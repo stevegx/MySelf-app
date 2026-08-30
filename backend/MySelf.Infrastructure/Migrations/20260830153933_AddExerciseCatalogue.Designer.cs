@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using MySelf.Infrastructure.Persistence;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MySelf.Infrastructure.Migrations
 {
     [DbContext(typeof(MySelfDbContext))]
-    partial class MySelfDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260830153933_AddExerciseCatalogue")]
+    partial class AddExerciseCatalogue
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -175,99 +178,6 @@ namespace MySelf.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("muscles", (string)null);
-                });
-
-            modelBuilder.Entity("MySelf.Domain.Nutrition.FoodCacheEntry", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Barcode")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<string>("Brand")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<decimal?>("CarbsPer100g")
-                        .HasPrecision(10, 3)
-                        .HasColumnType("numeric(10,3)");
-
-                    b.Property<decimal?>("EnergyKcalPer100g")
-                        .HasPrecision(10, 3)
-                        .HasColumnType("numeric(10,3)");
-
-                    b.Property<decimal?>("FatPer100g")
-                        .HasPrecision(10, 3)
-                        .HasColumnType("numeric(10,3)");
-
-                    b.Property<DateTimeOffset>("FetchedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal?>("FiberPer100g")
-                        .HasPrecision(10, 3)
-                        .HasColumnType("numeric(10,3)");
-
-                    b.Property<string>("Name")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<string>("PackageQuantityRaw")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<decimal?>("ProteinPer100g")
-                        .HasPrecision(10, 3)
-                        .HasColumnType("numeric(10,3)");
-
-                    b.Property<string>("RawPayload")
-                        .HasColumnType("jsonb");
-
-                    b.Property<decimal?>("SaltPer100g")
-                        .HasPrecision(10, 3)
-                        .HasColumnType("numeric(10,3)");
-
-                    b.Property<decimal?>("SaturatedFatPer100g")
-                        .HasPrecision(10, 3)
-                        .HasColumnType("numeric(10,3)");
-
-                    b.Property<decimal?>("ServingQuantityGrams")
-                        .HasPrecision(10, 3)
-                        .HasColumnType("numeric(10,3)");
-
-                    b.Property<string>("ServingSizeRaw")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<decimal?>("SodiumPer100g")
-                        .HasPrecision(10, 3)
-                        .HasColumnType("numeric(10,3)");
-
-                    b.Property<string>("Source")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<DateTimeOffset?>("SourceLastModified")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("SourceUrl")
-                        .HasMaxLength(400)
-                        .HasColumnType("character varying(400)");
-
-                    b.Property<decimal?>("SugarsPer100g")
-                        .HasPrecision(10, 3)
-                        .HasColumnType("numeric(10,3)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Source", "Barcode")
-                        .IsUnique();
-
-                    b.ToTable("food_cache_entries", (string)null);
                 });
 
             modelBuilder.Entity("MySelf.Domain.Exercises.Exercise", b =>

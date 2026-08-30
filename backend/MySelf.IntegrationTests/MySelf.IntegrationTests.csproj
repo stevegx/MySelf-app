@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\MySelf.Api\MySelf.Api.csproj" />
+    <ProjectReference Include="..\MySelf.Tools.WgerImport\MySelf.Tools.WgerImport.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>MySelf.Tools.WgerImport</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DotNetEnv" Version="3.2.0" />
+    <PackageReference Include="HtmlSanitizer" Version="9.2.1039" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MySelf.Infrastructure\MySelf.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

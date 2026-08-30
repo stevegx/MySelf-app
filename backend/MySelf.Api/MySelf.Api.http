@@ -4,3 +4,21 @@ GET {{MySelf.Api_HostAddress}}/health
 Accept: text/plain
 
 ###
+
+# Barcode lookup (3017620422003 = Nutella)
+GET {{MySelf.Api_HostAddress}}/api/v1/foods/barcode/3017620422003
+Accept: application/json
+
+###
+
+# Unknown barcode -> 404 ProblemDetails
+GET {{MySelf.Api_HostAddress}}/api/v1/foods/barcode/0000000000000
+Accept: application/json
+
+###
+
+# Invalid barcode -> 400 ProblemDetails
+GET {{MySelf.Api_HostAddress}}/api/v1/foods/barcode/abc
+Accept: application/json
+
+###

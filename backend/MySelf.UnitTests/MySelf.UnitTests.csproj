@@ -18,4 +18,9 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\MySelf.Domain\MySelf.Domain.csproj" />
+    <ProjectReference Include="..\MySelf.Infrastructure\MySelf.Infrastructure.csproj" />
+  </ItemGroup>
+
 </Project>
