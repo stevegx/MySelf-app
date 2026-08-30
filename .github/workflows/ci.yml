@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      ConnectionStrings__DefaultConnection: Host=localhost;Port=5432;Database=myself;Username=myself;Password=myself
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: myself
+          POSTGRES_USER: myself
+          POSTGRES_PASSWORD: myself
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U myself"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - run: dotnet restore MySelf.sln
+      - run: dotnet build MySelf.sln --no-restore
+
+      # Style check — informational for now; flip to a required step once the style is settled.
+      - name: Format check
+        run: dotnet format MySelf.sln --verify-no-changes --no-restore
+        continue-on-error: true
+
+      - name: Apply migrations
+        run: |
+          dotnet tool restore
+          dotnet ef database update --project MySelf.Infrastructure --startup-project MySelf.Api
+
+      - name: Test
+        run: dotnet test MySelf.sln --no-build --verbosity normal
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
