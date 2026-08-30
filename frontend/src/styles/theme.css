@@ -1,0 +1,203 @@
+@import "tailwindcss";
+
+/* Dark mode is driven by <html data-theme="dark"> set by ThemeProvider. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ----------------------------------------------------------------------------
+   Design tokens — docs/06 "Balanced Indigo".
+   Raw values live on :root / [data-theme="dark"]; @theme maps them to Tailwind
+   utilities (bg-surface, text-foreground-muted, rounded-card, ...).
+   -------------------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+
+  --background: #f7f8fc;
+  --surface: #ffffff;
+  --surface-subtle: #f1f3f8;
+  --surface-strong: #e9ecf3;
+
+  --foreground: #182033;
+  --foreground-muted: #667085;
+  --foreground-subtle: #98a2b3;
+
+  --border: #e2e6ee;
+  --border-strong: #c7ced9;
+
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --primary-pressed: #3730a3;
+  --primary-soft: #eef2ff;
+  --on-primary: #ffffff;
+  --ring: #818cf8;
+
+  --success: #15803d;
+  --success-soft: #dcfce7;
+  --info: #0369a1;
+  --info-soft: #e0f2fe;
+  --warning: #b45309;
+  --warning-soft: #fef3c7;
+  --danger: #b42318;
+  --danger-soft: #fee4e2;
+
+  --viz-strength: #4f46e5;
+  --viz-protein: #2563eb;
+  --viz-carbs: #d97706;
+  --viz-fat: #db2777;
+  --viz-calories: #7c3aed;
+  --viz-positive: #15803d;
+  --viz-negative: #b42318;
+  --viz-track: var(--surface-strong);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --background: #0f1420;
+  --surface: #171d2b;
+  --surface-subtle: #20283a;
+  --surface-strong: #2a3447;
+
+  --foreground: #f7f8fc;
+  --foreground-muted: #a5aec0;
+  --foreground-subtle: #6f7a90;
+
+  --border: #303a4f;
+  --border-strong: #46526a;
+
+  --primary: #818cf8;
+  --primary-hover: #a5b4fc;
+  --primary-pressed: #6366f1;
+  --primary-soft: #252a55;
+  --on-primary: #11162a;
+  --ring: #a5b4fc;
+
+  --success: #4ade80;
+  --success-soft: #163a29;
+  --info: #38bdf8;
+  --info-soft: #123548;
+  --warning: #fbbf24;
+  --warning-soft: #493711;
+  --danger: #fb7185;
+  --danger-soft: #4a202a;
+
+  --viz-strength: #818cf8;
+  --viz-protein: #60a5fa;
+  --viz-carbs: #fbbf24;
+  --viz-fat: #f472b6;
+  --viz-calories: #c4b5fd;
+  --viz-positive: #4ade80;
+  --viz-negative: #fb7185;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-subtle: var(--surface-subtle);
+  --color-surface-strong: var(--surface-strong);
+
+  --color-foreground: var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-foreground-subtle: var(--foreground-subtle);
+
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-pressed: var(--primary-pressed);
+  --color-primary-soft: var(--primary-soft);
+  --color-on-primary: var(--on-primary);
+  --color-ring: var(--ring);
+
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+
+  --color-viz-strength: var(--viz-strength);
+  --color-viz-protein: var(--viz-protein);
+  --color-viz-carbs: var(--viz-carbs);
+  --color-viz-fat: var(--viz-fat);
+  --color-viz-calories: var(--viz-calories);
+  --color-viz-positive: var(--viz-positive);
+  --color-viz-negative: var(--viz-negative);
+  --color-viz-track: var(--viz-track);
+
+  /* docs/06: 12px cards, 10px controls, pill only for tags/status */
+  --radius-card: 12px;
+  --radius-control: 10px;
+
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+
+  --breakpoint-nav: 45rem;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+    margin: 0 0 0.5rem;
+  }
+  h1 {
+    font-size: 34px;
+  }
+  h2 {
+    font-size: 26px;
+  }
+  h3 {
+    font-size: 21px;
+  }
+  h4 {
+    font-size: 18px;
+  }
+  h5 {
+    font-size: 16px;
+  }
+  h6 {
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .scrollbar-slim::-webkit-scrollbar {
+    width: 8px;
+  }
+  .scrollbar-slim::-webkit-scrollbar-thumb {
+    background: var(--color-border-strong);
+    border-radius: 999px;
+  }
+}

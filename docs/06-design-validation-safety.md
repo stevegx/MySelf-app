@@ -31,6 +31,16 @@ Balanced Indigo γίνεται η βασική κατεύθυνση. Είναι 
 
 Το primary χρησιμοποιείται για main actions, active navigation και selected states. Η επιτυχία/βελτίωση έχει ξεχωριστό green token, ώστε το indigo να μην αποκτά δύο διαφορετικές σημασίες.
 
+### Component & layout language (merged 2026-08-30)
+
+The frontend structure follows the "Organic" UI mockups (Claude Design handoff), reconciled with Balanced Indigo:
+
+- **Colours, data-viz mapping and semantic status tokens** in this section remain the source of truth. The mockups' own palette (blue primary, amber second accent, Caprasimo display font) is **not** adopted.
+- **Adopted from the mockups:** the left sidebar shell + scrollable content column; the card / kicker / title / body pattern; segmented controls; per-screen headers with an action cluster; the eight MVP screens (dashboard, workout builder, active workout, nutrition day, add food / barcode, progress, settings, onboarding review).
+- **Radius stays per the UI rules below** — 12px cards, 10px controls, pill for tags/status only (the mockups' pill buttons/inputs and ~32px cards are not used).
+- **Type:** Inter for headings and body; headings differ by weight (700) and tracking only.
+- Implemented with **Tailwind CSS v4**: tokens defined as CSS custom properties and mapped to utilities via `@theme` in `frontend/src/styles/theme.css` (dark mode keys off `<html data-theme="dark">`); repeated patterns wrapped as small typed React components in `frontend/src/components/ui`.
+
 ### Complete light theme tokens
 
 | Token | Hex | Use |

@@ -1,11 +1,11 @@
-import "./App.css";
+import { RouterProvider } from "react-router";
+import { Providers } from "./app/providers";
+import { router } from "./app/router";
 
-function App() {
+export default function App() {
   return (
-    <>
-      <h1 className="text-4xl text-blue-500">Hello there</h1>
-    </>
+    <Providers>
+      <RouterProvider router={router} />
+    </Providers>
   );
 }
-
-export default App;

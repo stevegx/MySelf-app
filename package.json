@@ -1,6 +1,5 @@
 {
-  "dependencies": {
-    "@tailwindcss/vite": "^4.3.3",
-    "tailwindcss": "^4.3.3"
-  }
+  "name": "myself-app",
+  "private": true,
+  "description": "MySelf App monorepo root. Frontend lives in ./frontend, backend in ./backend."
 }
