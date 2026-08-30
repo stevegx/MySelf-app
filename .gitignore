@@ -1,0 +1,23 @@
+# Secrets and local environment
+.env
+
+# .NET build output
+[Bb]in/
+[Oo]bj/
+
+# .NET user-specific / IDE
+*.user
+.vs/
+.idea/
+*.suo
+
+# Node
+node_modules/
+dist/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
