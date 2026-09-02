@@ -30,6 +30,12 @@ No authentication or business-domain features yet. Phase 0 is complete only when
 
 ### Phase 1 — identity and onboarding
 
+_Complete 2026-09-02. Story 1 (auth) shipped 2026-08-31; Story 2 (onboarding) in four
+slices — `UserProfile` + `PUT /me/profile`, the pure calorie estimator +
+`POST /me/nutrition-estimate`, `UserGoal`/`NutritionEstimateSnapshot` +
+`POST /me/onboarding/complete`, the wizard UI + route gating. Owner-based authorization is
+per-endpoint ownership checks (no roles). See `docs/learning-log/`._
+
 - ASP.NET Core Identity.
 - Register/login/refresh/logout.
 - Profile and goal wizard.
