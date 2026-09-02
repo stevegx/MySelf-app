@@ -166,6 +166,7 @@ app.MapAuthEndpoints();
 app.MapPasswordResetEndpoints();
 app.MapMeEndpoints();
 app.MapNutritionEstimateEndpoints();
+app.MapOnboardingEndpoints();
 
 app.Run();
 

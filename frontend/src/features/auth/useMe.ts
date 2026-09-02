@@ -14,7 +14,24 @@ export type ProfileSummary = {
   onboardingCompletedAt: string | null;
 };
 
-export type MeResponse = { user: AuthUser; profile: ProfileSummary | null };
+/** One nutrition goal (docs/04 UserGoal). Targets are null when nutrition was skipped or the goal is Track-only. */
+export type GoalSummary = {
+  id: string;
+  goalType: "Lose" | "Maintain" | "Gain" | "TrackOnly";
+  source: "Estimated" | "Manual";
+  targetWeightKg: number | null;
+  calorieTarget: number | null;
+  proteinGrams: number | null;
+  carbGrams: number | null;
+  fatGrams: number | null;
+  effectiveFrom: string;
+};
+
+export type MeResponse = {
+  user: AuthUser;
+  profile: ProfileSummary | null;
+  currentGoal: GoalSummary | null;
+};
 
 /**
  * Calls the protected GET /api/v1/me — the account summary plus the onboarding profile.

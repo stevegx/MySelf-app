@@ -38,8 +38,9 @@ public class MeEndpointTests(WebApplicationFactory<Program> factory)
             Assert.Equal(username, user.GetProperty("username").GetString());
             Assert.Equal(email, user.GetProperty("email").GetString());
 
-            // A brand-new account has not started onboarding, so there is no profile row yet.
+            // A brand-new account has not started onboarding: no profile, no goal.
             Assert.Equal(JsonValueKind.Null, body.GetProperty("profile").ValueKind);
+            Assert.Equal(JsonValueKind.Null, body.GetProperty("currentGoal").ValueKind);
         }
         finally
         {

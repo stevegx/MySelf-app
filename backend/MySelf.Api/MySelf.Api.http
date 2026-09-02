@@ -224,6 +224,54 @@ Content-Type: application/json
 
 ###
 
+# Complete onboarding, accepting an estimated target -> 201 with the created goal.
+# Needs PUT /api/v1/me/profile (with a calculationSex) to have run first. Runs once per
+# account; a second call returns 409. Height/DOB/sex are read from the saved profile.
+POST {{MySelf.Api_HostAddress}}/api/v1/me/onboarding/complete
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "goalType": "Lose",
+  "targetWeightKg": 62,
+  "estimate": {
+    "weightKg": 68,
+    "activityLevel": "Moderate",
+    "pace": "Standard"
+  }
+}
+
+###
+
+# Complete onboarding with a manual target -> 201, source "Manual", no snapshot
+POST {{MySelf.Api_HostAddress}}/api/v1/me/onboarding/complete
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "goalType": "Maintain",
+  "manualTarget": { "calorieTarget": 2100, "proteinGrams": 150, "carbGrams": 210, "fatGrams": 60 }
+}
+
+###
+
+# Complete onboarding, skipping nutrition -> 201, goal with null targets
+POST {{MySelf.Api_HostAddress}}/api/v1/me/onboarding/complete
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "goalType": "TrackOnly"
+}
+
+###
+
+# Goal history, newest first
+GET {{MySelf.Api_HostAddress}}/api/v1/me/goals
+Authorization: Bearer {{accessToken}}
+
+###
+
 # Logout -> 204, revokes the cookie's refresh token and clears it (needs the Cookie header
 # manually pasted from a prior Set-Cookie in this file; a browser does this automatically).
 POST {{MySelf.Api_HostAddress}}/api/v1/auth/logout

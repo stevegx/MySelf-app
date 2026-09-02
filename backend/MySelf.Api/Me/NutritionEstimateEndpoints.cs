@@ -58,7 +58,7 @@ public static class NutritionEstimateEndpoints
         }
         else
         {
-            age = AgeYears(dob, today);
+            age = AgeCalculator.Years(dob, today);
             if (age > 120)
             {
                 errors["dateOfBirth"] = ["Enter a valid date of birth."];
@@ -162,17 +162,5 @@ public static class NutritionEstimateEndpoints
 
         parsed = default;
         return false;
-    }
-
-    /// <summary>Whole years between the two dates. Mirrors the helper in MeEndpoints.</summary>
-    private static int AgeYears(DateOnly dob, DateOnly on)
-    {
-        var age = on.Year - dob.Year;
-        if (dob > on.AddYears(-age))
-        {
-            age--;
-        }
-
-        return age;
     }
 }

@@ -17,8 +17,12 @@ public sealed record ProfileSummary(
     string? Locale,
     DateTimeOffset? OnboardingCompletedAt);
 
-/// <summary>GET /api/v1/me — account summary plus profile (docs/04: "Current user + profile summary").</summary>
-public sealed record MeResponse(AuthUser User, ProfileSummary? Profile);
+/// <summary>
+/// GET /api/v1/me — account summary, onboarding profile, and the current nutrition goal
+/// (docs/04: "Current user + profile summary"). <see cref="Profile"/> is null until onboarding
+/// step 1; <see cref="CurrentGoal"/> is null until onboarding is completed.
+/// </summary>
+public sealed record MeResponse(AuthUser User, ProfileSummary? Profile, GoalSummary? CurrentGoal);
 
 /// <summary>
 /// Body of PUT /api/v1/me/profile (onboarding step 1). Enums come in as strings and are

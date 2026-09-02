@@ -29,6 +29,8 @@ public class MySelfDbContext(DbContextOptions<MySelfDbContext> options)
     public DbSet<FoodCacheEntry> FoodCacheEntries => Set<FoodCacheEntry>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<UserProfile> UserProfiles => Set<UserProfile>();
+    public DbSet<UserGoal> UserGoals => Set<UserGoal>();
+    public DbSet<NutritionEstimateSnapshot> NutritionEstimateSnapshots => Set<NutritionEstimateSnapshot>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

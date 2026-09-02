@@ -9,9 +9,11 @@ using MySelf.Infrastructure.Persistence;
 namespace MySelf.Api.Me;
 
 /// <summary>
-/// docs/04's "current user" surface. <c>GET /me</c> returns the account summary plus the
-/// onboarding <see cref="UserProfile"/> (null until the user saves step 1); <c>PUT /me/profile</c>
-/// creates or updates that profile. The calorie estimate and goal endpoints are later slices.
+/// docs/04's "current user" surface. <c>GET /me</c> returns the account summary, the
+/// onboarding <see cref="UserProfile"/> (null until step 1) and the current
+/// <see cref="UserGoal"/> (null until onboarding completes); <c>PUT /me/profile</c> creates
+/// or updates that profile. The estimate and goal-completion endpoints live in
+/// <see cref="NutritionEstimateEndpoints"/> and <see cref="OnboardingEndpoints"/>.
 /// </summary>
 public static class MeEndpoints
 {
@@ -54,9 +56,18 @@ public static class MeEndpoints
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.UserId == user.Id, ct);
 
+        // "Current" goal = the one with the latest EffectiveFrom (docs/01 step 4: goals are
+        // effective-dated history, never edited in place). Null until onboarding completes.
+        var currentGoal = await db.UserGoals
+            .AsNoTracking()
+            .Where(g => g.UserId == user.Id)
+            .OrderByDescending(g => g.EffectiveFrom)
+            .FirstOrDefaultAsync(ct);
+
         return Results.Ok(new MeResponse(
             new AuthUser(user.Id, user.UserName!, user.Email!),
-            profile is null ? null : ToSummary(profile)));
+            profile is null ? null : ToSummary(profile),
+            currentGoal is null ? null : GoalSummary.From(currentGoal)));
     }
 
     private static async Task<IResult> UpdateProfileAsync(
@@ -91,7 +102,7 @@ public static class MeEndpoints
         {
             errors["dateOfBirth"] = ["Date of birth must be in the past."];
         }
-        else if (AgeYears(dob, today) > 120)
+        else if (AgeCalculator.Years(dob, today) > 120)
         {
             errors["dateOfBirth"] = ["Enter a valid date of birth."];
         }
@@ -159,18 +170,6 @@ public static class MeEndpoints
         p.Timezone,
         p.Locale,
         p.OnboardingCompletedAt);
-
-    /// <summary>Whole years between <paramref name="dob"/> and <paramref name="on"/>, not yet rounded up on the birthday.</summary>
-    private static int AgeYears(DateOnly dob, DateOnly on)
-    {
-        var age = on.Year - dob.Year;
-        if (dob > on.AddYears(-age))
-        {
-            age--;
-        }
-
-        return age;
-    }
 
     private static string? Trimmed(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
