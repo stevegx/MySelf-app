@@ -57,6 +57,16 @@ Build this phase in small vertical slices: register first, then login, then one 
 
 ### Phase 2 — program builder
 
+_Core shipped 2026-09-02: WorkoutProgram/Group/Variant/VariantExercise/SetPrescription/
+SupersetGroup model + CRUD, per-owner authorization (404 on a miss), `PUT /workout-variants/{id}`
+whole-body replace in one transaction, `POST /programs/{id}/activate` (explicit transaction +
+filtered unique index for one-active-per-user), `GET /exercises` catalogue search, and a
+functional builder UI. **Deferred:** program clone, bulk copy/move exercises, custom
+(user-created) exercises, superset editing UI, undo/BulkOperation, drag-and-drop reorder,
+per-set prescription UI, templates. See `docs/learning-log/2026-09-02-phase2-program-builder.md`
+for the full drawbacks/risks/gaps review (concurrency token not yet enforced, no rate limiting,
+no tree-size caps, integration tests local-only)._
+
 - Seed/curate the catalogue data needed by the builder.
 - Blank custom program builder.
 - User-defined groups/variants, item order and activation, without weekdays or schedule slots.

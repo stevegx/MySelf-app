@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using MySelf.Api.Auth;
 using MySelf.Api.Me;
 using MySelf.Api.Nutrition;
+using MySelf.Api.Workouts;
 using MySelf.Infrastructure.Identity;
 using MySelf.Infrastructure.Nutrition;
 using MySelf.Infrastructure.Persistence;
@@ -167,6 +168,10 @@ app.MapPasswordResetEndpoints();
 app.MapMeEndpoints();
 app.MapNutritionEstimateEndpoints();
 app.MapOnboardingEndpoints();
+app.MapExerciseEndpoints();
+app.MapProgramEndpoints();
+app.MapWorkoutGroupEndpoints();
+app.MapWorkoutVariantEndpoints();
 
 app.Run();
 

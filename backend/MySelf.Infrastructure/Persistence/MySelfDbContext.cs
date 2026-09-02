@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using MySelf.Domain.Exercises;
 using MySelf.Domain.Identity;
 using MySelf.Domain.Nutrition;
+using MySelf.Domain.Workouts;
 using MySelf.Infrastructure.Identity;
 
 namespace MySelf.Infrastructure.Persistence;
@@ -31,6 +32,13 @@ public class MySelfDbContext(DbContextOptions<MySelfDbContext> options)
     public DbSet<UserProfile> UserProfiles => Set<UserProfile>();
     public DbSet<UserGoal> UserGoals => Set<UserGoal>();
     public DbSet<NutritionEstimateSnapshot> NutritionEstimateSnapshots => Set<NutritionEstimateSnapshot>();
+
+    public DbSet<WorkoutProgram> WorkoutPrograms => Set<WorkoutProgram>();
+    public DbSet<WorkoutGroup> WorkoutGroups => Set<WorkoutGroup>();
+    public DbSet<WorkoutVariant> WorkoutVariants => Set<WorkoutVariant>();
+    public DbSet<SupersetGroup> SupersetGroups => Set<SupersetGroup>();
+    public DbSet<VariantExercise> VariantExercises => Set<VariantExercise>();
+    public DbSet<SetPrescription> SetPrescriptions => Set<SetPrescription>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -8,3 +8,4 @@ implement as a durable artifact instead of only living in chat).
 | --- | --- | --- |
 | 2026-08-31 | [Phase 1 — Auth](./2026-08-31-phase1-auth.md) | Register, login, JWT-bearer middleware + `/me`, trust-device + `/refresh` with cookie rotation, `/logout`, password reset (dev-sink) |
 | 2026-09-02 | [Phase 1 — Onboarding](./2026-09-02-phase1-onboarding.md) | `UserProfile` + `PUT /me/profile`, the pure `CalorieEstimator` + `POST /me/nutrition-estimate`, `UserGoal` / `NutritionEstimateSnapshot` + `POST /me/onboarding/complete` (one transaction), the 4-step wizard UI + route gating |
+| 2026-09-02 | [Phase 2 — Program builder](./2026-09-02-phase2-program-builder.md) | Program/group/variant/exercise/set-prescription/superset model + CRUD, ownership checks, `PUT /workout-variants/{id}` whole-body replace, activation transaction + filtered unique index, `GET /exercises` search, the builder UI. **Includes a full drawbacks/risks/gaps review.** |

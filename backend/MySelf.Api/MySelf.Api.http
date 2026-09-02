@@ -322,3 +322,87 @@ Content-Type: application/json
 }
 
 ###
+
+# ============================================================================
+# Phase 2 — program builder (all require Authorization: Bearer {{accessToken}})
+# ============================================================================
+
+# Search the seeded exercise catalogue
+GET {{MySelf.Api_HostAddress}}/api/v1/exercises?q=squat&page=1&pageSize=10
+Authorization: Bearer {{accessToken}}
+
+###
+
+# Create a program -> 201 { id, name, ... }
+POST {{MySelf.Api_HostAddress}}/api/v1/programs
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{ "name": "PPL", "splitLabel": "Push/Pull/Legs" }
+
+###
+
+# List the caller's programs (active first, archived hidden)
+GET {{MySelf.Api_HostAddress}}/api/v1/programs
+Authorization: Bearer {{accessToken}}
+
+###
+
+# Full program tree
+GET {{MySelf.Api_HostAddress}}/api/v1/programs/PROGRAM_ID
+Authorization: Bearer {{accessToken}}
+
+###
+
+# Add a group -> 201
+POST {{MySelf.Api_HostAddress}}/api/v1/programs/PROGRAM_ID/groups
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{ "name": "Legs" }
+
+###
+
+# Add a variant -> 201
+POST {{MySelf.Api_HostAddress}}/api/v1/workout-groups/GROUP_ID/variants
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{ "name": "Legs #1" }
+
+###
+
+# Replace a variant's whole contents (exercises + set prescriptions + supersets) -> 200 detail
+PUT {{MySelf.Api_HostAddress}}/api/v1/workout-variants/VARIANT_ID
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Legs #1",
+  "estimatedDurationMinutes": 60,
+  "exercises": [
+    {
+      "exerciseId": "EXERCISE_ID_1", "sortOrder": 0, "supersetRef": null, "supersetMemberOrder": 0,
+      "restSeconds": 120, "notes": null,
+      "sets": [
+        { "sortOrder": 0, "kind": "Standard", "isAmrap": false, "targetToFailure": false, "targetRepsMin": 8, "targetRepsMax": 12, "targetWeightKg": 100, "targetRir": 2 },
+        { "sortOrder": 1, "kind": "Standard", "isAmrap": true,  "targetToFailure": false, "targetRepsMin": null, "targetRepsMax": null, "targetWeightKg": 90, "targetRir": null }
+      ]
+    }
+  ],
+  "supersets": []
+}
+
+###
+
+# Activate a program (deactivates the previous active one) -> 204
+POST {{MySelf.Api_HostAddress}}/api/v1/programs/PROGRAM_ID/activate
+Authorization: Bearer {{accessToken}}
+
+###
+
+# Archive a program -> 204 (hidden from the list, its active flag cleared)
+DELETE {{MySelf.Api_HostAddress}}/api/v1/programs/PROGRAM_ID
+Authorization: Bearer {{accessToken}}
+
+###

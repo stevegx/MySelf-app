@@ -1,0 +1,348 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using MySelf.Infrastructure.Persistence;
+using static MySelf.IntegrationTests.Auth.AuthTestHelpers;
+
+namespace MySelf.IntegrationTests.Workouts;
+
+/// <summary>
+/// Drives the program builder (docs/02, Story 3): programs → groups → variants → exercises →
+/// set prescriptions → supersets, plus activation and ownership. Runs against the shared dev
+/// database; the seeded exercise catalogue supplies real exercise ids.
+/// </summary>
+public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory)
+    : IClassFixture<WebApplicationFactory<Program>>
+{
+    private async Task<Guid[]> TwoExerciseIdsAsync()
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MySelfDbContext>();
+        return await db.Exercises.OrderBy(e => e.Name).Select(e => e.Id).Take(2).ToArrayAsync();
+    }
+
+    private static async Task<Guid> CreateProgramAsync(HttpClient client, string name = "PPL")
+    {
+        var res = await client.PostAsJsonAsync("/api/v1/programs", new { name, splitLabel = "Push/Pull/Legs" });
+        res.EnsureSuccessStatusCode();
+        return (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+    }
+
+    private static async Task<Guid> AddGroupAsync(HttpClient client, Guid programId, string name = "Legs")
+    {
+        var res = await client.PostAsJsonAsync($"/api/v1/programs/{programId}/groups", new { name });
+        res.EnsureSuccessStatusCode();
+        return (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+    }
+
+    private static async Task<Guid> AddVariantAsync(HttpClient client, Guid groupId, string name = "Legs #1")
+    {
+        var res = await client.PostAsJsonAsync($"/api/v1/workout-groups/{groupId}/variants", new { name });
+        res.EnsureSuccessStatusCode();
+        return (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+    }
+
+    [Fact]
+    public async Task Create_add_group_variant_and_read_the_program_tree()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var programId = await CreateProgramAsync(client);
+            var groupId = await AddGroupAsync(client, programId, "Legs");
+            var variantId = await AddVariantAsync(client, groupId);
+
+            var tree = await client.GetFromJsonAsync<JsonElement>($"/api/v1/programs/{programId}");
+            var group = tree.GetProperty("groups").EnumerateArray().Single();
+            Assert.Equal("Legs", group.GetProperty("name").GetString());
+            var variant = group.GetProperty("variants").EnumerateArray().Single();
+            Assert.Equal(variantId, variant.GetProperty("id").GetGuid());
+            Assert.Equal(0, variant.GetProperty("exerciseCount").GetInt32());
+
+            var list = await client.GetFromJsonAsync<JsonElement>("/api/v1/programs");
+            Assert.Equal(1, list.GetArrayLength());
+            Assert.Equal(1, list[0].GetProperty("variantCount").GetInt32());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Put_variant_with_exercises_and_prescriptions_round_trips()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var ex = await TwoExerciseIdsAsync();
+            var programId = await CreateProgramAsync(client);
+            var groupId = await AddGroupAsync(client, programId);
+            var variantId = await AddVariantAsync(client, groupId);
+
+            var body = new
+            {
+                name = "Legs #1",
+                estimatedDurationMinutes = 60,
+                exercises = new[]
+                {
+                    new
+                    {
+                        exerciseId = ex[0],
+                        sortOrder = 0,
+                        supersetRef = (string?)null,
+                        supersetMemberOrder = 0,
+                        restSeconds = (int?)120,
+                        notes = (string?)"warm up first",
+                        sets = new[]
+                        {
+                            new { sortOrder = 0, kind = "Standard", isAmrap = false, targetToFailure = false, targetRepsMin = (int?)8, targetRepsMax = (int?)12, targetWeightKg = (double?)100.0, targetRir = (int?)2 },
+                            new { sortOrder = 1, kind = "Standard", isAmrap = true, targetToFailure = false, targetRepsMin = (int?)null, targetRepsMax = (int?)null, targetWeightKg = (double?)90.0, targetRir = (int?)null },
+                        },
+                    },
+                    new
+                    {
+                        exerciseId = ex[1],
+                        sortOrder = 1,
+                        supersetRef = (string?)null,
+                        supersetMemberOrder = 0,
+                        restSeconds = (int?)90,
+                        notes = (string?)null,
+                        sets = new[]
+                        {
+                            new { sortOrder = 0, kind = "Standard", isAmrap = false, targetToFailure = true, targetRepsMin = (int?)10, targetRepsMax = (int?)10, targetWeightKg = (double?)null, targetRir = (int?)null },
+                        },
+                    },
+                },
+                supersets = Array.Empty<object>(),
+            };
+
+            var put = await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}", body);
+            Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+
+            var detail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-variants/{variantId}");
+            var exercises = detail.GetProperty("exercises").EnumerateArray().ToList();
+            Assert.Equal(2, exercises.Count);
+            Assert.Equal(ex[0], exercises[0].GetProperty("exerciseId").GetGuid());
+            Assert.Equal(2, exercises[0].GetProperty("sets").GetArrayLength());
+            Assert.True(exercises[0].GetProperty("sets")[1].GetProperty("isAmrap").GetBoolean());
+            Assert.True(exercises[1].GetProperty("sets")[0].GetProperty("targetToFailure").GetBoolean());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Put_variant_with_a_superset_groups_the_members()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var ex = await TwoExerciseIdsAsync();
+            var programId = await CreateProgramAsync(client);
+            var groupId = await AddGroupAsync(client, programId);
+            var variantId = await AddVariantAsync(client, groupId);
+
+            var body = new
+            {
+                exercises = new[]
+                {
+                    new { exerciseId = ex[0], sortOrder = 0, supersetRef = "A", supersetMemberOrder = 0, restSeconds = (int?)null, notes = (string?)null, sets = Array.Empty<object>() },
+                    new { exerciseId = ex[1], sortOrder = 1, supersetRef = "A", supersetMemberOrder = 1, restSeconds = (int?)null, notes = (string?)null, sets = Array.Empty<object>() },
+                },
+                supersets = new[] { new { @ref = "A", sortOrder = 0, restAfterRoundSeconds = 90 } },
+            };
+
+            var put = await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}", body);
+            Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+
+            var detail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-variants/{variantId}");
+            var supersets = detail.GetProperty("supersets").EnumerateArray().ToList();
+            Assert.Single(supersets);
+            var supersetId = supersets[0].GetProperty("id").GetGuid();
+            Assert.Equal(90, supersets[0].GetProperty("restAfterRoundSeconds").GetInt32());
+
+            foreach (var e in detail.GetProperty("exercises").EnumerateArray())
+            {
+                Assert.Equal(supersetId, e.GetProperty("supersetGroupId").GetGuid());
+            }
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Put_variant_replaces_the_previous_contents()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var ex = await TwoExerciseIdsAsync();
+            var programId = await CreateProgramAsync(client);
+            var groupId = await AddGroupAsync(client, programId);
+            var variantId = await AddVariantAsync(client, groupId);
+
+            object Exercise(Guid id, int order) => new
+            {
+                exerciseId = id, sortOrder = order, supersetRef = (string?)null, supersetMemberOrder = 0,
+                restSeconds = (int?)null, notes = (string?)null,
+                sets = new[] { new { sortOrder = 0, kind = "Standard", isAmrap = false, targetToFailure = false, targetRepsMin = 5, targetRepsMax = 5, targetWeightKg = (double?)null, targetRir = (int?)null } },
+            };
+
+            await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}",
+                new { exercises = new[] { Exercise(ex[0], 0), Exercise(ex[1], 1) }, supersets = Array.Empty<object>() });
+
+            await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}",
+                new { exercises = new[] { Exercise(ex[1], 0) }, supersets = Array.Empty<object>() });
+
+            var detail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-variants/{variantId}");
+            Assert.Equal(1, detail.GetProperty("exercises").GetArrayLength());
+            Assert.Equal(ex[1], detail.GetProperty("exercises")[0].GetProperty("exerciseId").GetGuid());
+
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<MySelfDbContext>();
+            var orphanSets = await db.SetPrescriptions.CountAsync(s => s.VariantExercise.VariantId == variantId);
+            Assert.Equal(1, orphanSets); // the two from the first PUT are gone
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Activate_deactivates_the_previous_active_program()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var first = await CreateProgramAsync(client, "First");
+            var second = await CreateProgramAsync(client, "Second");
+
+            Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsync($"/api/v1/programs/{first}/activate", null)).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsync($"/api/v1/programs/{second}/activate", null)).StatusCode);
+
+            var list = await client.GetFromJsonAsync<JsonElement>("/api/v1/programs");
+            var byId = list.EnumerateArray().ToDictionary(p => p.GetProperty("id").GetGuid(), p => p.GetProperty("isActive").GetBoolean());
+            Assert.False(byId[first]);
+            Assert.True(byId[second]);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Another_users_program_is_not_visible_or_editable()
+    {
+        var (alice, aliceEmail) = await factory.RegisterAndAuthenticateAsync();
+        var (bob, bobEmail) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var programId = await CreateProgramAsync(alice);
+            var groupId = await AddGroupAsync(alice, programId);
+            var variantId = await AddVariantAsync(alice, groupId);
+
+            Assert.Equal(HttpStatusCode.NotFound, (await bob.GetAsync($"/api/v1/programs/{programId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await bob.PostAsJsonAsync($"/api/v1/programs/{programId}/groups", new { name = "X" })).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await bob.GetAsync($"/api/v1/workout-variants/{variantId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await bob.PostAsync($"/api/v1/programs/{programId}/activate", null)).StatusCode);
+            Assert.Equal(0, (await bob.GetFromJsonAsync<JsonElement>("/api/v1/programs")).GetArrayLength());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(aliceEmail, bobEmail);
+        }
+    }
+
+    [Fact]
+    public async Task Archive_hides_the_program_from_the_default_list()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var programId = await CreateProgramAsync(client);
+            Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"/api/v1/programs/{programId}")).StatusCode);
+
+            Assert.Equal(0, (await client.GetFromJsonAsync<JsonElement>("/api/v1/programs")).GetArrayLength());
+            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v1/programs/{programId}")).StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Put_variant_rejects_an_unknown_exercise_and_a_lonely_superset()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var ex = await TwoExerciseIdsAsync();
+            var programId = await CreateProgramAsync(client);
+            var groupId = await AddGroupAsync(client, programId);
+            var variantId = await AddVariantAsync(client, groupId);
+
+            var unknown = await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}", new
+            {
+                exercises = new[] { new { exerciseId = Guid.NewGuid(), sortOrder = 0, supersetRef = (string?)null, supersetMemberOrder = 0, restSeconds = (int?)null, notes = (string?)null, sets = Array.Empty<object>() } },
+                supersets = Array.Empty<object>(),
+            });
+            Assert.Equal(HttpStatusCode.BadRequest, unknown.StatusCode);
+
+            var lonely = await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}", new
+            {
+                exercises = new[] { new { exerciseId = ex[0], sortOrder = 0, supersetRef = "A", supersetMemberOrder = 0, restSeconds = (int?)null, notes = (string?)null, sets = Array.Empty<object>() } },
+                supersets = new[] { new { @ref = "A", sortOrder = 0, restAfterRoundSeconds = 60 } },
+            });
+            Assert.Equal(HttpStatusCode.BadRequest, lonely.StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Exercise_search_paginates_and_filters()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var page = await client.GetFromJsonAsync<JsonElement>("/api/v1/exercises?pageSize=5");
+            Assert.Equal(5, page.GetProperty("pageSize").GetInt32());
+            Assert.True(page.GetProperty("items").GetArrayLength() <= 5);
+            Assert.True(page.GetProperty("total").GetInt32() > 5);
+
+            var filtered = await client.GetFromJsonAsync<JsonElement>("/api/v1/exercises?q=press&pageSize=50");
+            foreach (var item in filtered.GetProperty("items").EnumerateArray())
+            {
+                Assert.Contains("press", item.GetProperty("name").GetString()!, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Builder_endpoints_require_a_token()
+    {
+        var client = factory.CreateClient();
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/v1/programs")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/v1/exercises")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await client.PostAsJsonAsync("/api/v1/programs", new { name = "X" })).StatusCode);
+    }
+}

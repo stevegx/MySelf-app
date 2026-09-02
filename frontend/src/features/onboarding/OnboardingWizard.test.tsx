@@ -22,7 +22,7 @@ const ESTIMATE = {
 
 /** Routes fetch by URL: quiet the AuthProvider refresh, canned estimate + complete responses. */
 function installFetch(overrides: { estimate?: unknown; complete?: unknown } = {}) {
-  const spy = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
+  const spy = vi.fn<typeof fetch>((input) => {
     const url = typeof input === "string" ? input : input.toString();
     if (url.includes("/auth/refresh")) {
       return Promise.resolve(new Response(null, { status: 401 }));
