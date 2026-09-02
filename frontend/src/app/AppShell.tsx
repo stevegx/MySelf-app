@@ -9,6 +9,8 @@ import {
   TrendingUp,
   Utensils,
 } from "lucide-react";
+import { useAuth } from "../features/auth/auth";
+import { useMe } from "../features/auth/useMe";
 import { useTheme } from "./theme";
 import type { ThemeMode } from "./theme";
 
@@ -45,6 +47,31 @@ function ThemeToggle() {
   );
 }
 
+function AccountSummary() {
+  const { session } = useAuth();
+  // GET /api/v1/me is the protected endpoint behind the JWT-bearer middleware — this is
+  // what actually proves it works, rather than only ever trusting the cached login/register
+  // response. Falls back to that cached user while the request is in flight.
+  const { data: me } = useMe();
+  const user = me ?? session?.user;
+
+  if (!user) {
+    return null;
+  }
+
+  return (
+    <div className="hidden items-center gap-2.5 rounded-control bg-surface-subtle px-2 py-2.5 nav:flex">
+      <div className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-indigo-200 text-sm font-bold text-indigo-800">
+        {user.username.charAt(0).toUpperCase()}
+      </div>
+      <div className="min-w-0">
+        <div className="truncate text-[13px] font-bold">{user.username}</div>
+        <div className="truncate text-[11px] text-foreground-muted">{user.email}</div>
+      </div>
+    </div>
+  );
+}
+
 export function AppShell() {
   return (
     <div className="flex min-h-screen flex-col items-start nav:flex-row">
@@ -66,15 +93,7 @@ export function AppShell() {
 
         <div className="ml-auto flex items-center gap-3 nav:ml-0 nav:mt-auto nav:flex-col nav:items-stretch">
           <ThemeToggle />
-          <div className="hidden items-center gap-2.5 rounded-control bg-surface-subtle px-2 py-2.5 nav:flex">
-            <div className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-indigo-200 text-sm font-bold text-indigo-800">
-              A
-            </div>
-            <div className="min-w-0">
-              <div className="truncate text-[13px] font-bold">Alex Papadopoulos</div>
-              <div className="text-[11px] text-foreground-muted">Free plan</div>
-            </div>
-          </div>
+          <AccountSummary />
         </div>
       </aside>
 

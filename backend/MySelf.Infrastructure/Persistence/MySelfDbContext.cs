@@ -1,6 +1,9 @@
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using MySelf.Domain.Exercises;
+using MySelf.Domain.Identity;
 using MySelf.Domain.Nutrition;
+using MySelf.Infrastructure.Identity;
 
 namespace MySelf.Infrastructure.Persistence;
 
@@ -8,8 +11,15 @@ namespace MySelf.Infrastructure.Persistence;
 /// The EF Core unit-of-work + change tracker for the MySelf database.
 /// Entity mappings live in <c>Persistence/Configurations</c> and are picked up by
 /// <see cref="ModelBuilder.ApplyConfigurationsFromAssembly"/>.
+///
+/// Base class is <see cref="IdentityUserContext{TUser,TKey}"/> rather than plain
+/// <see cref="DbContext"/> — it adds the Identity user/claims/logins/tokens tables and their
+/// model configuration via base.OnModelCreating. This is the "no roles" Identity context
+/// (as opposed to IdentityDbContext, which also adds Roles/RoleClaims); nothing here needs
+/// role-based authorization yet, only per-owner checks, so the extra tables were left out.
 /// </summary>
-public class MySelfDbContext(DbContextOptions<MySelfDbContext> options) : DbContext(options)
+public class MySelfDbContext(DbContextOptions<MySelfDbContext> options)
+    : IdentityUserContext<ApplicationUser, Guid>(options)
 {
     public DbSet<Exercise> Exercises => Set<Exercise>();
     public DbSet<ExerciseCategory> ExerciseCategories => Set<ExerciseCategory>();
@@ -17,9 +27,11 @@ public class MySelfDbContext(DbContextOptions<MySelfDbContext> options) : DbCont
     public DbSet<Equipment> Equipment => Set<Equipment>();
 
     public DbSet<FoodCacheEntry> FoodCacheEntries => Set<FoodCacheEntry>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(MySelfDbContext).Assembly);
     }
 }

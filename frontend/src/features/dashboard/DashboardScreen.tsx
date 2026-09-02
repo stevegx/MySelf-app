@@ -1,5 +1,7 @@
 import { ChevronRight, Circle, Dumbbell, Scale, Utensils } from "lucide-react";
 import { Button, Card, CardKicker, PageHeader, Ring } from "../../components/ui";
+import { useAuth } from "../auth/auth";
+import { useMe } from "../auth/useMe";
 
 const MACROS = [
   { label: "Protein", detail: "0 / 112g" },
@@ -17,10 +19,14 @@ const SETUP_ITEMS = [
 ];
 
 export function DashboardScreen() {
+  const { session } = useAuth();
+  const { data: me } = useMe();
+  const username = (me ?? session?.user)?.username;
+
   return (
     <>
       <PageHeader
-        title="Good morning, Alex"
+        title={username ? `Good morning, ${username}` : "Good morning"}
         subtitle="Friday, August 30"
         actions={
           <>

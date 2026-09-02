@@ -30,7 +30,7 @@ psql -U postgres -h localhost \
 cp .env.example .env
 ```
 
-`.env` holds `ConnectionStrings__DefaultConnection` (read by the API and the tools). It is git-ignored.
+`.env` holds `ConnectionStrings__DefaultConnection` and `Jwt__Key` (read by the API and the tools). It is git-ignored. Generate your own signing key with `openssl rand -base64 48`.
 
 **3. Backend** — apply migrations, then seed the exercise catalogue:
 
@@ -46,6 +46,7 @@ dotnet run --project MySelf.Tools.WgerImport -- import   # loads seed-data/wger-
 ```bash
 cd frontend
 npm install
+cp .env.example .env   # VITE_API_BASE_URL, defaults to http://localhost:5242
 ```
 
 ## Run

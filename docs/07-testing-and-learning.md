@@ -154,6 +154,10 @@
 5. εξηγήσει conceptually τι κάνει το EF Core προς PostgreSQL,
 6. επισημάνει framework conventions που δεν είναι obvious από TypeScript/React background.
 
+Στο τέλος κάθε working session (όχι κάθε μεμονωμένου slice), αυτή η εξήγηση γράφεται επίσης
+ως μόνιμο αρχείο στο `docs/learning-log/YYYY-MM-DD-<topic>.md`, ώστε να μένει διαθέσιμη
+πέρα από το chat scrollback. Βλέπε `docs/learning-log/README.md` για το index.
+
 #### Step 4 — Manual verification first
 
 Το Claude δίνει exact commands και manual verification plan με:

@@ -22,3 +22,151 @@ GET {{MySelf.Api_HostAddress}}/api/v1/foods/barcode/abc
 Accept: application/json
 
 ###
+
+# Register -> 201 with access token + Set-Cookie: refreshToken
+POST {{MySelf.Api_HostAddress}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "username": "demo",
+  "email": "demo@example.com",
+  "password": "Str0ng!Passw0rd"
+}
+
+###
+
+# Duplicate username/email -> 400 with a username or email field error (run the request above twice)
+
+###
+
+# Weak password -> 400 with field errors
+POST {{MySelf.Api_HostAddress}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "username": "weakpassworduser",
+  "email": "weak-password@example.com",
+  "password": "123"
+}
+
+###
+
+# Login by email -> 200 with access token + Set-Cookie: refreshToken (run register above first)
+POST {{MySelf.Api_HostAddress}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "identifier": "demo@example.com",
+  "password": "Str0ng!Passw0rd"
+}
+
+###
+
+# Login by username also works
+POST {{MySelf.Api_HostAddress}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "identifier": "demo",
+  "password": "Str0ng!Passw0rd"
+}
+
+###
+
+# trustThisDevice:true -> the Set-Cookie gets an Expires (persistent, survives browser close).
+# Omitted/false -> no Expires -> a session cookie, gone once the browser closes.
+POST {{MySelf.Api_HostAddress}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "identifier": "demo@example.com",
+  "password": "Str0ng!Passw0rd",
+  "trustThisDevice": true
+}
+
+###
+
+# Wrong password -> 401 (5x in a row -> 423 Locked for a few minutes)
+POST {{MySelf.Api_HostAddress}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "identifier": "demo@example.com",
+  "password": "WrongPassword!1"
+}
+
+###
+
+# Refresh -> 200 with a new access token + rotated Set-Cookie (needs a real browser/client
+# to actually send the cookie automatically; from this file you'd need to paste the
+# Set-Cookie value from a prior response as a Cookie header manually).
+POST {{MySelf.Api_HostAddress}}/api/v1/auth/refresh
+
+###
+
+# Refresh with no cookie -> 401
+POST {{MySelf.Api_HostAddress}}/api/v1/auth/refresh
+
+###
+
+# Me -> 200 with the signed-in user (paste an accessToken from register/login above)
+GET {{MySelf.Api_HostAddress}}/api/v1/me
+Authorization: Bearer {{accessToken}}
+
+###
+
+# Me without a token -> 401
+GET {{MySelf.Api_HostAddress}}/api/v1/me
+
+###
+
+# Logout -> 204, revokes the cookie's refresh token and clears it (needs the Cookie header
+# manually pasted from a prior Set-Cookie in this file; a browser does this automatically).
+POST {{MySelf.Api_HostAddress}}/api/v1/auth/logout
+
+###
+
+# Forgot password (known email) -> 200; in Development, resetLink is included directly
+# (dev-sink, docs/05 — no real email provider yet). It's also logged server-side.
+POST {{MySelf.Api_HostAddress}}/api/v1/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "demo@example.com"
+}
+
+###
+
+# Forgot password (unknown email) -> same 200 message, resetLink is null either way
+POST {{MySelf.Api_HostAddress}}/api/v1/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "no-such-account@example.com"
+}
+
+###
+
+# Reset password -> paste the email + token from the resetLink above
+POST {{MySelf.Api_HostAddress}}/api/v1/auth/reset-password
+Content-Type: application/json
+
+{
+  "email": "demo@example.com",
+  "token": "PASTE_TOKEN_HERE",
+  "newPassword": "EvenStr0nger!Pass"
+}
+
+###
+
+# Invalid/garbage token -> 400 "Invalid reset link"
+POST {{MySelf.Api_HostAddress}}/api/v1/auth/reset-password
+Content-Type: application/json
+
+{
+  "email": "demo@example.com",
+  "token": "not-a-real-token",
+  "newPassword": "EvenStr0nger!Pass"
+}
+
+###
