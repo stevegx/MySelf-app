@@ -36,7 +36,9 @@ export function RegisterScreen() {
         trustThisDevice: values.trustThisDevice,
       });
       setSession({ accessToken: result.accessToken, user: result.user });
-      navigate("/dashboard");
+      // New accounts go straight to the onboarding wizard; RequireOnboarding would bounce
+      // them there from /dashboard anyway, so skip the round-trip.
+      navigate("/onboarding");
     } catch (error) {
       if (error instanceof ApiError && error.errors) {
         // The backend groups every failure by field (username/email/password), with a

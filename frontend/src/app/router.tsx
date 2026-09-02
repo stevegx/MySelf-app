@@ -1,12 +1,14 @@
 import { createBrowserRouter, Navigate } from "react-router";
 import { AppShell } from "./AppShell";
 import { RedirectIfAuthenticated } from "./RedirectIfAuthenticated";
+import { RedirectIfOnboarded } from "./RedirectIfOnboarded";
 import { RequireAuth } from "./RequireAuth";
+import { RequireOnboarding } from "./RequireOnboarding";
 import { ForgotPasswordScreen } from "../features/auth/ForgotPasswordScreen";
 import { LoginScreen } from "../features/auth/LoginScreen";
 import { RegisterScreen } from "../features/auth/RegisterScreen";
 import { ResetPasswordScreen } from "../features/auth/ResetPasswordScreen";
-import { OnboardingReviewScreen } from "../features/onboarding/OnboardingReviewScreen";
+import { OnboardingWizard } from "../features/onboarding/OnboardingWizard";
 import { DashboardScreen } from "../features/dashboard/DashboardScreen";
 import { WorkoutBuilderScreen } from "../features/workouts/WorkoutBuilderScreen";
 import { ActiveWorkoutScreen } from "../features/workouts/ActiveWorkoutScreen";
@@ -25,30 +27,41 @@ export const router = createBrowserRouter([
       { path: "/register", element: <RegisterScreen /> },
     ],
   },
-  { path: "/onboarding", element: <OnboardingReviewScreen /> },
   // Reachable whether or not a session exists — e.g. resetting a password from another
   // device while still signed in here (not wrapped in RedirectIfAuthenticated).
   { path: "/forgot-password", element: <ForgotPasswordScreen /> },
   { path: "/reset-password", element: <ResetPasswordScreen /> },
   {
-    // Everything under the app shell requires a session — RequireAuth redirects to
-    // /login otherwise (docs/05: the app's business screens are all owner-scoped).
+    // Everything below requires a session — RequireAuth redirects to /login otherwise.
     path: "/",
     element: <RequireAuth />,
     children: [
       {
-        element: <AppShell />,
+        // /onboarding: full-bleed, no app shell. A user who already finished is bounced
+        // to the dashboard.
+        element: <RedirectIfOnboarded />,
+        children: [{ path: "onboarding", element: <OnboardingWizard /> }],
+      },
+      {
+        // The business screens: a signed-in user who hasn't finished onboarding is sent
+        // back to /onboarding (docs/05: all owner-scoped, and they need a profile/goal).
+        element: <RequireOnboarding />,
         children: [
-          { index: true, element: <Navigate to="/dashboard" replace /> },
-          { path: "dashboard", element: <DashboardScreen /> },
-          { path: "workouts", element: <Navigate to="/workouts/builder" replace /> },
-          { path: "workouts/builder", element: <WorkoutBuilderScreen /> },
-          { path: "workouts/active", element: <ActiveWorkoutScreen /> },
-          { path: "nutrition", element: <NutritionScreen /> },
-          { path: "nutrition/add", element: <AddFoodScreen /> },
-          { path: "progress", element: <ProgressScreen /> },
-          { path: "settings", element: <SettingsScreen /> },
-          { path: "*", element: <Navigate to="/dashboard" replace /> },
+          {
+            element: <AppShell />,
+            children: [
+              { index: true, element: <Navigate to="/dashboard" replace /> },
+              { path: "dashboard", element: <DashboardScreen /> },
+              { path: "workouts", element: <Navigate to="/workouts/builder" replace /> },
+              { path: "workouts/builder", element: <WorkoutBuilderScreen /> },
+              { path: "workouts/active", element: <ActiveWorkoutScreen /> },
+              { path: "nutrition", element: <NutritionScreen /> },
+              { path: "nutrition/add", element: <AddFoodScreen /> },
+              { path: "progress", element: <ProgressScreen /> },
+              { path: "settings", element: <SettingsScreen /> },
+              { path: "*", element: <Navigate to="/dashboard" replace /> },
+            ],
+          },
         ],
       },
     ],
