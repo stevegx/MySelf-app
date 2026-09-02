@@ -175,6 +175,55 @@ Content-Type: application/json
 
 ###
 
+# Nutrition estimate -> 200 with BMR/TDEE/adjustment/suggested + macros + formula version
+POST {{MySelf.Api_HostAddress}}/api/v1/me/nutrition-estimate
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "dateOfBirth": "1994-03-21",
+  "calculationSex": "Female",
+  "heightCm": 170,
+  "weightKg": 68,
+  "activityLevel": "Moderate",
+  "goalType": "Lose",
+  "pace": "Standard"
+}
+
+###
+
+# Nutrition estimate, under 18 -> 200 with nutritionEstimateAvailable=false, reason "under-18"
+POST {{MySelf.Api_HostAddress}}/api/v1/me/nutrition-estimate
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "dateOfBirth": "2012-01-01",
+  "calculationSex": "Male",
+  "heightCm": 160,
+  "weightKg": 50,
+  "activityLevel": "Light",
+  "goalType": "Maintain"
+}
+
+###
+
+# Nutrition estimate, Lose goal with no pace -> 400 ValidationProblem with a "pace" error
+POST {{MySelf.Api_HostAddress}}/api/v1/me/nutrition-estimate
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "dateOfBirth": "1994-03-21",
+  "calculationSex": "Female",
+  "heightCm": 170,
+  "weightKg": 68,
+  "activityLevel": "Moderate",
+  "goalType": "Lose"
+}
+
+###
+
 # Logout -> 204, revokes the cookie's refresh token and clears it (needs the Cookie header
 # manually pasted from a prior Set-Cookie in this file; a browser does this automatically).
 POST {{MySelf.Api_HostAddress}}/api/v1/auth/logout

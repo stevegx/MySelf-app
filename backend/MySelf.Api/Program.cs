@@ -165,6 +165,7 @@ app.MapFoodsEndpoints();
 app.MapAuthEndpoints();
 app.MapPasswordResetEndpoints();
 app.MapMeEndpoints();
+app.MapNutritionEstimateEndpoints();
 
 app.Run();
 
