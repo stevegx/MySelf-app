@@ -15,7 +15,7 @@ export function SettingsScreen() {
   const [units, setUnits] = useState<Units>("metric");
   const { session } = useAuth();
   const { data: me } = useMe();
-  const user = me ?? session?.user;
+  const user = me?.user ?? session?.user;
   const logoutMutation = useLogout();
 
   return (

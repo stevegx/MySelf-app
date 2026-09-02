@@ -120,6 +120,61 @@ GET {{MySelf.Api_HostAddress}}/api/v1/me
 
 ###
 
+# Update profile (onboarding step 1) -> 200 with the saved profile summary.
+# Re-run GET /api/v1/me above afterwards: "profile" is no longer null.
+PUT {{MySelf.Api_HostAddress}}/api/v1/me/profile
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "unitSystem": "Metric",
+  "dateOfBirth": "1994-03-21",
+  "heightCm": 178.5,
+  "calculationSex": "Female",
+  "timezone": "Europe/Athens",
+  "locale": "en-GB"
+}
+
+###
+
+# Update profile, opting out of the calorie estimate -> 200, calculationSex comes back null
+PUT {{MySelf.Api_HostAddress}}/api/v1/me/profile
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "unitSystem": "Metric",
+  "dateOfBirth": "1994-03-21",
+  "heightCm": 178.5
+}
+
+###
+
+# Update profile with a future date of birth -> 400 ValidationProblem with a dateOfBirth error
+PUT {{MySelf.Api_HostAddress}}/api/v1/me/profile
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "unitSystem": "Metric",
+  "dateOfBirth": "2999-01-01",
+  "heightCm": 178.5
+}
+
+###
+
+# Update profile without a token -> 401
+PUT {{MySelf.Api_HostAddress}}/api/v1/me/profile
+Content-Type: application/json
+
+{
+  "unitSystem": "Metric",
+  "dateOfBirth": "1994-03-21",
+  "heightCm": 178.5
+}
+
+###
+
 # Logout -> 204, revokes the cookie's refresh token and clears it (needs the Cookie header
 # manually pasted from a prior Set-Cookie in this file; a browser does this automatically).
 POST {{MySelf.Api_HostAddress}}/api/v1/auth/logout

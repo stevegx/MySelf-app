@@ -34,8 +34,12 @@ public class MeEndpointTests(WebApplicationFactory<Program> factory)
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-            Assert.Equal(username, body.GetProperty("username").GetString());
-            Assert.Equal(email, body.GetProperty("email").GetString());
+            var user = body.GetProperty("user");
+            Assert.Equal(username, user.GetProperty("username").GetString());
+            Assert.Equal(email, user.GetProperty("email").GetString());
+
+            // A brand-new account has not started onboarding, so there is no profile row yet.
+            Assert.Equal(JsonValueKind.Null, body.GetProperty("profile").ValueKind);
         }
         finally
         {

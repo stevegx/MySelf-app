@@ -1,22 +1,32 @@
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using MySelf.Api.Auth;
+using MySelf.Domain.Identity;
 using MySelf.Infrastructure.Identity;
+using MySelf.Infrastructure.Persistence;
 
 namespace MySelf.Api.Me;
 
 /// <summary>
-/// docs/04's "current user" endpoint. For now it only echoes what's on the JWT/Identity
-/// user (id/username/email) — the "profile summary" half (docs/04's UserProfile: date of
-/// birth, goals, etc.) is added once the onboarding slice creates that entity.
+/// docs/04's "current user" surface. <c>GET /me</c> returns the account summary plus the
+/// onboarding <see cref="UserProfile"/> (null until the user saves step 1); <c>PUT /me/profile</c>
+/// creates or updates that profile. The calorie estimate and goal endpoints are later slices.
 /// </summary>
 public static class MeEndpoints
 {
     public static IEndpointRouteBuilder MapMeEndpoints(this IEndpointRouteBuilder app)
     {
+        // Both routes are mapped with their full path (rather than via MapGroup) so
+        // GET /api/v1/me keeps its exact existing pattern — no trailing slash.
         app.MapGet("/api/v1/me", GetMeAsync)
             .WithName("GetMe")
-            .WithSummary("The signed-in user's account summary.")
+            .WithSummary("The signed-in user's account summary and onboarding profile.")
+            .RequireAuthorization();
+
+        app.MapPut("/api/v1/me/profile", UpdateProfileAsync)
+            .WithName("UpdateProfile")
+            .WithSummary("Create or update the signed-in user's profile (onboarding step 1).")
             .RequireAuthorization();
 
         return app;
@@ -24,10 +34,12 @@ public static class MeEndpoints
 
     private static async Task<IResult> GetMeAsync(
         HttpContext httpContext,
-        UserManager<ApplicationUser> userManager)
+        UserManager<ApplicationUser> userManager,
+        MySelfDbContext db,
+        CancellationToken ct)
     {
-        // "sub" survives as the literal JWT claim type (not remapped to a long Microsoft
-        // URI) because Program.cs sets JwtSecurityTokenHandler.DefaultMapInboundClaims = false.
+        // "sub" survives as the literal JWT claim type (not remapped to a long Microsoft URI)
+        // because Program.cs sets JwtSecurityTokenHandler.DefaultMapInboundClaims = false.
         var userId = httpContext.User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
         var user = userId is null ? null : await userManager.FindByIdAsync(userId);
 
@@ -38,6 +50,128 @@ public static class MeEndpoints
             return Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Invalid credentials");
         }
 
-        return Results.Ok(new AuthUser(user.Id, user.UserName!, user.Email!));
+        var profile = await db.UserProfiles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.UserId == user.Id, ct);
+
+        return Results.Ok(new MeResponse(
+            new AuthUser(user.Id, user.UserName!, user.Email!),
+            profile is null ? null : ToSummary(profile)));
     }
+
+    private static async Task<IResult> UpdateProfileAsync(
+        UpdateProfileRequest request,
+        HttpContext httpContext,
+        MySelfDbContext db,
+        TimeProvider clock,
+        CancellationToken ct)
+    {
+        var userIdClaim = httpContext.User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+        if (userIdClaim is null || !Guid.TryParse(userIdClaim, out var userId))
+        {
+            return Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Invalid credentials");
+        }
+
+        // Server-side validation of every calculation-affecting field (docs/04 API
+        // conventions) — the estimator in a later slice depends on these being sane.
+        var errors = new Dictionary<string, string[]>();
+        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+
+        if (!Enum.TryParse<UnitSystem>(request.UnitSystem, ignoreCase: true, out var unitSystem)
+            || !Enum.IsDefined(unitSystem))
+        {
+            errors["unitSystem"] = ["Choose either Metric or Imperial."];
+        }
+
+        if (request.DateOfBirth is not { } dob)
+        {
+            errors["dateOfBirth"] = ["Date of birth is required."];
+        }
+        else if (dob >= today)
+        {
+            errors["dateOfBirth"] = ["Date of birth must be in the past."];
+        }
+        else if (AgeYears(dob, today) > 120)
+        {
+            errors["dateOfBirth"] = ["Enter a valid date of birth."];
+        }
+
+        if (request.HeightCm is not { } heightCm)
+        {
+            errors["heightCm"] = ["Height is required."];
+        }
+        else if (heightCm is < 50m or > 260m)
+        {
+            errors["heightCm"] = ["Enter a height between 50 and 260 cm."];
+        }
+
+        // Optional by product rule (docs/01 step 1: "I prefer not to use this calculation").
+        // Absent => null. Present but not Male/Female => a field error, not a silent drop.
+        CalculationSex? calculationSex = null;
+        if (request.CalculationSex is not null)
+        {
+            if (Enum.TryParse<CalculationSex>(request.CalculationSex, ignoreCase: true, out var parsedSex)
+                && Enum.IsDefined(parsedSex))
+            {
+                calculationSex = parsedSex;
+            }
+            else
+            {
+                errors["calculationSex"] = ["Choose Male or Female, or omit it to skip the calorie estimate."];
+            }
+        }
+
+        if (errors.Count > 0)
+        {
+            return Results.ValidationProblem(errors, title: "Validation failed");
+        }
+
+        var now = clock.GetUtcNow();
+        var profile = await db.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId, ct);
+
+        // Create-or-update: onboarding step 1 can be revisited and re-saved, so a second call
+        // must land on the same row rather than inserting a duplicate (the shared PK would
+        // reject that anyway — this just makes the intent explicit).
+        if (profile is null)
+        {
+            profile = new UserProfile { UserId = userId, CreatedAt = now };
+            db.UserProfiles.Add(profile);
+        }
+
+        profile.UnitSystem = unitSystem;
+        profile.DateOfBirth = request.DateOfBirth!.Value;
+        profile.HeightCm = request.HeightCm!.Value;
+        profile.CalculationSex = calculationSex;
+        profile.Timezone = Trimmed(request.Timezone);
+        profile.Locale = Trimmed(request.Locale);
+        profile.UpdatedAt = now;
+
+        await db.SaveChangesAsync(ct);
+
+        return Results.Ok(ToSummary(profile));
+    }
+
+    private static ProfileSummary ToSummary(UserProfile p) => new(
+        p.DateOfBirth,
+        p.HeightCm,
+        p.CalculationSex?.ToString(),
+        p.UnitSystem.ToString(),
+        p.Timezone,
+        p.Locale,
+        p.OnboardingCompletedAt);
+
+    /// <summary>Whole years between <paramref name="dob"/> and <paramref name="on"/>, not yet rounded up on the birthday.</summary>
+    private static int AgeYears(DateOnly dob, DateOnly on)
+    {
+        var age = on.Year - dob.Year;
+        if (dob > on.AddYears(-age))
+        {
+            age--;
+        }
+
+        return age;
+    }
+
+    private static string? Trimmed(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

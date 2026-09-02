@@ -21,7 +21,7 @@ const SETUP_ITEMS = [
 export function DashboardScreen() {
   const { session } = useAuth();
   const { data: me } = useMe();
-  const username = (me ?? session?.user)?.username;
+  const username = (me?.user ?? session?.user)?.username;
 
   return (
     <>

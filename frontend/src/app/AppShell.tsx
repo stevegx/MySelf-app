@@ -53,7 +53,7 @@ function AccountSummary() {
   // what actually proves it works, rather than only ever trusting the cached login/register
   // response. Falls back to that cached user while the request is in flight.
   const { data: me } = useMe();
-  const user = me ?? session?.user;
+  const user = me?.user ?? session?.user;
 
   if (!user) {
     return null;
