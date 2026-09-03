@@ -61,11 +61,27 @@ _Core shipped 2026-09-02: WorkoutProgram/Group/Variant/VariantExercise/SetPrescr
 SupersetGroup model + CRUD, per-owner authorization (404 on a miss), `PUT /workout-variants/{id}`
 whole-body replace in one transaction, `POST /programs/{id}/activate` (explicit transaction +
 filtered unique index for one-active-per-user), `GET /exercises` catalogue search, and a
-functional builder UI. **Deferred:** program clone, bulk copy/move exercises, custom
-(user-created) exercises, superset editing UI, undo/BulkOperation, drag-and-drop reorder,
-per-set prescription UI, templates. See `docs/learning-log/2026-09-02-phase2-program-builder.md`
-for the full drawbacks/risks/gaps review (concurrency token not yet enforced, no rate limiting,
-no tree-size caps, integration tests local-only)._
+functional builder UI._
+
+_Gap closure shipped 2026-09-03 (11 slices — see
+`docs/learning-log/2026-09-03-phase2-gap-closure.md`): input caps (`WorkoutLimits`) + `q`
+length cap; rate limiting (global + `auth` + `write` policies, incl. the Phase 1 auth
+endpoints); centralised ownership filter (`OwnedWorkouts`); **`xmin` concurrency token now
+enforced** on `PUT /programs` and `PUT /workout-variants` (token on the program, returns
+409); `POST /programs/{id}/clone`; bulk copy/move exercises
+(`/workout-variants/{id}/exercises/bulk-copy|bulk-move`); rebuilt variant editor with the
+full per-set prescription grid (drop sets / AMRAP / per-set weights round-trip losslessly),
+superset editing UI, and an unsaved-changes guard; `@dnd-kit` drag-and-drop reorder for
+groups/variants/exercises + the previously-unwired `groupOrder`/`variantOrder`;
+`GET /programs/archived` + `POST /programs/{id}/restore` (un-archive); styled confirm
+dialogs replacing `window.confirm`; integration tests isolated with Respawn (per-test DB
+reset, serial) + CI now seeds the exercise catalogue._
+
+_**Still deferred:** custom (user-created) exercises — **dropped from the MVP**, builder is
+catalogue-only. Undo/`BulkOperation` for hard deletes, and the archive-instead-of-delete
+guard for groups/variants with session history — both **Phase 3** (no sessions yet).
+Templates — after the custom flow stabilises. `ILIKE '%…%'` catalogue search still full-scans
+(fine at ~900 rows). OpenAPI-generated TS client still hand-written (project-wide)._
 
 - Seed/curate the catalogue data needed by the builder.
 - Blank custom program builder.
