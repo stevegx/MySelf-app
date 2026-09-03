@@ -1,17 +1,18 @@
 import { useNavigate } from "react-router";
 import { Plus, ScanLine } from "lucide-react";
 import { Button, Card, CardTitle, PageHeader, Ring } from "../../components/ui";
-
-const MACROS = [
-  { label: "Protein", detail: "0/112g" },
-  { label: "Carbs", detail: "0/288g" },
-  { label: "Fat", detail: "0/56g" },
-];
+import { formatTarget, useNutritionTargets } from "./useNutritionTargets";
 
 const MEALS = ["Breakfast", "Lunch", "Dinner", "Snacks"];
 
 export function NutritionScreen() {
   const navigate = useNavigate();
+  const targets = useNutritionTargets();
+  const macros = [
+    { label: "Protein", target: targets.proteinGrams },
+    { label: "Carbs", target: targets.carbGrams },
+    { label: "Fat", target: targets.fatGrams },
+  ];
 
   return (
     <>
@@ -33,19 +34,40 @@ export function NutritionScreen() {
       />
 
       <Card className="mb-[18px] flex-row flex-wrap items-center gap-7">
-        <Ring size={104} stroke={9} ariaLabel="Calories: 0 of 2,104 kcal" />
+        <Ring
+          size={104}
+          stroke={9}
+          ariaLabel={
+            targets.hasTarget
+              ? `Calories: 0 of ${formatTarget(targets.calorieTarget)} kcal`
+              : "Calories logged today: 0 kcal"
+          }
+        />
         <div>
           <div className="text-2xl font-bold">
-            0 <span className="text-[13px] font-normal text-foreground-muted">/ 2,104 kcal</span>
+            0{" "}
+            <span className="text-[13px] font-normal text-foreground-muted">
+              {targets.hasTarget ? `/ ${formatTarget(targets.calorieTarget)} kcal` : "kcal"}
+            </span>
           </div>
-          <div className="text-xs text-foreground-muted">2,104 remaining</div>
+          <div className="text-xs text-foreground-muted">
+            {targets.hasTarget
+              ? `${formatTarget(targets.calorieTarget)} remaining`
+              : "No calorie target — set one in Settings"}
+          </div>
         </div>
         <div className="ml-auto flex gap-4">
-          {MACROS.map((macro) => (
+          {macros.map((macro) => (
             <div key={macro.label} className="text-center">
-              <Ring size={46} stroke={5} ariaLabel={`${macro.label}: ${macro.detail}`} />
+              <Ring
+                size={46}
+                stroke={5}
+                ariaLabel={`${macro.label}: 0 of ${macro.target == null ? "no" : formatTarget(macro.target)} g`}
+              />
               <div className="mt-1 text-[11px]">{macro.label}</div>
-              <div className="text-[10px] text-foreground-muted">{macro.detail}</div>
+              <div className="text-[10px] text-foreground-muted">
+                {macro.target == null ? "—" : `0/${formatTarget(macro.target)}g`}
+              </div>
             </div>
           ))}
         </div>

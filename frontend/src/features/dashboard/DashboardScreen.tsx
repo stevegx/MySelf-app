@@ -2,12 +2,7 @@ import { ChevronRight, Circle, Dumbbell, Scale, Utensils } from "lucide-react";
 import { Button, Card, CardKicker, PageHeader, Ring } from "../../components/ui";
 import { useAuth } from "../auth/auth";
 import { useMe } from "../auth/useMe";
-
-const MACROS = [
-  { label: "Protein", detail: "0 / 112g" },
-  { label: "Carbs", detail: "0 / 288g" },
-  { label: "Fat", detail: "0 / 56g" },
-];
+import { formatTarget, useNutritionTargets } from "../nutrition/useNutritionTargets";
 
 const WEEK_DAYS = ["M", "T", "W", "T", "F", "S", "S"];
 
@@ -22,6 +17,16 @@ export function DashboardScreen() {
   const { session } = useAuth();
   const { data: me } = useMe();
   const username = (me?.user ?? session?.user)?.username;
+
+  const targets = useNutritionTargets();
+  const macros = [
+    { label: "Protein", target: targets.proteinGrams },
+    { label: "Carbs", target: targets.carbGrams },
+    { label: "Fat", target: targets.fatGrams },
+  ];
+  const calorieLabel = targets.hasTarget
+    ? `Calories: 0 of ${formatTarget(targets.calorieTarget)} kcal`
+    : "Calories logged today: 0 kcal";
 
   return (
     <>
@@ -50,19 +55,32 @@ export function DashboardScreen() {
         <Card className="col-span-2">
           <CardKicker>Nutrition today</CardKicker>
           <div className="flex flex-wrap items-center gap-7 py-1">
-            <Ring size={112} stroke={10} ariaLabel="Calories: 0 of 2,104 kcal" />
+            <Ring size={112} stroke={10} ariaLabel={calorieLabel} />
             <div className="flex flex-col gap-0.5">
               <div className="text-[26px] font-bold">
-                0 <span className="text-sm font-normal text-foreground-muted">/ 2,104 kcal</span>
+                0{" "}
+                <span className="text-sm font-normal text-foreground-muted">
+                  {targets.hasTarget ? `/ ${formatTarget(targets.calorieTarget)} kcal` : "kcal"}
+                </span>
               </div>
-              <div className="text-[13px] text-foreground-muted">Nothing logged yet today</div>
+              <div className="text-[13px] text-foreground-muted">
+                {targets.hasTarget
+                  ? "Nothing logged yet today"
+                  : "No calorie target — set one in Settings"}
+              </div>
             </div>
             <div className="ml-auto flex gap-[18px]">
-              {MACROS.map((macro) => (
+              {macros.map((macro) => (
                 <div key={macro.label} className="text-center">
-                  <Ring size={52} stroke={6} ariaLabel={`${macro.label}: ${macro.detail}`} />
+                  <Ring
+                    size={52}
+                    stroke={6}
+                    ariaLabel={`${macro.label}: 0 of ${macro.target == null ? "no" : formatTarget(macro.target)} g`}
+                  />
                   <div className="mt-1 text-xs">{macro.label}</div>
-                  <div className="text-[11px] text-foreground-muted">{macro.detail}</div>
+                  <div className="text-[11px] text-foreground-muted">
+                    {macro.target == null ? "—" : `0 / ${formatTarget(macro.target)}g`}
+                  </div>
                 </div>
               ))}
             </div>
