@@ -36,9 +36,9 @@ public static class WorkoutGroupEndpoints
             return Unauthorized();
         }
 
-        var group = await db.WorkoutGroups
+        var group = await db.OwnedGroups(userId)
             .Include(g => g.Variants)
-            .FirstOrDefaultAsync(g => g.Id == id && g.Program.UserId == userId, ct);
+            .FirstOrDefaultAsync(g => g.Id == id, ct);
         if (group is null)
         {
             return Results.NotFound();
@@ -71,7 +71,7 @@ public static class WorkoutGroupEndpoints
             return Unauthorized();
         }
 
-        var group = await db.WorkoutGroups.FirstOrDefaultAsync(g => g.Id == id && g.Program.UserId == userId, ct);
+        var group = await db.OwnedGroups(userId).FirstOrDefaultAsync(g => g.Id == id, ct);
         if (group is null)
         {
             return Results.NotFound();
@@ -95,9 +95,9 @@ public static class WorkoutGroupEndpoints
             return Unauthorized();
         }
 
-        var group = await db.WorkoutGroups
+        var group = await db.OwnedGroups(userId)
             .Include(g => g.Variants)
-            .FirstOrDefaultAsync(g => g.Id == id && g.Program.UserId == userId, ct);
+            .FirstOrDefaultAsync(g => g.Id == id, ct);
         if (group is null)
         {
             return Results.NotFound();

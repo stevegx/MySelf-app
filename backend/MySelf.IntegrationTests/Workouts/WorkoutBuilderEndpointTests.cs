@@ -253,8 +253,15 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory)
 
             Assert.Equal(HttpStatusCode.NotFound, (await bob.GetAsync($"/api/v1/programs/{programId}")).StatusCode);
             Assert.Equal(HttpStatusCode.NotFound, (await bob.PostAsJsonAsync($"/api/v1/programs/{programId}/groups", new { name = "X" })).StatusCode);
-            Assert.Equal(HttpStatusCode.NotFound, (await bob.GetAsync($"/api/v1/workout-variants/{variantId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await bob.PutAsJsonAsync($"/api/v1/programs/{programId}", new { name = "hijacked" })).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await bob.DeleteAsync($"/api/v1/programs/{programId}")).StatusCode);
             Assert.Equal(HttpStatusCode.NotFound, (await bob.PostAsync($"/api/v1/programs/{programId}/activate", null)).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await bob.PutAsJsonAsync($"/api/v1/workout-groups/{groupId}", new { name = "X" })).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await bob.DeleteAsync($"/api/v1/workout-groups/{groupId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await bob.PostAsJsonAsync($"/api/v1/workout-groups/{groupId}/variants", new { name = "X" })).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await bob.GetAsync($"/api/v1/workout-variants/{variantId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await bob.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}", new { exercises = Array.Empty<object>(), supersets = Array.Empty<object>() })).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await bob.DeleteAsync($"/api/v1/workout-variants/{variantId}")).StatusCode);
             Assert.Equal(0, (await bob.GetFromJsonAsync<JsonElement>("/api/v1/programs")).GetArrayLength());
         }
         finally

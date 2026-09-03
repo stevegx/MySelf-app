@@ -35,9 +35,9 @@ public static class ProgramEndpoints
             return Unauthorized();
         }
 
-        var items = await db.WorkoutPrograms
+        var items = await db.OwnedPrograms(userId)
             .AsNoTracking()
-            .Where(p => p.UserId == userId && p.ArchivedAt == null)
+            .Where(p => p.ArchivedAt == null)
             .OrderByDescending(p => p.IsActive)
             .ThenByDescending(p => p.CreatedAt)
             .Select(p => new ProgramListItem(
@@ -71,8 +71,8 @@ public static class ProgramEndpoints
             return Validation("name", "Enter a program name (1–120 characters).");
         }
 
-        var programCount = await db.WorkoutPrograms
-            .CountAsync(p => p.UserId == userId && p.ArchivedAt == null, ct);
+        var programCount = await db.OwnedPrograms(userId)
+            .CountAsync(p => p.ArchivedAt == null, ct);
         if (programCount >= WorkoutLimits.MaxProgramsPerUser)
         {
             return TooMany($"You can have at most {WorkoutLimits.MaxProgramsPerUser} programs. Archive one first.");
@@ -101,9 +101,9 @@ public static class ProgramEndpoints
             return Unauthorized();
         }
 
-        var program = await db.WorkoutPrograms
+        var program = await db.OwnedPrograms(userId)
             .AsNoTracking()
-            .Where(p => p.Id == id && p.UserId == userId && p.ArchivedAt == null)
+            .Where(p => p.Id == id && p.ArchivedAt == null)
             .Select(p => new ProgramDetail(
                 p.Id,
                 p.Name,
@@ -138,9 +138,9 @@ public static class ProgramEndpoints
             return Unauthorized();
         }
 
-        var program = await db.WorkoutPrograms
+        var program = await db.OwnedPrograms(userId)
             .Include(p => p.Groups)
-            .FirstOrDefaultAsync(p => p.Id == id && p.UserId == userId, ct);
+            .FirstOrDefaultAsync(p => p.Id == id, ct);
 
         if (program is null)
         {
@@ -181,7 +181,7 @@ public static class ProgramEndpoints
             return Unauthorized();
         }
 
-        var program = await db.WorkoutPrograms.FirstOrDefaultAsync(p => p.Id == id && p.UserId == userId, ct);
+        var program = await db.OwnedPrograms(userId).FirstOrDefaultAsync(p => p.Id == id, ct);
         if (program is null)
         {
             return Results.NotFound();
@@ -204,8 +204,8 @@ public static class ProgramEndpoints
             return Unauthorized();
         }
 
-        var target = await db.WorkoutPrograms.FirstOrDefaultAsync(
-            p => p.Id == id && p.UserId == userId && p.ArchivedAt == null, ct);
+        var target = await db.OwnedPrograms(userId)
+            .FirstOrDefaultAsync(p => p.Id == id && p.ArchivedAt == null, ct);
         if (target is null)
         {
             return Results.NotFound();
@@ -217,8 +217,8 @@ public static class ProgramEndpoints
         // explicit transaction so a crash between them can't leave the user with none.
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
-        await db.WorkoutPrograms
-            .Where(p => p.UserId == userId && p.IsActive && p.Id != target.Id)
+        await db.OwnedPrograms(userId)
+            .Where(p => p.IsActive && p.Id != target.Id)
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.IsActive, false), ct);
 
         target.IsActive = true;
@@ -240,9 +240,9 @@ public static class ProgramEndpoints
             return Unauthorized();
         }
 
-        var program = await db.WorkoutPrograms
+        var program = await db.OwnedPrograms(userId)
             .Include(p => p.Groups)
-            .FirstOrDefaultAsync(p => p.Id == id && p.UserId == userId, ct);
+            .FirstOrDefaultAsync(p => p.Id == id, ct);
         if (program is null)
         {
             return Results.NotFound();

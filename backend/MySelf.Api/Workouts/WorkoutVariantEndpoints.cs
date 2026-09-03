@@ -34,9 +34,9 @@ public static class WorkoutVariantEndpoints
             return Unauthorized();
         }
 
-        var variant = await db.WorkoutVariants
+        var variant = await db.OwnedVariants(userId)
             .AsNoTracking()
-            .Where(v => v.Id == id && v.Group.Program.UserId == userId)
+            .Where(v => v.Id == id)
             .Select(v => new VariantDetail(
                 v.Id,
                 v.Name,
@@ -88,10 +88,10 @@ public static class WorkoutVariantEndpoints
             return Unauthorized();
         }
 
-        var variant = await db.WorkoutVariants
+        var variant = await db.OwnedVariants(userId)
             .Include(v => v.Exercises).ThenInclude(e => e.Sets)
             .Include(v => v.Supersets)
-            .FirstOrDefaultAsync(v => v.Id == id && v.Group.Program.UserId == userId, ct);
+            .FirstOrDefaultAsync(v => v.Id == id, ct);
         if (variant is null)
         {
             return Results.NotFound();
@@ -288,8 +288,7 @@ public static class WorkoutVariantEndpoints
             return Unauthorized();
         }
 
-        var variant = await db.WorkoutVariants.FirstOrDefaultAsync(
-            v => v.Id == id && v.Group.Program.UserId == userId, ct);
+        var variant = await db.OwnedVariants(userId).FirstOrDefaultAsync(v => v.Id == id, ct);
         if (variant is null)
         {
             return Results.NotFound();
