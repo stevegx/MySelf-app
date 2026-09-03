@@ -10,10 +10,12 @@ import {
   goalSchema,
   manualTargetSchema,
 } from "./onboardingSchema";
+import { DateOfBirthPicker } from "./DateOfBirthPicker";
 import { useNutritionEstimate } from "./useNutritionEstimate";
 import type { NutritionEstimate } from "./useNutritionEstimate";
 import { useCompleteOnboarding } from "./useCompleteOnboarding";
 import type { CompleteOnboardingInput } from "./useCompleteOnboarding";
+import { useSaveProfile } from "./useSaveProfile";
 
 type Answers = {
   unitSystem: "Metric" | "Imperial";
@@ -149,6 +151,7 @@ export function OnboardingWizard() {
   const navigate = useNavigate();
   const estimateMutation = useNutritionEstimate();
   const completeMutation = useCompleteOnboarding();
+  const saveProfileMutation = useSaveProfile();
 
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Answers>(INITIAL);
@@ -171,7 +174,8 @@ export function OnboardingWizard() {
   const targetWeightForPayload =
     paceMatters && answers.targetWeightKg ? Number(answers.targetWeightKg) : undefined;
 
-  const busy = estimateMutation.isPending || completeMutation.isPending;
+  const busy =
+    estimateMutation.isPending || completeMutation.isPending || saveProfileMutation.isPending;
 
   async function goToReview() {
     setSubmitError(null);
@@ -244,6 +248,15 @@ export function OnboardingWizard() {
   async function finish(input: CompleteOnboardingInput) {
     setSubmitError(null);
     try {
+      // The profile (DOB / height / sex) must be persisted first — POST /me/onboarding/complete
+      // reads it and 400s if it's missing. PUT /me/profile is create-or-update / idempotent.
+      await saveProfileMutation.mutateAsync({
+        unitSystem: answers.unitSystem,
+        dateOfBirth: answers.dateOfBirth,
+        heightCm: Number(answers.heightCm),
+        calculationSex: answers.useCalculationSex ? (answers.calculationSex || null) : null,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+      });
       await completeMutation.mutateAsync(input);
       navigate("/dashboard", { replace: true });
     } catch (error) {
@@ -314,13 +327,11 @@ export function OnboardingWizard() {
                 ]}
               />
             </Field>
-            <Field label="Date of birth" htmlFor="dob" hint={<ErrorText>{errors.dateOfBirth}</ErrorText>}>
-              <Input
-                id="dob"
-                type="date"
+            <Field label="Date of birth" hint={<ErrorText>{errors.dateOfBirth}</ErrorText>}>
+              <DateOfBirthPicker
                 value={answers.dateOfBirth}
-                onChange={(e) => set("dateOfBirth", e.target.value)}
-                aria-invalid={errors.dateOfBirth ? true : undefined}
+                onChange={(v) => set("dateOfBirth", v)}
+                invalid={errors.dateOfBirth ? true : undefined}
               />
             </Field>
             {isMinor && (

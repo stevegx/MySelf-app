@@ -27,6 +27,9 @@ function installFetch(overrides: { estimate?: unknown; complete?: unknown } = {}
     if (url.includes("/auth/refresh")) {
       return Promise.resolve(new Response(null, { status: 401 }));
     }
+    if (url.includes("/me/profile")) {
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }
     if (url.includes("/me/nutrition-estimate")) {
       return Promise.resolve(
         new Response(JSON.stringify(overrides.estimate ?? ESTIMATE), {
@@ -64,10 +67,16 @@ function renderWizard() {
   );
 }
 
+async function setDateOfBirth(user: ReturnType<typeof userEvent.setup>, iso: string) {
+  const [year, month, day] = iso.split("-").map(Number);
+  await user.selectOptions(screen.getByLabelText("Year"), String(year));
+  await user.selectOptions(screen.getByLabelText("Month"), String(month));
+  await user.selectOptions(screen.getByLabelText("Day"), String(day));
+}
+
 /** Complete step 1 with a valid adult profile and advance to step 2. */
 async function fillAboutYou(user: ReturnType<typeof userEvent.setup>, { minor = false } = {}) {
-  const dob = minor ? "2013-01-01" : "1994-03-21";
-  fireEvent.change(screen.getByLabelText("Date of birth"), { target: { value: dob } });
+  await setDateOfBirth(user, minor ? "2013-01-01" : "1994-03-21");
   fireEvent.change(screen.getByLabelText("Height (cm)"), { target: { value: "178" } });
   fireEvent.change(screen.getByLabelText("Current weight (kg)"), { target: { value: "72" } });
   await user.click(screen.getByRole("radio", { name: "Male" }));
@@ -123,6 +132,37 @@ describe("OnboardingWizard", () => {
     expect(JSON.parse((completeCall![1] as RequestInit).body as string)).toMatchObject({
       goalType: "Lose",
       estimate: { weightKg: 72, activityLevel: "Moderate", pace: "Standard" },
+    });
+  });
+
+  it("saves the profile (PUT /me/profile) before completing onboarding", async () => {
+    const fetchSpy = installFetch();
+    const user = userEvent.setup();
+    renderWizard();
+
+    await fillAboutYou(user);
+    await user.click(await screen.findByRole("radio", { name: /Maintain weight/i }));
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(await screen.findByRole("radio", { name: /Moderately active/i }));
+    await user.click(screen.getByRole("button", { name: "Review" }));
+    await user.click(await screen.findByRole("button", { name: "Skip nutrition setup" }));
+
+    await screen.findByText("Dashboard content");
+
+    const urls = fetchSpy.mock.calls.map(([u, i]) => `${(i as RequestInit)?.method ?? "GET"} ${String(u)}`);
+    const profileIdx = urls.findIndex((u) => u.startsWith("PUT ") && u.includes("/me/profile"));
+    const completeIdx = urls.findIndex((u) => u.includes("/me/onboarding/complete"));
+    expect(profileIdx).toBeGreaterThanOrEqual(0);
+    expect(completeIdx).toBeGreaterThan(profileIdx);
+
+    const profileBody = JSON.parse(
+      (fetchSpy.mock.calls.find(([u, i]) => (i as RequestInit)?.method === "PUT" && String(u).includes("/me/profile"))![1] as RequestInit).body as string,
+    );
+    expect(profileBody).toMatchObject({
+      unitSystem: "Metric",
+      dateOfBirth: "1994-03-21",
+      heightCm: 178,
+      calculationSex: "Male",
     });
   });
 
