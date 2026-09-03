@@ -32,6 +32,16 @@ public static class ExerciseEndpoints
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
 
+        if (q is { Length: > WorkoutLimits.MaxSearchTermLength })
+        {
+            return Results.ValidationProblem(
+                new Dictionary<string, string[]>
+                {
+                    ["q"] = [$"Search term must be {WorkoutLimits.MaxSearchTermLength} characters or fewer."],
+                },
+                title: "Validation failed");
+        }
+
         var query = db.Exercises.AsNoTracking().Include(e => e.Category).AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(q))

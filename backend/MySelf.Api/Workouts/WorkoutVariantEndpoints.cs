@@ -14,9 +14,6 @@ namespace MySelf.Api.Workouts;
 /// </summary>
 public static class WorkoutVariantEndpoints
 {
-    private const int MaxExercises = 50;
-    private const int MaxSetsPerExercise = 20;
-
     public static IEndpointRouteBuilder MapWorkoutVariantEndpoints(this IEndpointRouteBuilder app)
     {
         var variants = app.MapGroup("/api/v1/workout-variants").RequireAuthorization();
@@ -112,9 +109,47 @@ public static class WorkoutVariantEndpoints
             variant.Name = name;
         }
 
-        if (exercises.Count > MaxExercises)
+        if (request.EstimatedDurationMinutes is { } dur &&
+            (dur < 0 || dur > WorkoutLimits.MaxEstimatedDurationMinutes))
         {
-            return Validation("exercises", $"A variant can hold at most {MaxExercises} exercises.");
+            return Validation("estimatedDurationMinutes",
+                $"Estimated duration must be between 0 and {WorkoutLimits.MaxEstimatedDurationMinutes} minutes.");
+        }
+
+        if (exercises.Count > WorkoutLimits.MaxExercisesPerVariant)
+        {
+            return Validation("exercises", $"A variant can hold at most {WorkoutLimits.MaxExercisesPerVariant} exercises.");
+        }
+
+        if (supersets.Count > WorkoutLimits.MaxSupersetsPerVariant)
+        {
+            return Validation("supersets", $"A variant can hold at most {WorkoutLimits.MaxSupersetsPerVariant} supersets.");
+        }
+
+        foreach (var e in exercises)
+        {
+            if (e.SortOrder < 0 || e.SortOrder > WorkoutLimits.MaxSortOrder)
+            {
+                return Validation("exercises", "Exercise sort order is out of range.");
+            }
+
+            if (e.SupersetMemberOrder < 0 || e.SupersetMemberOrder > WorkoutLimits.MaxSupersetMemberOrder)
+            {
+                return Validation("exercises", "Superset member order is out of range.");
+            }
+
+            if (e.RestSeconds is { } rest && (rest < 0 || rest > WorkoutLimits.MaxRestSeconds))
+            {
+                return Validation("exercises", $"Rest must be between 0 and {WorkoutLimits.MaxRestSeconds} seconds.");
+            }
+        }
+
+        foreach (var s in supersets)
+        {
+            if (s.SortOrder < 0 || s.SortOrder > WorkoutLimits.MaxSetSortOrder)
+            {
+                return Validation("supersets", "Superset sort order is out of range.");
+            }
         }
 
         // Every referenced exercise must exist in the catalogue.
@@ -151,9 +186,9 @@ public static class WorkoutVariantEndpoints
 
         foreach (var e in exercises)
         {
-            if ((e.Sets?.Count ?? 0) > MaxSetsPerExercise)
+            if ((e.Sets?.Count ?? 0) > WorkoutLimits.MaxSetsPerExercise)
             {
-                return Validation("sets", $"An exercise can hold at most {MaxSetsPerExercise} sets.");
+                return Validation("sets", $"An exercise can hold at most {WorkoutLimits.MaxSetsPerExercise} sets.");
             }
 
             foreach (var s in e.Sets ?? [])
@@ -161,6 +196,11 @@ public static class WorkoutVariantEndpoints
                 if (s.Kind is not null && !Enum.TryParse<SetKind>(s.Kind, ignoreCase: true, out _))
                 {
                     return Validation("sets", "Set kind must be Standard or Drop.");
+                }
+
+                if (s.SortOrder < 0 || s.SortOrder > WorkoutLimits.MaxSetSortOrder)
+                {
+                    return Validation("sets", "Set sort order is out of range.");
                 }
 
                 if (s.TargetRepsMin is < 0 || s.TargetRepsMax is < 0 ||
@@ -172,6 +212,11 @@ public static class WorkoutVariantEndpoints
                 if (s.TargetWeightKg is < 0 or > 2000)
                 {
                     return Validation("sets", "Target weight is out of range.");
+                }
+
+                if (s.TargetRir is { } rir && (rir < 0 || rir > WorkoutLimits.MaxTargetRir))
+                {
+                    return Validation("sets", $"Reps in reserve must be between 0 and {WorkoutLimits.MaxTargetRir}.");
                 }
             }
         }

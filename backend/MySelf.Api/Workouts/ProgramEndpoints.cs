@@ -69,6 +69,13 @@ public static class ProgramEndpoints
             return Validation("name", "Enter a program name (1–120 characters).");
         }
 
+        var programCount = await db.WorkoutPrograms
+            .CountAsync(p => p.UserId == userId && p.ArchivedAt == null, ct);
+        if (programCount >= WorkoutLimits.MaxProgramsPerUser)
+        {
+            return TooMany($"You can have at most {WorkoutLimits.MaxProgramsPerUser} programs. Archive one first.");
+        }
+
         var program = new WorkoutProgram
         {
             Id = Guid.NewGuid(),
@@ -245,6 +252,11 @@ public static class ProgramEndpoints
             return Validation("name", "Enter a group name (1–80 characters).");
         }
 
+        if (program.Groups.Count >= WorkoutLimits.MaxGroupsPerProgram)
+        {
+            return TooMany($"A program can have at most {WorkoutLimits.MaxGroupsPerProgram} groups.");
+        }
+
         var groupEntity = new WorkoutGroup
         {
             Id = Guid.NewGuid(),
@@ -289,6 +301,10 @@ public static class ProgramEndpoints
 
     internal static IResult Validation(string field, string message) =>
         Results.ValidationProblem(new Dictionary<string, string[]> { [field] = [message] }, title: "Validation failed");
+
+    /// <summary>A size cap was hit — the request is well-formed, the resource state won't allow it (409).</summary>
+    internal static IResult TooMany(string message) =>
+        Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "Limit reached", detail: message);
 
     internal static string? Trimmed(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

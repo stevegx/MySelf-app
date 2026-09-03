@@ -336,6 +336,89 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory)
     }
 
     [Fact]
+    public async Task Exercise_search_rejects_an_over_long_term()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var tooLong = new string('a', 101);
+            var res = await client.GetAsync($"/api/v1/exercises?q={tooLong}");
+            Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Put_variant_rejects_out_of_range_numbers()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var ex = await TwoExerciseIdsAsync();
+            var programId = await CreateProgramAsync(client);
+            var groupId = await AddGroupAsync(client, programId);
+            var variantId = await AddVariantAsync(client, groupId);
+
+            object ExerciseWithRest(int rest) => new
+            {
+                exerciseId = ex[0], sortOrder = 0, supersetRef = (string?)null, supersetMemberOrder = 0,
+                restSeconds = (int?)rest, notes = (string?)null, sets = Array.Empty<object>(),
+            };
+
+            var badRest = await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}",
+                new { exercises = new[] { ExerciseWithRest(999_999) }, supersets = Array.Empty<object>() });
+            Assert.Equal(HttpStatusCode.BadRequest, badRest.StatusCode);
+
+            var badRir = await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}", new
+            {
+                exercises = new[]
+                {
+                    new
+                    {
+                        exerciseId = ex[0], sortOrder = 0, supersetRef = (string?)null, supersetMemberOrder = 0,
+                        restSeconds = (int?)null, notes = (string?)null,
+                        sets = new[]
+                        {
+                            new { sortOrder = 0, kind = "Standard", isAmrap = false, targetToFailure = false, targetRepsMin = (int?)5, targetRepsMax = (int?)5, targetWeightKg = (double?)null, targetRir = (int?)99 },
+                        },
+                    },
+                },
+                supersets = Array.Empty<object>(),
+            });
+            Assert.Equal(HttpStatusCode.BadRequest, badRir.StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Adding_a_31st_group_is_rejected()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var programId = await CreateProgramAsync(client);
+            for (var i = 0; i < 30; i++)
+            {
+                var ok = await client.PostAsJsonAsync($"/api/v1/programs/{programId}/groups", new { name = $"G{i}" });
+                ok.EnsureSuccessStatusCode();
+            }
+
+            var over = await client.PostAsJsonAsync($"/api/v1/programs/{programId}/groups", new { name = "G31" });
+            Assert.Equal(HttpStatusCode.Conflict, over.StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
     public async Task Builder_endpoints_require_a_token()
     {
         var client = factory.CreateClient();

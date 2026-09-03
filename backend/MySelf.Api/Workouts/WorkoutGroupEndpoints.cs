@@ -107,6 +107,11 @@ public static class WorkoutGroupEndpoints
             return Validation("name", "Enter a variant name (1–80 characters).");
         }
 
+        if (group.Variants.Count >= WorkoutLimits.MaxVariantsPerGroup)
+        {
+            return TooMany($"A group can have at most {WorkoutLimits.MaxVariantsPerGroup} variants.");
+        }
+
         var variant = new WorkoutVariant
         {
             Id = Guid.NewGuid(),
