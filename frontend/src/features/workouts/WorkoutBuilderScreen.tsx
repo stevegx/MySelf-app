@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChevronLeft, Plus } from "lucide-react";
 import { Button, Card, CardKicker, Input, PageHeader } from "../../components/ui";
+import { SortableList } from "./SortableList";
 import { VariantEditor } from "./VariantEditor";
 import { useCreateProgram, useMutateProgram, useProgram, usePrograms } from "./api";
 
@@ -148,10 +149,18 @@ function ProgramDetail({
       />
 
       <div className="flex flex-col gap-3">
-        {program.groups.map((g) => (
-          <Card key={g.id} className="gap-2">
+        <SortableList
+          items={program.groups}
+          getId={(g) => g.id}
+          onReorder={(groupOrder) => m.updateProgram.mutate({ groupOrder, rowVersion: program.rowVersion })}
+        >
+          {(g, groupHandle) => (
+          <Card className="gap-2">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-bold uppercase tracking-[0.06em] text-primary-pressed">{g.name}</span>
+              <span className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.06em] text-primary-pressed">
+                {groupHandle}
+                {g.name}
+              </span>
               <Button
                 variant="ghost"
                 size="sm"
@@ -163,11 +172,19 @@ function ProgramDetail({
               </Button>
             </div>
 
-            {g.variants.map((v) => (
-              <div key={v.id} className="flex items-center justify-between rounded-control border border-border px-3 py-2">
-                <span className="text-[13px]">
+            <SortableList
+              items={g.variants}
+              getId={(v) => v.id}
+              onReorder={(variantOrder) =>
+                m.updateGroup.mutate({ groupId: g.id, variantOrder, rowVersion: program.rowVersion })
+              }
+            >
+              {(v, variantHandle) => (
+              <div className="flex items-center justify-between rounded-control border border-border px-3 py-2">
+                <span className="flex items-center gap-2 text-[13px]">
+                  {variantHandle}
                   <span className="font-semibold">{v.name}</span>
-                  <span className="ml-2 text-xs text-foreground-muted">{v.exerciseCount} exercises</span>
+                  <span className="ml-1 text-xs text-foreground-muted">{v.exerciseCount} exercises</span>
                 </span>
                 <div className="flex gap-1">
                   <Button variant="secondary" size="sm" onClick={() => onEditVariant(v.id)}>
@@ -184,7 +201,8 @@ function ProgramDetail({
                   </Button>
                 </div>
               </div>
-            ))}
+              )}
+            </SortableList>
 
             <div className="flex gap-2">
               <Input
@@ -210,7 +228,8 @@ function ProgramDetail({
               </Button>
             </div>
           </Card>
-        ))}
+          )}
+        </SortableList>
 
         <Card className="gap-2">
           <CardKicker>Add workout group</CardKicker>

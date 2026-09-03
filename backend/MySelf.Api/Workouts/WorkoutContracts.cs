@@ -46,7 +46,7 @@ public sealed record VariantListItem(Guid Id, string Name, int SortOrder, int Ex
 
 public sealed record CreateGroupRequest(string? Name);
 
-public sealed record UpdateGroupRequest(string? Name, IReadOnlyList<Guid>? VariantOrder);
+public sealed record UpdateGroupRequest(string? Name, IReadOnlyList<Guid>? VariantOrder, uint? RowVersion);
 
 public sealed record CreateVariantRequest(string? Name);
 

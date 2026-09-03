@@ -208,6 +208,25 @@ export function useMutateProgram(programId: string | null) {
         apiFetch<void>(`/api/v1/workout-variants/${variantId}`, { method: "DELETE", accessToken }),
       onSuccess: invalidate,
     }),
+    // Rename / relabel a program and/or reorder its groups. Pass the program's rowVersion.
+    updateProgram: useMutation({
+      mutationFn: (body: { name?: string; splitLabel?: string | null; groupOrder?: string[]; rowVersion: number }) =>
+        apiFetch<void>(`/api/v1/programs/${programId}`, { method: "PUT", body, accessToken }),
+      onSuccess: invalidate,
+    }),
+    // Rename a group and/or reorder its variants. Pass the program's rowVersion.
+    updateGroup: useMutation({
+      mutationFn: ({
+        groupId,
+        ...body
+      }: {
+        groupId: string;
+        name?: string;
+        variantOrder?: string[];
+        rowVersion: number;
+      }) => apiFetch<void>(`/api/v1/workout-groups/${groupId}`, { method: "PUT", body, accessToken }),
+      onSuccess: invalidate,
+    }),
   };
 }
 

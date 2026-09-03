@@ -572,6 +572,40 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory)
     }
 
     [Fact]
+    public async Task Group_variant_reorder_round_trips_and_honours_the_row_version()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var programId = await CreateProgramAsync(client);
+            var groupId = await AddGroupAsync(client, programId);
+            var a = await AddVariantAsync(client, groupId, "A");
+            var b = await AddVariantAsync(client, groupId, "B");
+
+            var tree = await client.GetFromJsonAsync<JsonElement>($"/api/v1/programs/{programId}");
+            var version = tree.GetProperty("rowVersion").GetUInt32();
+
+            var reorder = await client.PutAsJsonAsync($"/api/v1/workout-groups/{groupId}",
+                new { variantOrder = new[] { b, a }, rowVersion = version });
+            Assert.Equal(HttpStatusCode.NoContent, reorder.StatusCode);
+
+            var after = await client.GetFromJsonAsync<JsonElement>($"/api/v1/programs/{programId}");
+            var orderedIds = after.GetProperty("groups")[0].GetProperty("variants").EnumerateArray()
+                .Select(v => v.GetProperty("id").GetGuid()).ToArray();
+            Assert.Equal(new[] { b, a }, orderedIds);
+
+            // The token moved on with the first reorder.
+            var stale = await client.PutAsJsonAsync($"/api/v1/workout-groups/{groupId}",
+                new { variantOrder = new[] { a, b }, rowVersion = version });
+            Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
     public async Task Exercise_search_rejects_an_over_long_term()
     {
         var (client, email) = await factory.RegisterAndAuthenticateAsync();

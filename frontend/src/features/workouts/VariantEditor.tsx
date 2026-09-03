@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from "lucide-react";
 import { Button, Checkbox, Input, Segmented } from "../../components/ui";
 import { ApiError } from "../../lib/api";
 import { ExercisePicker } from "./ExercisePicker";
+import { SortableList } from "./SortableList";
 import { useBulkExercises, useProgram, useUpdateVariant, useVariant } from "./api";
 import type { ExerciseListItem, UpdateVariantBody, VariantDetail } from "./api";
 
@@ -379,15 +380,22 @@ export function VariantEditor({
         </div>
       )}
 
-      {state.exercises.map((e) => {
+      <SortableList
+        items={state.exercises}
+        getId={(e) => e.key}
+        onReorder={(order) =>
+          setState((s) => ({ ...s, exercises: order.map((k) => s.exercises.find((e) => e.key === k)!) }))
+        }
+      >
+        {(e, dragHandle) => {
         const grouped = e.supersetKey != null;
         return (
           <div
-            key={e.key}
             className={`rounded-control border p-3 ${grouped ? "border-primary/50 bg-primary-soft/30" : "border-border"}`}
           >
             <div className="mb-2 flex items-center justify-between gap-2">
               <span className="flex items-center gap-2 text-sm font-bold">
+                {dragHandle}
                 {e.serverId && (
                   <Checkbox
                     label=""
@@ -527,7 +535,8 @@ export function VariantEditor({
             </div>
           </div>
         );
-      })}
+        }}
+      </SortableList>
 
       {picking ? (
         <ExercisePicker

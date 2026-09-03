@@ -60,7 +60,12 @@ public static class WorkoutGroupEndpoints
             ApplyOrder(group.Variants, v => v.Id, order, (v, i) => v.SortOrder = i);
         }
 
-        await db.SaveChangesAsync(ct);
+        var program = await db.WorkoutPrograms.FirstAsync(p => p.Id == group.ProgramId, ct);
+        if (!await TrySaveWithRowVersionAsync(db, program, request.RowVersion, ct))
+        {
+            return StaleWrite();
+        }
+
         return Results.NoContent();
     }
 
