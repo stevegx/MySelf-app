@@ -220,6 +220,7 @@ export function OnboardingWizard() {
       const parsed = goalSchema.safeParse({
         goalType: answers.goalType,
         targetWeightKg: answers.targetWeightKg,
+        currentWeightKg: answers.weightKg,
       });
       if (!parsed.success) return setErrors(fieldErrors(parsed.error));
       setErrors({});

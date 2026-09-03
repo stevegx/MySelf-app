@@ -36,10 +36,30 @@ export const aboutYouSchema = z
     }
   });
 
-export const goalSchema = z.object({
-  goalType: z.enum(GOAL_TYPES),
-  targetWeightKg: optionalNumberInRange(20, 500, "Enter a target weight between 20 and 500 kg."),
-});
+export const goalSchema = z
+  .object({
+    goalType: z.enum(GOAL_TYPES),
+    targetWeightKg: optionalNumberInRange(20, 500, "Enter a target weight between 20 and 500 kg."),
+    // From step 1 (already validated there); used only to sanity-check the target's direction.
+    currentWeightKg: optionalNumberInRange(20, 500, "Enter a weight between 20 and 500 kg."),
+  })
+  .superRefine((v, ctx) => {
+    if (v.targetWeightKg == null || v.currentWeightKg == null) return;
+    if (v.goalType === "Lose" && v.targetWeightKg >= v.currentWeightKg) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["targetWeightKg"],
+        message: "For a lose-weight goal, your target should be below your current weight.",
+      });
+    }
+    if (v.goalType === "Gain" && v.targetWeightKg <= v.currentWeightKg) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["targetWeightKg"],
+        message: "For a gain-weight goal, your target should be above your current weight.",
+      });
+    }
+  });
 
 export const activitySchema = z
   .object({

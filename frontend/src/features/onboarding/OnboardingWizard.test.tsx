@@ -135,6 +135,28 @@ describe("OnboardingWizard", () => {
     });
   });
 
+  it("rejects a target weight that goes the wrong way for the goal", async () => {
+    installFetch();
+    const user = userEvent.setup();
+    renderWizard();
+
+    await fillAboutYou(user); // current weight 72
+    await user.click(await screen.findByRole("radio", { name: /Lose weight/i }));
+
+    const target = screen.getByLabelText(/Target weight/i);
+    fireEvent.change(target, { target: { value: "80" } });
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(
+      await screen.findByText("For a lose-weight goal, your target should be below your current weight."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Your goal" })).toBeInTheDocument();
+
+    fireEvent.change(target, { target: { value: "66" } });
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByRole("heading", { name: "Activity and pace" })).toBeInTheDocument();
+  });
+
   it("saves the profile (PUT /me/profile) before completing onboarding", async () => {
     const fetchSpy = installFetch();
     const user = userEvent.setup();
