@@ -110,6 +110,7 @@ public static class ProgramEndpoints
                 p.SplitLabel,
                 p.IsActive,
                 p.CreatedAt,
+                p.RowVersion,
                 p.Groups
                     .OrderBy(g => g.SortOrder)
                     .Select(g => new GroupDetail(
@@ -165,7 +166,11 @@ public static class ProgramEndpoints
             ApplyOrder(program.Groups, g => g.Id, order, (g, i) => g.SortOrder = i);
         }
 
-        await db.SaveChangesAsync(ct);
+        if (!await TrySaveWithRowVersionAsync(db, program, request.RowVersion, ct))
+        {
+            return StaleWrite();
+        }
+
         return Results.NoContent();
     }
 
@@ -298,6 +303,41 @@ public static class ProgramEndpoints
         }
     }
 
+    /// <summary>
+    /// Saves, optionally guarding on the program's <c>xmin</c> token. When
+    /// <paramref name="clientRowVersion"/> is null the save is unconditional (last-write-wins,
+    /// backward compatible). When it's supplied, the program row is forced to UPDATE with a
+    /// <c>WHERE xmin = @original</c> clause; a 0-row result surfaces as
+    /// <see cref="DbUpdateConcurrencyException"/>, which this maps to <c>false</c> so the
+    /// caller returns 409. Editing any part of the tree bumps the program's token.
+    /// </summary>
+    internal static async Task<bool> TrySaveWithRowVersionAsync(
+        MySelfDbContext db,
+        WorkoutProgram program,
+        uint? clientRowVersion,
+        CancellationToken ct)
+    {
+        if (clientRowVersion is not { } expected)
+        {
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+
+        var entry = db.Entry(program);
+        entry.Property(p => p.RowVersion).OriginalValue = expected;
+        entry.State = EntityState.Modified; // ensure an UPDATE is emitted even if no scalar changed
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return false;
+        }
+    }
+
     internal static IResult Unauthorized() =>
         Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Invalid credentials");
 
@@ -307,6 +347,13 @@ public static class ProgramEndpoints
     /// <summary>A size cap was hit — the request is well-formed, the resource state won't allow it (409).</summary>
     internal static IResult TooMany(string message) =>
         Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "Limit reached", detail: message);
+
+    /// <summary>The client's concurrency token was stale — someone else changed the program first (409).</summary>
+    internal static IResult StaleWrite() =>
+        Results.Problem(
+            statusCode: StatusCodes.Status409Conflict,
+            title: "Program changed",
+            detail: "This program changed since you opened it. Reload to get the latest version, then reapply your changes.");
 
     internal static string? Trimmed(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

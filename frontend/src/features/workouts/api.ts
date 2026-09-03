@@ -36,6 +36,8 @@ export type ProgramDetail = {
   splitLabel: string | null;
   isActive: boolean;
   createdAt: string;
+  // xmin concurrency token — echo back on PUT /programs and PUT /workout-variants.
+  rowVersion: number;
   groups: GroupDetail[];
 };
 
@@ -68,6 +70,8 @@ export type VariantDetail = {
   name: string;
   sortOrder: number;
   estimatedDurationMinutes: number | null;
+  // The owning program's xmin token; send it back on PUT to guard the edit.
+  programRowVersion: number;
   exercises: VariantExerciseDetail[];
   supersets: { id: string; sortOrder: number; restAfterRoundSeconds: number }[];
 };
@@ -94,6 +98,8 @@ export type UpdateVariantExercise = {
 export type UpdateVariantBody = {
   name?: string;
   estimatedDurationMinutes?: number | null;
+  // The program xmin token from the last read; omit to accept last-write-wins.
+  rowVersion?: number;
   exercises: UpdateVariantExercise[];
   supersets: { ref: string; sortOrder: number; restAfterRoundSeconds: number }[];
 };

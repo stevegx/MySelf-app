@@ -42,6 +42,7 @@ public static class WorkoutVariantEndpoints
                 v.Name,
                 v.SortOrder,
                 v.EstimatedDurationMinutes,
+                v.Group.Program.RowVersion,
                 v.Exercises
                     .OrderBy(e => e.SortOrder)
                     .Select(e => new VariantExerciseDetail(
@@ -89,6 +90,7 @@ public static class WorkoutVariantEndpoints
         }
 
         var variant = await db.OwnedVariants(userId)
+            .Include(v => v.Group)
             .Include(v => v.Exercises).ThenInclude(e => e.Sets)
             .Include(v => v.Supersets)
             .FirstOrDefaultAsync(v => v.Id == id, ct);
@@ -96,6 +98,10 @@ public static class WorkoutVariantEndpoints
         {
             return Results.NotFound();
         }
+
+        // The concurrency token lives on the program (docs/04). Load it tracked so the save
+        // can guard on — and bump — its xmin: any edit in the tree moves the program version.
+        var program = await db.WorkoutPrograms.FirstAsync(p => p.Id == variant.Group.ProgramId, ct);
 
         var exercises = request.Exercises ?? [];
         var supersets = request.Supersets ?? [];
@@ -277,7 +283,11 @@ public static class WorkoutVariantEndpoints
 
         variant.EstimatedDurationMinutes = request.EstimatedDurationMinutes;
 
-        await db.SaveChangesAsync(ct);
+        if (!await TrySaveWithRowVersionAsync(db, program, request.RowVersion, ct))
+        {
+            return StaleWrite();
+        }
+
         return await GetAsync(id, http, db, ct);
     }
 

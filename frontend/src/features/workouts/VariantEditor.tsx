@@ -83,6 +83,7 @@ export function VariantEditor({
     setError(null);
     const body: UpdateVariantBody = {
       name: variant!.name,
+      rowVersion: variant!.programRowVersion,
       exercises: rows.map((row, index) => ({
         exerciseId: row.exerciseId,
         sortOrder: index,
@@ -108,6 +109,12 @@ export function VariantEditor({
       await update.mutateAsync({ variantId, body });
       onClose();
     } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        setError(
+          "This program changed in another tab since you opened this variant. Reload the page to get the latest, then reapply your changes.",
+        );
+        return;
+      }
       setError(e instanceof ApiError ? (Object.values(e.errors ?? {})[0]?.[0] ?? e.detail ?? e.title) : "Save failed.");
     }
   }

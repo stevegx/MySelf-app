@@ -10,8 +10,17 @@ public sealed record ExerciseSearchResult(IReadOnlyList<ExerciseListItem> Items,
 
 public sealed record CreateProgramRequest(string? Name, string? SplitLabel);
 
-/// <summary>Rename / relabel a program and (optionally) reorder its groups by id.</summary>
-public sealed record UpdateProgramRequest(string? Name, string? SplitLabel, IReadOnlyList<Guid>? GroupOrder);
+/// <summary>
+/// Rename / relabel a program and (optionally) reorder its groups by id.
+/// <paramref name="RowVersion"/> is the <c>xmin</c> token the client last read (from
+/// <see cref="ProgramDetail"/>); when supplied, the update is rejected with 409 if the
+/// program changed in the meantime. Omit it to accept last-write-wins.
+/// </summary>
+public sealed record UpdateProgramRequest(
+    string? Name,
+    string? SplitLabel,
+    IReadOnlyList<Guid>? GroupOrder,
+    uint? RowVersion);
 
 public sealed record ProgramListItem(
     Guid Id,
@@ -28,6 +37,7 @@ public sealed record ProgramDetail(
     string? SplitLabel,
     bool IsActive,
     DateTimeOffset CreatedAt,
+    uint RowVersion,
     IReadOnlyList<GroupDetail> Groups);
 
 public sealed record GroupDetail(Guid Id, string Name, int SortOrder, IReadOnlyList<VariantListItem> Variants);
@@ -47,6 +57,8 @@ public sealed record VariantDetail(
     string Name,
     int SortOrder,
     int? EstimatedDurationMinutes,
+    // The owning program's xmin token — send it back on PUT to guard the edit.
+    uint ProgramRowVersion,
     IReadOnlyList<VariantExerciseDetail> Exercises,
     IReadOnlyList<SupersetDetail> Supersets);
 
@@ -80,7 +92,9 @@ public sealed record UpdateVariantRequest(
     string? Name,
     int? EstimatedDurationMinutes,
     IReadOnlyList<UpdateVariantExercise>? Exercises,
-    IReadOnlyList<UpdateSuperset>? Supersets);
+    IReadOnlyList<UpdateSuperset>? Supersets,
+    // The owning program's xmin token from the last read; 409 if it moved on. Optional.
+    uint? RowVersion);
 
 public sealed record UpdateVariantExercise(
     Guid ExerciseId,

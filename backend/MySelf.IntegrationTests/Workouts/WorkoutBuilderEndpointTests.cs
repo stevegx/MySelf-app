@@ -343,6 +343,83 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory)
     }
 
     [Fact]
+    public async Task Put_variant_conflicts_when_the_program_row_version_is_stale()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var programId = await CreateProgramAsync(client);
+            var groupId = await AddGroupAsync(client, programId);
+            var variantId = await AddVariantAsync(client, groupId);
+
+            var tree = await client.GetFromJsonAsync<JsonElement>($"/api/v1/programs/{programId}");
+            var staleVersion = tree.GetProperty("rowVersion").GetUInt32();
+
+            // First save with the current token succeeds and advances the program's xmin.
+            var first = await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}", new
+            {
+                exercises = Array.Empty<object>(),
+                supersets = Array.Empty<object>(),
+                rowVersion = staleVersion,
+            });
+            Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+            var fresh = await first.Content.ReadFromJsonAsync<JsonElement>();
+            var freshVersion = fresh.GetProperty("programRowVersion").GetUInt32();
+            Assert.NotEqual(staleVersion, freshVersion);
+
+            // Re-using the now-stale token is rejected.
+            var conflict = await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}", new
+            {
+                exercises = Array.Empty<object>(),
+                supersets = Array.Empty<object>(),
+                rowVersion = staleVersion,
+            });
+            Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
+
+            // The fresh token works again.
+            var ok = await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}", new
+            {
+                exercises = Array.Empty<object>(),
+                supersets = Array.Empty<object>(),
+                rowVersion = freshVersion,
+            });
+            Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Put_program_conflicts_when_the_row_version_is_stale()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var programId = await CreateProgramAsync(client);
+            var tree = await client.GetFromJsonAsync<JsonElement>($"/api/v1/programs/{programId}");
+            var staleVersion = tree.GetProperty("rowVersion").GetUInt32();
+
+            var first = await client.PutAsJsonAsync($"/api/v1/programs/{programId}",
+                new { name = "Renamed once", rowVersion = staleVersion });
+            Assert.Equal(HttpStatusCode.NoContent, first.StatusCode);
+
+            var second = await client.PutAsJsonAsync($"/api/v1/programs/{programId}",
+                new { name = "Renamed twice", rowVersion = staleVersion });
+            Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+
+            // Omitting the token keeps the old last-write-wins behaviour.
+            var noToken = await client.PutAsJsonAsync($"/api/v1/programs/{programId}", new { name = "Renamed anyway" });
+            Assert.Equal(HttpStatusCode.NoContent, noToken.StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
     public async Task Exercise_search_rejects_an_over_long_term()
     {
         var (client, email) = await factory.RegisterAndAuthenticateAsync();
