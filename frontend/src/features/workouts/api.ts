@@ -228,3 +228,44 @@ export function useUpdateVariant(programId: string | null) {
     },
   });
 }
+
+export type BulkExercisesArgs = {
+  destVariantId: string;
+  sourceVariantId: string;
+  variantExerciseIds: string[];
+  rowVersion?: number;
+};
+
+/** Copy / move selected exercises between two of the caller's variants (docs/08 Story 7). */
+export function useBulkExercises(programId: string | null) {
+  const accessToken = useToken();
+  const qc = useQueryClient();
+  const invalidate = (destVariantId: string, sourceVariantId: string) => {
+    qc.invalidateQueries({ queryKey: ["variant", destVariantId] });
+    qc.invalidateQueries({ queryKey: ["variant", sourceVariantId] });
+    qc.invalidateQueries({ queryKey: ["program", programId] });
+    qc.invalidateQueries({ queryKey: ["programs"] });
+  };
+
+  const call = (kind: "copy" | "move") => (args: BulkExercisesArgs) =>
+    apiFetch<VariantDetail>(`/api/v1/workout-variants/${args.destVariantId}/exercises/bulk-${kind}`, {
+      method: "POST",
+      body: {
+        sourceVariantId: args.sourceVariantId,
+        variantExerciseIds: args.variantExerciseIds,
+        rowVersion: args.rowVersion,
+      },
+      accessToken,
+    });
+
+  return {
+    copy: useMutation({
+      mutationFn: call("copy"),
+      onSuccess: (_d, a) => invalidate(a.destVariantId, a.sourceVariantId),
+    }),
+    move: useMutation({
+      mutationFn: call("move"),
+      onSuccess: (_d, a) => invalidate(a.destVariantId, a.sourceVariantId),
+    }),
+  };
+}

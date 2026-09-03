@@ -116,3 +116,15 @@ public sealed record UpdateSetPrescription(
     int? TargetRir);
 
 public sealed record UpdateSuperset(string Ref, int SortOrder, int RestAfterRoundSeconds);
+
+// --- bulk copy / move exercises between variants (docs/08 Story 7) ---
+
+/// <summary>
+/// Copy or move <paramref name="VariantExerciseIds"/> from <paramref name="SourceVariantId"/>
+/// into the variant named in the route. Both variants must belong to the caller.
+/// <paramref name="RowVersion"/> guards on the destination program's xmin (optional).
+/// </summary>
+public sealed record BulkExerciseRequest(
+    Guid SourceVariantId,
+    IReadOnlyList<Guid>? VariantExerciseIds,
+    uint? RowVersion);

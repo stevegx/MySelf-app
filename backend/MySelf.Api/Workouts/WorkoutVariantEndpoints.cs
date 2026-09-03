@@ -23,6 +23,8 @@ public static class WorkoutVariantEndpoints
         variants.MapGet("/{id:guid}", GetAsync).WithName("GetWorkoutVariant");
         variants.MapPut("/{id:guid}", UpdateAsync).WithName("UpdateWorkoutVariant");
         variants.MapDelete("/{id:guid}", DeleteAsync).WithName("DeleteWorkoutVariant");
+        variants.MapPost("/{id:guid}/exercises/bulk-copy", BulkCopyAsync).WithName("BulkCopyVariantExercises");
+        variants.MapPost("/{id:guid}/exercises/bulk-move", BulkMoveAsync).WithName("BulkMoveVariantExercises");
 
         return app;
     }
@@ -307,5 +309,214 @@ public static class WorkoutVariantEndpoints
         db.WorkoutVariants.Remove(variant);
         await db.SaveChangesAsync(ct);
         return Results.NoContent();
+    }
+
+    /// <summary>
+    /// Copy the chosen exercises from another of the caller's variants into this one, as
+    /// independent rows (new ids, copied sets — docs/08 Story 7 "copy creates independent
+    /// ids"). A source superset is recreated here only if two or more of its members are in
+    /// the selection; otherwise the copies land ungrouped. Appended after the current
+    /// exercises.
+    /// </summary>
+    private static async Task<IResult> BulkCopyAsync(
+        Guid id,
+        BulkExerciseRequest request,
+        HttpContext http,
+        MySelfDbContext db,
+        CancellationToken ct)
+    {
+        if (!http.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var selectedIds = (request.VariantExerciseIds ?? []).Distinct().ToList();
+        if (selectedIds.Count == 0)
+        {
+            return Validation("variantExerciseIds", "Choose at least one exercise to copy.");
+        }
+
+        var destination = await db.OwnedVariants(userId)
+            .Include(v => v.Group)
+            .Include(v => v.Exercises)
+            .FirstOrDefaultAsync(v => v.Id == id, ct);
+        if (destination is null)
+        {
+            return Results.NotFound();
+        }
+
+        var source = await db.OwnedVariants(userId)
+            .Include(v => v.Exercises).ThenInclude(e => e.Sets)
+            .Include(v => v.Supersets)
+            .FirstOrDefaultAsync(v => v.Id == request.SourceVariantId, ct);
+        if (source is null)
+        {
+            return Results.NotFound();
+        }
+
+        var picked = source.Exercises.Where(e => selectedIds.Contains(e.Id)).OrderBy(e => e.SortOrder).ToList();
+        if (picked.Count != selectedIds.Count)
+        {
+            return Validation("variantExerciseIds", "One or more exercises are not in the source variant.");
+        }
+
+        if (destination.Exercises.Count + picked.Count > WorkoutLimits.MaxExercisesPerVariant)
+        {
+            return TooMany($"A variant can hold at most {WorkoutLimits.MaxExercisesPerVariant} exercises.");
+        }
+
+        var program = await db.WorkoutPrograms.FirstAsync(p => p.Id == destination.Group.ProgramId, ct);
+        var nextSort = destination.Exercises.Count == 0 ? 0 : destination.Exercises.Max(e => e.SortOrder) + 1;
+
+        // Recreate a superset here only when 2+ of its members were picked.
+        var keptGroupIds = picked
+            .Where(e => e.SupersetGroupId is not null)
+            .GroupBy(e => e.SupersetGroupId!.Value)
+            .Where(g => g.Count() >= 2)
+            .Select(g => g.Key)
+            .ToHashSet();
+
+        var newGroupBySourceId = source.Supersets
+            .Where(s => keptGroupIds.Contains(s.Id))
+            .ToDictionary(s => s.Id, s => new SupersetGroup
+            {
+                Id = Guid.NewGuid(),
+                VariantId = destination.Id,
+                SortOrder = s.SortOrder,
+                RestAfterRoundSeconds = s.RestAfterRoundSeconds,
+            });
+
+        foreach (var group in newGroupBySourceId.Values)
+        {
+            db.SupersetGroups.Add(group);
+        }
+
+        foreach (var e in picked)
+        {
+            var copy = new VariantExercise
+            {
+                Id = Guid.NewGuid(),
+                VariantId = destination.Id,
+                ExerciseId = e.ExerciseId,
+                SortOrder = nextSort++,
+                SupersetGroup = e.SupersetGroupId is { } gid && newGroupBySourceId.TryGetValue(gid, out var ng) ? ng : null,
+                SupersetMemberOrder = e.SupersetMemberOrder,
+                RestSeconds = e.RestSeconds,
+                Notes = e.Notes,
+                Sets = e.Sets.OrderBy(s => s.SortOrder).Select(s => new SetPrescription
+                {
+                    Id = Guid.NewGuid(),
+                    SortOrder = s.SortOrder,
+                    Kind = s.Kind,
+                    IsAmrap = s.IsAmrap,
+                    TargetToFailure = s.TargetToFailure,
+                    TargetRepsMin = s.TargetRepsMin,
+                    TargetRepsMax = s.TargetRepsMax,
+                    TargetWeightKg = s.TargetWeightKg,
+                    TargetRir = s.TargetRir,
+                }).ToList(),
+            };
+            db.VariantExercises.Add(copy);
+        }
+
+        if (!await TrySaveWithRowVersionAsync(db, program, request.RowVersion, ct))
+        {
+            return StaleWrite();
+        }
+
+        return await GetAsync(id, http, db, ct);
+    }
+
+    /// <summary>
+    /// Move the chosen exercises from another of the caller's variants into this one,
+    /// keeping their identity and sets (docs/04 "move preserves identity where the parent
+    /// change allows"). Moved exercises leave their superset; a source superset left with
+    /// fewer than two members is dissolved.
+    /// </summary>
+    private static async Task<IResult> BulkMoveAsync(
+        Guid id,
+        BulkExerciseRequest request,
+        HttpContext http,
+        MySelfDbContext db,
+        CancellationToken ct)
+    {
+        if (!http.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        if (request.SourceVariantId == id)
+        {
+            return Validation("sourceVariantId", "Source and destination variant must differ.");
+        }
+
+        var selectedIds = (request.VariantExerciseIds ?? []).Distinct().ToList();
+        if (selectedIds.Count == 0)
+        {
+            return Validation("variantExerciseIds", "Choose at least one exercise to move.");
+        }
+
+        var destination = await db.OwnedVariants(userId)
+            .Include(v => v.Group)
+            .Include(v => v.Exercises)
+            .FirstOrDefaultAsync(v => v.Id == id, ct);
+        if (destination is null)
+        {
+            return Results.NotFound();
+        }
+
+        var source = await db.OwnedVariants(userId)
+            .Include(v => v.Exercises)
+            .Include(v => v.Supersets)
+            .FirstOrDefaultAsync(v => v.Id == request.SourceVariantId, ct);
+        if (source is null)
+        {
+            return Results.NotFound();
+        }
+
+        var picked = source.Exercises.Where(e => selectedIds.Contains(e.Id)).OrderBy(e => e.SortOrder).ToList();
+        if (picked.Count != selectedIds.Count)
+        {
+            return Validation("variantExerciseIds", "One or more exercises are not in the source variant.");
+        }
+
+        if (destination.Exercises.Count + picked.Count > WorkoutLimits.MaxExercisesPerVariant)
+        {
+            return TooMany($"A variant can hold at most {WorkoutLimits.MaxExercisesPerVariant} exercises.");
+        }
+
+        var program = await db.WorkoutPrograms.FirstAsync(p => p.Id == destination.Group.ProgramId, ct);
+        var nextSort = destination.Exercises.Count == 0 ? 0 : destination.Exercises.Max(e => e.SortOrder) + 1;
+        var touchedSourceGroupIds = picked.Where(e => e.SupersetGroupId is not null)
+            .Select(e => e.SupersetGroupId!.Value).Distinct().ToList();
+
+        foreach (var e in picked)
+        {
+            e.VariantId = destination.Id;
+            e.SortOrder = nextSort++;
+            e.SupersetGroupId = null;
+            e.SupersetMemberOrder = 0;
+        }
+
+        // A source superset that now has fewer than two members no longer makes sense.
+        foreach (var groupId in touchedSourceGroupIds)
+        {
+            var remaining = source.Exercises.Count(e => e.SupersetGroupId == groupId && !selectedIds.Contains(e.Id));
+            if (remaining < 2)
+            {
+                var group = source.Supersets.FirstOrDefault(s => s.Id == groupId);
+                if (group is not null)
+                {
+                    db.SupersetGroups.Remove(group); // FK OnDelete(SetNull) clears any lone remaining member
+                }
+            }
+        }
+
+        if (!await TrySaveWithRowVersionAsync(db, program, request.RowVersion, ct))
+        {
+            return StaleWrite();
+        }
+
+        return await GetAsync(id, http, db, ct);
     }
 }

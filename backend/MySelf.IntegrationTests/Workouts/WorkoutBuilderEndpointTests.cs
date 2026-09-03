@@ -279,6 +279,97 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory)
     }
 
     [Fact]
+    public async Task Bulk_copy_appends_independent_exercises_to_the_destination()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var ex = await TwoExerciseIdsAsync();
+            var programId = await CreateProgramAsync(client);
+            var groupId = await AddGroupAsync(client, programId);
+            var sourceId = await AddVariantAsync(client, groupId, "Source");
+            var destId = await AddVariantAsync(client, groupId, "Dest");
+
+            await client.PutAsJsonAsync($"/api/v1/workout-variants/{sourceId}", new
+            {
+                exercises = new[]
+                {
+                    new { exerciseId = ex[0], sortOrder = 0, supersetRef = (string?)null, supersetMemberOrder = 0, restSeconds = (int?)null, notes = (string?)null, sets = Array.Empty<object>() },
+                    new { exerciseId = ex[1], sortOrder = 1, supersetRef = (string?)null, supersetMemberOrder = 0, restSeconds = (int?)null, notes = (string?)null, sets = Array.Empty<object>() },
+                },
+                supersets = Array.Empty<object>(),
+            });
+
+            var sourceDetail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-variants/{sourceId}");
+            var sourceExerciseIds = sourceDetail.GetProperty("exercises").EnumerateArray()
+                .Select(e => e.GetProperty("id").GetGuid()).ToArray();
+
+            var copy = await client.PostAsJsonAsync($"/api/v1/workout-variants/{destId}/exercises/bulk-copy",
+                new { sourceVariantId = sourceId, variantExerciseIds = sourceExerciseIds });
+            Assert.Equal(HttpStatusCode.OK, copy.StatusCode);
+
+            var destDetail = await copy.Content.ReadFromJsonAsync<JsonElement>();
+            var destExercises = destDetail.GetProperty("exercises").EnumerateArray().ToList();
+            Assert.Equal(2, destExercises.Count);
+            foreach (var e in destExercises)
+            {
+                Assert.DoesNotContain(e.GetProperty("id").GetGuid(), sourceExerciseIds);
+            }
+
+            var sourceAfter = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-variants/{sourceId}");
+            Assert.Equal(2, sourceAfter.GetProperty("exercises").GetArrayLength());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Bulk_move_reparents_exercises_and_dissolves_a_broken_superset()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var ex = await TwoExerciseIdsAsync();
+            var programId = await CreateProgramAsync(client);
+            var groupId = await AddGroupAsync(client, programId);
+            var sourceId = await AddVariantAsync(client, groupId, "Source");
+            var destId = await AddVariantAsync(client, groupId, "Dest");
+
+            await client.PutAsJsonAsync($"/api/v1/workout-variants/{sourceId}", new
+            {
+                exercises = new[]
+                {
+                    new { exerciseId = ex[0], sortOrder = 0, supersetRef = "A", supersetMemberOrder = 0, restSeconds = (int?)null, notes = (string?)null, sets = Array.Empty<object>() },
+                    new { exerciseId = ex[1], sortOrder = 1, supersetRef = "A", supersetMemberOrder = 1, restSeconds = (int?)null, notes = (string?)null, sets = Array.Empty<object>() },
+                },
+                supersets = new[] { new { @ref = "A", sortOrder = 0, restAfterRoundSeconds = 60 } },
+            });
+
+            var sourceDetail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-variants/{sourceId}");
+            var firstExerciseId = sourceDetail.GetProperty("exercises")[0].GetProperty("id").GetGuid();
+
+            var move = await client.PostAsJsonAsync($"/api/v1/workout-variants/{destId}/exercises/bulk-move",
+                new { sourceVariantId = sourceId, variantExerciseIds = new[] { firstExerciseId } });
+            Assert.Equal(HttpStatusCode.OK, move.StatusCode);
+
+            var destDetail = await move.Content.ReadFromJsonAsync<JsonElement>();
+            var movedExercise = destDetail.GetProperty("exercises").EnumerateArray().Single();
+            Assert.Equal(firstExerciseId, movedExercise.GetProperty("id").GetGuid()); // identity preserved
+            Assert.Equal(JsonValueKind.Null, movedExercise.GetProperty("supersetGroupId").ValueKind); // left its superset
+
+            var sourceAfter = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-variants/{sourceId}");
+            Assert.Equal(1, sourceAfter.GetProperty("exercises").GetArrayLength());
+            Assert.Equal(0, sourceAfter.GetProperty("supersets").GetArrayLength()); // 1 member left -> dissolved
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
     public async Task Activate_deactivates_the_previous_active_program()
     {
         var (client, email) = await factory.RegisterAndAuthenticateAsync();
