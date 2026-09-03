@@ -1,25 +1,119 @@
-import { useState } from "react";
-import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
-import { Button, Input } from "../../components/ui";
+import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from "lucide-react";
+import { Button, Checkbox, Input, Segmented } from "../../components/ui";
 import { ApiError } from "../../lib/api";
 import { ExercisePicker } from "./ExercisePicker";
-import { useUpdateVariant, useVariant } from "./api";
-import type { ExerciseListItem, UpdateVariantBody } from "./api";
+import { useBulkExercises, useProgram, useUpdateVariant, useVariant } from "./api";
+import type { ExerciseListItem, UpdateVariantBody, VariantDetail } from "./api";
 
 /**
- * Edits one variant's exercises. The UI model is "N sets of X–Y reps at Z kg" per exercise;
- * on save it expands to that many Standard set prescriptions. Per-set differences (drop
- * sets, AMRAP on the last set) and superset grouping are backend-supported but not yet in
- * this screen.
+ * Edits one variant in full: every exercise, every prescribed set (kind, rep range,
+ * weight, AMRAP, to-failure, RIR), optional superset grouping with a rest-after-round, plus
+ * bulk copy/move of exercises to another variant. Round-trips per-set detail losslessly —
+ * loading a variant with drop sets / an AMRAP last set / per-set weights and saving no
+ * longer flattens it.
  */
-type Row = {
-  exerciseId: string;
-  exerciseName: string;
-  setCount: number;
+
+type EditSet = {
+  key: string;
+  kind: "Standard" | "Drop";
+  isAmrap: boolean;
+  toFailure: boolean;
   repsMin: string;
   repsMax: string;
   weightKg: string;
+  rir: string;
 };
+
+type EditExercise = {
+  key: string;
+  serverId: string | null; // the persisted VariantExercise id; null for a freshly added row
+  exerciseId: string;
+  exerciseName: string;
+  restSeconds: string;
+  notes: string;
+  supersetKey: string | null;
+  moreOpen: boolean;
+  sets: EditSet[];
+};
+
+type EditSuperset = { key: string; restAfterRoundSeconds: string };
+
+type EditState = { exercises: EditExercise[]; supersets: EditSuperset[] };
+
+let seq = 0;
+const uid = (prefix: string) => `${prefix}-${(seq += 1)}`;
+
+const numOrNull = (s: string) => (s.trim() === "" ? null : Number(s));
+
+function seed(variant: VariantDetail): EditState {
+  const supersetKeyByServerId = new Map<string, string>();
+  const supersets: EditSuperset[] = variant.supersets
+    .slice()
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((s) => {
+      const key = uid("ss");
+      supersetKeyByServerId.set(s.id, key);
+      return { key, restAfterRoundSeconds: String(s.restAfterRoundSeconds) };
+    });
+
+  const exercises: EditExercise[] = variant.exercises
+    .slice()
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((e) => ({
+      key: uid("ex"),
+      serverId: e.id,
+      exerciseId: e.exerciseId,
+      exerciseName: e.exerciseName,
+      restSeconds: e.restSeconds == null ? "" : String(e.restSeconds),
+      notes: e.notes ?? "",
+      supersetKey: e.supersetGroupId ? (supersetKeyByServerId.get(e.supersetGroupId) ?? null) : null,
+      moreOpen: false,
+      sets: e.sets
+        .slice()
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((s) => ({
+          key: uid("set"),
+          kind: s.kind,
+          isAmrap: s.isAmrap,
+          toFailure: s.targetToFailure,
+          repsMin: s.targetRepsMin == null ? "" : String(s.targetRepsMin),
+          repsMax: s.targetRepsMax == null ? "" : String(s.targetRepsMax),
+          weightKg: s.targetWeightKg == null ? "" : String(s.targetWeightKg),
+          rir: s.targetRir == null ? "" : String(s.targetRir),
+        })),
+    }));
+
+  return { exercises, supersets };
+}
+
+const blankSet = (): EditSet => ({
+  key: uid("set"),
+  kind: "Standard",
+  isAmrap: false,
+  toFailure: false,
+  repsMin: "8",
+  repsMax: "12",
+  weightKg: "",
+  rir: "",
+});
+
+// A comparable snapshot for dirty-tracking (drops the volatile React keys).
+const fingerprint = (s: EditState) =>
+  JSON.stringify({
+    exercises: s.exercises.map((e) => ({
+      exerciseId: e.exerciseId,
+      restSeconds: e.restSeconds,
+      notes: e.notes,
+      supersetKey: e.supersetKey,
+      sets: e.sets.map((st) => [st.kind, st.isAmrap, st.toFailure, st.repsMin, st.repsMax, st.weightKg, st.rir]),
+    })),
+    supersets: s.supersets.map((g) => ({
+      used: s.exercises.filter((e) => e.supersetKey === g.key).length,
+      rest: g.restAfterRoundSeconds,
+    })),
+  });
 
 export function VariantEditor({
   variantId,
@@ -31,82 +125,165 @@ export function VariantEditor({
   onClose: () => void;
 }) {
   const { data: variant, isLoading } = useVariant(variantId);
+  const { data: program } = useProgram(programId);
   const update = useUpdateVariant(programId);
+  const bulk = useBulkExercises(programId);
 
-  const [rows, setRows] = useState<Row[]>([]);
+  const [state, setState] = useState<EditState>({ exercises: [], supersets: [] });
+  const [baseline, setBaseline] = useState<string>("");
   const [loadedFrom, setLoadedFrom] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
 
-  // Seed the editable rows the first time this variant's data arrives (and again if the
-  // component is reused for a different variant). Setting state during render, guarded by a
-  // value that changes, is the pattern React recommends over a syncing effect.
+  // Seed editable state the first time this variant's data arrives (React's recommended
+  // "set state during render, guarded by a changing value" pattern).
   if (variant && loadedFrom !== variant.id) {
+    const seeded = seed(variant);
     setLoadedFrom(variant.id);
-    setRows(
-      variant.exercises.map((e) => ({
-        exerciseId: e.exerciseId,
-        exerciseName: e.exerciseName,
-        setCount: Math.max(1, e.sets.length),
-        repsMin: e.sets[0]?.targetRepsMin?.toString() ?? "",
-        repsMax: e.sets[0]?.targetRepsMax?.toString() ?? "",
-        weightKg: e.sets[0]?.targetWeightKg?.toString() ?? "",
-      })),
-    );
+    setState(seeded);
+    setBaseline(fingerprint(seeded));
+    setSelected(new Set());
   }
+
+  const dirty = baseline !== "" && fingerprint(state) !== baseline;
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
+  const otherVariants = useMemo(() => {
+    if (!program) return [];
+    return program.groups.flatMap((g) =>
+      g.variants.filter((v) => v.id !== variantId).map((v) => ({ id: v.id, label: `${g.name} · ${v.name}` })),
+    );
+  }, [program, variantId]);
 
   if (isLoading || !variant) {
     return <p className="text-sm text-foreground-muted">Loading variant…</p>;
   }
 
-  const update1 = (i: number, patch: Partial<Row>) =>
-    setRows((r) => r.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
+  const patchExercise = (key: string, patch: Partial<EditExercise>) =>
+    setState((s) => ({ ...s, exercises: s.exercises.map((e) => (e.key === key ? { ...e, ...patch } : e)) }));
 
-  const move = (i: number, dir: -1 | 1) =>
-    setRows((r) => {
+  const patchSet = (exKey: string, setKey: string, patch: Partial<EditSet>) =>
+    setState((s) => ({
+      ...s,
+      exercises: s.exercises.map((e) =>
+        e.key === exKey ? { ...e, sets: e.sets.map((st) => (st.key === setKey ? { ...st, ...patch } : st)) } : e,
+      ),
+    }));
+
+  const moveExercise = (key: string, dir: -1 | 1) =>
+    setState((s) => {
+      const i = s.exercises.findIndex((e) => e.key === key);
       const j = i + dir;
-      if (j < 0 || j >= r.length) return r;
-      const copy = [...r];
+      if (i < 0 || j < 0 || j >= s.exercises.length) return s;
+      const copy = [...s.exercises];
       [copy[i], copy[j]] = [copy[j], copy[i]];
-      return copy;
+      return { ...s, exercises: copy };
     });
 
   const addExercise = (ex: ExerciseListItem) => {
-    setRows((r) => [
-      ...r,
-      { exerciseId: ex.id, exerciseName: ex.name, setCount: 3, repsMin: "8", repsMax: "12", weightKg: "" },
-    ]);
+    setState((s) => ({
+      ...s,
+      exercises: [
+        ...s.exercises,
+        {
+          key: uid("ex"),
+          serverId: null,
+          exerciseId: ex.id,
+          exerciseName: ex.name,
+          restSeconds: "",
+          notes: "",
+          supersetKey: null,
+          moreOpen: false,
+          sets: [blankSet()],
+        },
+      ],
+    }));
     setPicking(false);
   };
 
-  async function save() {
-    setError(null);
-    const body: UpdateVariantBody = {
+  const removeExercise = (key: string) =>
+    setState((s) => ({ ...s, exercises: s.exercises.filter((e) => e.key !== key) }));
+
+  const newSuperset = (exKey: string) =>
+    setState((s) => {
+      const key = uid("ss");
+      return {
+        supersets: [...s.supersets, { key, restAfterRoundSeconds: "60" }],
+        exercises: s.exercises.map((e) => (e.key === exKey ? { ...e, supersetKey: key } : e)),
+      };
+    });
+
+  const setGroupRest = (groupKey: string, value: string) =>
+    setState((s) => ({
+      ...s,
+      supersets: s.supersets.map((g) => (g.key === groupKey ? { ...g, restAfterRoundSeconds: value } : g)),
+    }));
+
+  const toggleSelected = (serverId: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(serverId)) next.delete(serverId);
+      else next.add(serverId);
+      return next;
+    });
+
+  function buildBody(): UpdateVariantBody {
+    const memberOrder = new Map<string, number>();
+    return {
       name: variant!.name,
       rowVersion: variant!.programRowVersion,
-      exercises: rows.map((row, index) => ({
-        exerciseId: row.exerciseId,
-        sortOrder: index,
-        supersetRef: null,
-        supersetMemberOrder: 0,
-        restSeconds: null,
-        notes: null,
-        sets: Array.from({ length: Math.max(1, Math.min(20, row.setCount)) }, (_, s) => ({
-          sortOrder: s,
-          kind: "Standard" as const,
-          isAmrap: false,
-          targetToFailure: false,
-          targetRepsMin: row.repsMin === "" ? null : Number(row.repsMin),
-          targetRepsMax: row.repsMax === "" ? null : Number(row.repsMax),
-          targetWeightKg: row.weightKg === "" ? null : Number(row.weightKg),
-          targetRir: null,
+      exercises: state.exercises.map((e, index) => {
+        let supersetMemberOrder = 0;
+        if (e.supersetKey) {
+          const n = memberOrder.get(e.supersetKey) ?? 0;
+          supersetMemberOrder = n;
+          memberOrder.set(e.supersetKey, n + 1);
+        }
+        return {
+          exerciseId: e.exerciseId,
+          sortOrder: index,
+          supersetRef: e.supersetKey,
+          supersetMemberOrder,
+          restSeconds: numOrNull(e.restSeconds),
+          notes: e.notes.trim() === "" ? null : e.notes.trim(),
+          sets: e.sets.map((st, s) => ({
+            sortOrder: s,
+            kind: st.kind,
+            isAmrap: st.isAmrap,
+            targetToFailure: st.toFailure,
+            targetRepsMin: numOrNull(st.repsMin),
+            targetRepsMax: numOrNull(st.repsMax),
+            targetWeightKg: numOrNull(st.weightKg),
+            targetRir: numOrNull(st.rir),
+          })),
+        };
+      }),
+      // Only groups with 2+ members are valid supersets (backend rejects the rest).
+      supersets: state.supersets
+        .filter((g) => state.exercises.filter((e) => e.supersetKey === g.key).length >= 2)
+        .map((g, index) => ({
+          ref: g.key,
+          sortOrder: index,
+          restAfterRoundSeconds: Number(g.restAfterRoundSeconds) || 0,
         })),
-      })),
-      supersets: [],
     };
+  }
 
+  async function save() {
+    setError(null);
     try {
-      await update.mutateAsync({ variantId, body });
+      await update.mutateAsync({ variantId, body: buildBody() });
       onClose();
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
@@ -119,15 +296,43 @@ export function VariantEditor({
     }
   }
 
-  const existingIds = new Set(rows.map((r) => r.exerciseId));
+  async function runBulk(kind: "copy" | "move", destVariantId: string) {
+    setError(null);
+    const ids = [...selected];
+    try {
+      await (kind === "copy" ? bulk.copy : bulk.move).mutateAsync({
+        destVariantId,
+        sourceVariantId: variantId,
+        variantExerciseIds: ids,
+        rowVersion: variant!.programRowVersion,
+      });
+      setSelected(new Set());
+      if (kind === "move") {
+        // Rows left this variant — reseed from the server on the next render.
+        setLoadedFrom(null);
+      }
+    } catch (e) {
+      setError(e instanceof ApiError ? (e.detail ?? e.title) : `Bulk ${kind} failed.`);
+    }
+  }
+
+  const requestClose = () => {
+    if (dirty) setConfirmingDiscard(true);
+    else onClose();
+  };
+
+  const groupLabel = (key: string) => `Superset ${state.supersets.findIndex((g) => g.key === key) + 1}`;
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <h3 className="m-0 text-base font-bold">{variant.name}</h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="m-0 text-base font-bold">
+          {variant.name}
+          {dirty ? <span className="ml-2 text-xs font-normal text-warning">Unsaved changes</span> : null}
+        </h3>
         <div className="flex gap-2">
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
+          <Button variant="ghost" onClick={requestClose}>
+            {dirty ? "Close" : "Cancel"}
           </Button>
           <Button variant="primary" onClick={save} disabled={update.isPending}>
             {update.isPending ? "Saving…" : "Save variant"}
@@ -135,67 +340,245 @@ export function VariantEditor({
         </div>
       </div>
 
+      {confirmingDiscard && (
+        <div className="flex items-center justify-between gap-3 rounded-control border border-warning/40 bg-warning-soft px-3 py-2 text-sm">
+          <span>Discard your unsaved changes to this variant?</span>
+          <span className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setConfirmingDiscard(false)}>
+              Keep editing
+            </Button>
+            <Button variant="danger" size="sm" onClick={onClose}>
+              Discard
+            </Button>
+          </span>
+        </div>
+      )}
+
       {error && (
         <div role="alert" className="rounded-control border border-danger/40 bg-danger-soft px-3 py-2 text-sm text-danger">
           {error}
         </div>
       )}
 
-      {rows.map((row, i) => (
-        <div key={`${row.exerciseId}-${i}`} className="rounded-control border border-border p-3">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="text-sm font-bold">{row.exerciseName}</span>
-            <div className="flex gap-1">
-              <Button variant="secondary" size="sm" iconOnly aria-label="Move up" onClick={() => move(i, -1)}>
-                <ArrowUp size={14} aria-hidden />
-              </Button>
-              <Button variant="secondary" size="sm" iconOnly aria-label="Move down" onClick={() => move(i, 1)}>
-                <ArrowDown size={14} aria-hidden />
-              </Button>
-              <Button
-                variant="danger"
-                size="sm"
-                iconOnly
-                aria-label="Remove exercise"
-                onClick={() => setRows((r) => r.filter((_, idx) => idx !== i))}
-              >
-                <Trash2 size={14} aria-hidden />
-              </Button>
+      {selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-control border border-border bg-surface-subtle px-3 py-2 text-sm">
+          <span className="font-semibold">{selected.size} selected</span>
+          {dirty ? (
+            <span className="text-xs text-foreground-muted">Save your changes before copying or moving.</span>
+          ) : otherVariants.length === 0 ? (
+            <span className="text-xs text-foreground-muted">No other variant to copy or move to.</span>
+          ) : (
+            <>
+              <BulkTargetMenu label="Copy to…" icon={<Copy size={13} aria-hidden />} targets={otherVariants} onPick={(id) => runBulk("copy", id)} />
+              <BulkTargetMenu label="Move to…" icon={<ArrowDown size={13} aria-hidden />} targets={otherVariants} onPick={(id) => runBulk("move", id)} />
+            </>
+          )}
+          <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+            Clear
+          </Button>
+        </div>
+      )}
+
+      {state.exercises.map((e) => {
+        const grouped = e.supersetKey != null;
+        return (
+          <div
+            key={e.key}
+            className={`rounded-control border p-3 ${grouped ? "border-primary/50 bg-primary-soft/30" : "border-border"}`}
+          >
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2 text-sm font-bold">
+                {e.serverId && (
+                  <Checkbox
+                    label=""
+                    aria-label={`Select ${e.exerciseName}`}
+                    checked={selected.has(e.serverId)}
+                    onChange={() => toggleSelected(e.serverId!)}
+                  />
+                )}
+                {e.exerciseName}
+                {grouped ? <span className="text-xs font-normal text-primary-pressed">{groupLabel(e.supersetKey!)}</span> : null}
+              </span>
+              <div className="flex gap-1">
+                <Button variant="secondary" size="sm" iconOnly aria-label="Move up" onClick={() => moveExercise(e.key, -1)}>
+                  <ArrowUp size={14} aria-hidden />
+                </Button>
+                <Button variant="secondary" size="sm" iconOnly aria-label="Move down" onClick={() => moveExercise(e.key, 1)}>
+                  <ArrowDown size={14} aria-hidden />
+                </Button>
+                <Button variant="danger" size="sm" iconOnly aria-label="Remove exercise" onClick={() => removeExercise(e.key)}>
+                  <Trash2 size={14} aria-hidden />
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <div className="grid grid-cols-[auto_1fr_1fr_1fr_1fr_auto] items-center gap-2 text-[11px] text-foreground-muted">
+                <span>#</span>
+                <span>Kind</span>
+                <span>Reps min–max</span>
+                <span>Weight (kg)</span>
+                <span>RIR</span>
+                <span />
+              </div>
+              {e.sets.map((st, s) => (
+                <div key={st.key} className="flex flex-col gap-1 rounded-[6px] border border-border/70 p-2">
+                  <div className="grid grid-cols-[auto_1fr_1fr_1fr_1fr_auto] items-center gap-2">
+                    <span className="text-xs text-foreground-muted">{s + 1}</span>
+                    <Segmented
+                      aria-label="Set kind"
+                      options={[
+                        { value: "Standard", label: "Std" },
+                        { value: "Drop", label: "Drop" },
+                      ]}
+                      value={st.kind}
+                      onChange={(v) => patchSet(e.key, st.key, { kind: v })}
+                    />
+                    <span className="flex items-center gap-1">
+                      <Input type="number" aria-label="Reps min" value={st.repsMin} onChange={(ev) => patchSet(e.key, st.key, { repsMin: ev.target.value })} />
+                      <span className="text-xs text-foreground-muted">–</span>
+                      <Input type="number" aria-label="Reps max" value={st.repsMax} onChange={(ev) => patchSet(e.key, st.key, { repsMax: ev.target.value })} />
+                    </span>
+                    <Input type="number" aria-label="Weight kg" value={st.weightKg} onChange={(ev) => patchSet(e.key, st.key, { weightKg: ev.target.value })} />
+                    <Input type="number" aria-label="RIR" value={st.rir} onChange={(ev) => patchSet(e.key, st.key, { rir: ev.target.value })} />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      iconOnly
+                      aria-label="Remove set"
+                      onClick={() => setState((prev) => ({ ...prev, exercises: prev.exercises.map((x) => (x.key === e.key ? { ...x, sets: x.sets.filter((y) => y.key !== st.key) } : x)) }))}
+                    >
+                      <Trash2 size={13} aria-hidden />
+                    </Button>
+                  </div>
+                  <div className="flex gap-4 pl-6">
+                    <Checkbox label="AMRAP" checked={st.isAmrap} onChange={(ev) => patchSet(e.key, st.key, { isAmrap: ev.target.checked })} />
+                    <Checkbox label="To failure" checked={st.toFailure} onChange={(ev) => patchSet(e.key, st.key, { toFailure: ev.target.checked })} />
+                  </div>
+                </div>
+              ))}
+
+              <div className="flex flex-wrap gap-2">
+                <Button variant="ghost" size="sm" onClick={() => patchExercise(e.key, { sets: [...e.sets, blankSet()] })}>
+                  <Plus size={13} aria-hidden />
+                  Add set
+                </Button>
+                {e.sets.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      const first = e.sets[0];
+                      patchExercise(e.key, { sets: e.sets.map((st) => ({ ...st, repsMin: first.repsMin, repsMax: first.repsMax, weightKg: first.weightKg, rir: first.rir })) });
+                    }}
+                  >
+                    Fill down from set 1
+                  </Button>
+                )}
+                <Button variant="ghost" size="sm" onClick={() => patchExercise(e.key, { moreOpen: !e.moreOpen })}>
+                  {e.moreOpen ? "Hide options" : "More options"}
+                </Button>
+              </div>
+
+              {e.moreOpen && (
+                <div className="flex flex-col gap-2 rounded-[6px] border border-border/70 p-2">
+                  <label className="flex items-center gap-2 text-xs text-foreground-muted">
+                    Rest after exercise (s)
+                    <Input type="number" className="max-w-[120px]" value={e.restSeconds} onChange={(ev) => patchExercise(e.key, { restSeconds: ev.target.value })} />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs text-foreground-muted">
+                    Notes
+                    <Input value={e.notes} onChange={(ev) => patchExercise(e.key, { notes: ev.target.value })} />
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-foreground-muted">
+                    Superset
+                    <select
+                      className="min-h-[34px] rounded-control border border-border bg-surface px-2 text-[13px] text-foreground"
+                      value={e.supersetKey ?? ""}
+                      onChange={(ev) => patchExercise(e.key, { supersetKey: ev.target.value === "" ? null : ev.target.value })}
+                    >
+                      <option value="">No superset</option>
+                      {state.supersets.map((g) => (
+                        <option key={g.key} value={g.key}>
+                          {groupLabel(g.key)}
+                        </option>
+                      ))}
+                    </select>
+                    <Button variant="ghost" size="sm" onClick={() => newSuperset(e.key)}>
+                      New superset
+                    </Button>
+                  </label>
+                  {grouped && (
+                    <label className="flex items-center gap-2 text-xs text-foreground-muted">
+                      Rest after superset round (s)
+                      <Input
+                        type="number"
+                        className="max-w-[120px]"
+                        value={state.supersets.find((g) => g.key === e.supersetKey)?.restAfterRoundSeconds ?? ""}
+                        onChange={(ev) => setGroupRest(e.supersetKey!, ev.target.value)}
+                      />
+                    </label>
+                  )}
+                  {grouped && state.exercises.filter((x) => x.supersetKey === e.supersetKey).length < 2 && (
+                    <p className="m-0 text-xs text-warning">Add a second exercise to this superset, or it won't be saved.</p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
-          <div className="grid grid-cols-4 gap-2">
-            <label className="text-xs text-foreground-muted">
-              Sets
-              <Input
-                type="number"
-                inputMode="numeric"
-                value={row.setCount}
-                onChange={(e) => update1(i, { setCount: Math.max(1, Number(e.target.value) || 1) })}
-              />
-            </label>
-            <label className="text-xs text-foreground-muted">
-              Reps min
-              <Input type="number" value={row.repsMin} onChange={(e) => update1(i, { repsMin: e.target.value })} />
-            </label>
-            <label className="text-xs text-foreground-muted">
-              Reps max
-              <Input type="number" value={row.repsMax} onChange={(e) => update1(i, { repsMax: e.target.value })} />
-            </label>
-            <label className="text-xs text-foreground-muted">
-              Weight (kg)
-              <Input type="number" value={row.weightKg} onChange={(e) => update1(i, { weightKg: e.target.value })} />
-            </label>
-          </div>
-        </div>
-      ))}
+        );
+      })}
 
       {picking ? (
-        <ExercisePicker onPick={addExercise} onClose={() => setPicking(false)} existingIds={existingIds} />
+        <ExercisePicker
+          onPick={addExercise}
+          onClose={() => setPicking(false)}
+          existingIds={new Set(state.exercises.map((e) => e.exerciseId))}
+        />
       ) : (
         <Button variant="secondary" onClick={() => setPicking(true)}>
           + Add exercise
         </Button>
       )}
     </div>
+  );
+}
+
+function BulkTargetMenu({
+  label,
+  icon,
+  targets,
+  onPick,
+}: {
+  label: string;
+  icon: ReactNode;
+  targets: { id: string; label: string }[];
+  onPick: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="relative">
+      <Button variant="secondary" size="sm" onClick={() => setOpen((o) => !o)}>
+        {icon}
+        {label}
+      </Button>
+      {open && (
+        <span className="absolute left-0 top-full z-10 mt-1 flex min-w-[200px] flex-col rounded-control border border-border bg-surface p-1 shadow-lg">
+          {targets.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className="rounded-[6px] px-2 py-1.5 text-left text-[13px] hover:bg-surface-subtle"
+              onClick={() => {
+                setOpen(false);
+                onPick(t.id);
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </span>
+      )}
+    </span>
   );
 }
