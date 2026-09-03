@@ -23,6 +23,7 @@ public static class ProgramEndpoints
         programs.MapPut("/{id:guid}", UpdateAsync).WithName("UpdateProgram");
         programs.MapDelete("/{id:guid}", ArchiveAsync).WithName("ArchiveProgram");
         programs.MapPost("/{id:guid}/activate", ActivateAsync).WithName("ActivateProgram");
+        programs.MapPost("/{id:guid}/clone", CloneAsync).WithName("CloneProgram");
         programs.MapPost("/{id:guid}/groups", AddGroupAsync).WithName("AddWorkoutGroup");
 
         return app;
@@ -232,6 +233,120 @@ public static class ProgramEndpoints
         await tx.CommitAsync(ct);
         return Results.NoContent();
     }
+
+    private static async Task<IResult> CloneAsync(
+        Guid id,
+        HttpContext http,
+        MySelfDbContext db,
+        TimeProvider clock,
+        CancellationToken ct)
+    {
+        if (!http.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var source = await db.OwnedPrograms(userId)
+            .AsNoTracking()
+            .Where(p => p.Id == id && p.ArchivedAt == null)
+            .Include(p => p.Groups).ThenInclude(g => g.Variants).ThenInclude(v => v.Exercises).ThenInclude(e => e.Sets)
+            .Include(p => p.Groups).ThenInclude(g => g.Variants).ThenInclude(v => v.Supersets)
+            .FirstOrDefaultAsync(ct);
+        if (source is null)
+        {
+            return Results.NotFound();
+        }
+
+        var programCount = await db.OwnedPrograms(userId).CountAsync(p => p.ArchivedAt == null, ct);
+        if (programCount >= WorkoutLimits.MaxProgramsPerUser)
+        {
+            return TooMany($"You can have at most {WorkoutLimits.MaxProgramsPerUser} programs. Archive one first.");
+        }
+
+        var clone = new WorkoutProgram
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Name = Truncate($"{source.Name} (copy)", 120),
+            SplitLabel = source.SplitLabel,
+            IsActive = false, // a clone is always a draft — the user activates it explicitly
+            CreatedAt = clock.GetUtcNow(),
+            Groups = source.Groups
+                .OrderBy(g => g.SortOrder)
+                .Select(CloneGroup)
+                .ToList(),
+        };
+
+        db.WorkoutPrograms.Add(clone);
+        await db.SaveChangesAsync(ct);
+
+        return Results.Json(
+            new ProgramListItem(
+                clone.Id, clone.Name, clone.SplitLabel, false,
+                clone.Groups.Count, clone.Groups.Sum(g => g.Variants.Count), clone.CreatedAt),
+            statusCode: StatusCodes.Status201Created);
+    }
+
+    private static WorkoutGroup CloneGroup(WorkoutGroup source) => new()
+    {
+        Id = Guid.NewGuid(),
+        Name = source.Name,
+        SortOrder = source.SortOrder,
+        Variants = source.Variants.OrderBy(v => v.SortOrder).Select(CloneVariant).ToList(),
+    };
+
+    private static WorkoutVariant CloneVariant(WorkoutVariant source)
+    {
+        // New superset rows, keyed by the source id so the exercises can point at the copies.
+        var supersetByOldId = source.Supersets.ToDictionary(
+            s => s.Id,
+            s => new SupersetGroup
+            {
+                Id = Guid.NewGuid(),
+                SortOrder = s.SortOrder,
+                RestAfterRoundSeconds = s.RestAfterRoundSeconds,
+            });
+
+        return new WorkoutVariant
+        {
+            Id = Guid.NewGuid(),
+            Name = source.Name,
+            SortOrder = source.SortOrder,
+            EstimatedDurationMinutes = source.EstimatedDurationMinutes,
+            Supersets = supersetByOldId.Values.ToList(),
+            Exercises = source.Exercises
+                .OrderBy(e => e.SortOrder)
+                .Select(e => new VariantExercise
+                {
+                    Id = Guid.NewGuid(),
+                    ExerciseId = e.ExerciseId, // catalogue reference — shared, not copied
+                    SortOrder = e.SortOrder,
+                    SupersetGroup = e.SupersetGroupId is { } oldId ? supersetByOldId[oldId] : null,
+                    SupersetMemberOrder = e.SupersetMemberOrder,
+                    RestSeconds = e.RestSeconds,
+                    Notes = e.Notes,
+                    Sets = e.Sets
+                        .OrderBy(s => s.SortOrder)
+                        .Select(s => new SetPrescription
+                        {
+                            Id = Guid.NewGuid(),
+                            SortOrder = s.SortOrder,
+                            Kind = s.Kind,
+                            IsAmrap = s.IsAmrap,
+                            TargetToFailure = s.TargetToFailure,
+                            TargetRepsMin = s.TargetRepsMin,
+                            TargetRepsMax = s.TargetRepsMax,
+                            TargetWeightKg = s.TargetWeightKg,
+                            TargetRir = s.TargetRir,
+                        })
+                        .ToList(),
+                })
+                .ToList(),
+        };
+    }
+
+    private static string Truncate(string value, int max) =>
+        value.Length <= max ? value : value[..max];
 
     private static async Task<IResult> AddGroupAsync(
         Guid id,

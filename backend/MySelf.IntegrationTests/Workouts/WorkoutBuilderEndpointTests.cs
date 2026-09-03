@@ -218,6 +218,67 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory)
     }
 
     [Fact]
+    public async Task Clone_deep_copies_the_tree_with_independent_ids_and_is_inactive()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var ex = await TwoExerciseIdsAsync();
+            var programId = await CreateProgramAsync(client, "Original");
+            var groupId = await AddGroupAsync(client, programId, "Push");
+            var variantId = await AddVariantAsync(client, groupId, "Push #1");
+            await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}", new
+            {
+                exercises = new[]
+                {
+                    new { exerciseId = ex[0], sortOrder = 0, supersetRef = "A", supersetMemberOrder = 0, restSeconds = (int?)null, notes = (string?)"keep", sets = Array.Empty<object>() },
+                    new { exerciseId = ex[1], sortOrder = 1, supersetRef = "A", supersetMemberOrder = 1, restSeconds = (int?)null, notes = (string?)null, sets = Array.Empty<object>() },
+                },
+                supersets = new[] { new { @ref = "A", sortOrder = 0, restAfterRoundSeconds = 75 } },
+            });
+            await client.PostAsync($"/api/v1/programs/{programId}/activate", null);
+
+            var cloneRes = await client.PostAsync($"/api/v1/programs/{programId}/clone", null);
+            Assert.Equal(HttpStatusCode.Created, cloneRes.StatusCode);
+            var cloneSummary = await cloneRes.Content.ReadFromJsonAsync<JsonElement>();
+            var cloneId = cloneSummary.GetProperty("id").GetGuid();
+            Assert.NotEqual(programId, cloneId);
+            Assert.Equal("Original (copy)", cloneSummary.GetProperty("name").GetString());
+            Assert.False(cloneSummary.GetProperty("isActive").GetBoolean());
+
+            var cloneTree = await client.GetFromJsonAsync<JsonElement>($"/api/v1/programs/{cloneId}");
+            var cloneGroup = cloneTree.GetProperty("groups").EnumerateArray().Single();
+            Assert.Equal("Push", cloneGroup.GetProperty("name").GetString());
+            var cloneVariant = cloneGroup.GetProperty("variants").EnumerateArray().Single();
+            var cloneVariantId = cloneVariant.GetProperty("id").GetGuid();
+            Assert.NotEqual(variantId, cloneVariantId);
+
+            var cloneVariantDetail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-variants/{cloneVariantId}");
+            var cloneExercises = cloneVariantDetail.GetProperty("exercises").EnumerateArray().ToList();
+            Assert.Equal(2, cloneExercises.Count);
+            Assert.Equal(ex[0], cloneExercises[0].GetProperty("exerciseId").GetGuid());
+            Assert.Equal("keep", cloneExercises[0].GetProperty("notes").GetString());
+            var cloneSuperset = cloneVariantDetail.GetProperty("supersets").EnumerateArray().Single();
+            Assert.Equal(75, cloneSuperset.GetProperty("restAfterRoundSeconds").GetInt32());
+            var cloneSupersetId = cloneSuperset.GetProperty("id").GetGuid();
+            foreach (var e in cloneExercises)
+            {
+                Assert.Equal(cloneSupersetId, e.GetProperty("supersetGroupId").GetGuid());
+            }
+
+            // Editing the clone leaves the original untouched.
+            await client.PutAsJsonAsync($"/api/v1/workout-variants/{cloneVariantId}",
+                new { exercises = Array.Empty<object>(), supersets = Array.Empty<object>() });
+            var originalDetail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-variants/{variantId}");
+            Assert.Equal(2, originalDetail.GetProperty("exercises").GetArrayLength());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
     public async Task Activate_deactivates_the_previous_active_program()
     {
         var (client, email) = await factory.RegisterAndAuthenticateAsync();

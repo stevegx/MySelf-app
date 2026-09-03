@@ -132,6 +132,9 @@ function ProgramDetail({
                 Activate
               </Button>
             )}
+            <Button variant="secondary" onClick={() => m.clone.mutate(program.id)} disabled={m.clone.isPending}>
+              {m.clone.isPending ? "Duplicating…" : "Duplicate"}
+            </Button>
             <Button
               variant="danger"
               onClick={() => {

@@ -179,6 +179,11 @@ export function useMutateProgram(programId: string | null) {
         apiFetch<void>(`/api/v1/programs/${id}`, { method: "DELETE", accessToken }),
       onSuccess: invalidate,
     }),
+    clone: useMutation({
+      mutationFn: (id: string) =>
+        apiFetch<ProgramListItem>(`/api/v1/programs/${id}/clone`, { method: "POST", accessToken }),
+      onSuccess: invalidate,
+    }),
     addGroup: useMutation({
       mutationFn: (body: { name: string }) =>
         apiFetch<GroupDetail>(`/api/v1/programs/${programId}/groups`, { method: "POST", body, accessToken }),
