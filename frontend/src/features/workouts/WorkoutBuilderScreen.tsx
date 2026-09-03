@@ -3,6 +3,7 @@ import { ChevronLeft, Plus } from "lucide-react";
 import { Button, Card, CardKicker, Input, PageHeader } from "../../components/ui";
 import { SortableList } from "./SortableList";
 import { VariantEditor } from "./VariantEditor";
+import { useConfirm } from "./useConfirm";
 import { useArchivedPrograms, useCreateProgram, useMutateProgram, useProgram, usePrograms } from "./api";
 
 export function WorkoutBuilderScreen() {
@@ -159,6 +160,7 @@ function ProgramDetail({
 }) {
   const { data: program, isLoading } = useProgram(programId);
   const m = useMutateProgram(programId);
+  const { confirm, dialog } = useConfirm();
   const [groupName, setGroupName] = useState("");
   const [variantNameByGroup, setVariantNameByGroup] = useState<Record<string, string>>({});
 
@@ -173,6 +175,7 @@ function ProgramDetail({
 
   return (
     <>
+      {dialog}
       <PageHeader
         title={program.name}
         subtitle={program.isActive ? "Active program" : "Draft"}
@@ -189,8 +192,16 @@ function ProgramDetail({
             </Button>
             <Button
               variant="danger"
-              onClick={() => {
-                if (confirm("Archive this program?")) m.archive.mutate(program.id, { onSuccess: onBack });
+              onClick={async () => {
+                if (
+                  await confirm({
+                    title: "Archive this program?",
+                    message: "It leaves your active list. You can restore it later from Archived programs.",
+                    confirmLabel: "Archive",
+                  })
+                ) {
+                  m.archive.mutate(program.id, { onSuccess: onBack });
+                }
               }}
             >
               Archive
@@ -215,8 +226,16 @@ function ProgramDetail({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => {
-                  if (confirm(`Delete group "${g.name}" and its variants?`)) m.deleteGroup.mutate(g.id);
+                onClick={async () => {
+                  if (
+                    await confirm({
+                      title: `Delete group "${g.name}"?`,
+                      message: "This also deletes its variants and their exercises. This can't be undone.",
+                      confirmLabel: "Delete group",
+                    })
+                  ) {
+                    m.deleteGroup.mutate(g.id);
+                  }
                 }}
               >
                 Delete group
@@ -244,8 +263,16 @@ function ProgramDetail({
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => {
-                      if (confirm(`Delete variant "${v.name}"?`)) m.deleteVariant.mutate(v.id);
+                    onClick={async () => {
+                      if (
+                        await confirm({
+                          title: `Delete variant "${v.name}"?`,
+                          message: "Its exercises and set targets go with it. This can't be undone.",
+                          confirmLabel: "Delete variant",
+                        })
+                      ) {
+                        m.deleteVariant.mutate(v.id);
+                      }
                     }}
                   >
                     Delete
