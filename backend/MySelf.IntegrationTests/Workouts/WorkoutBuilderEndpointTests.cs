@@ -14,8 +14,9 @@ namespace MySelf.IntegrationTests.Workouts;
 /// set prescriptions → supersets, plus activation and ownership. Runs against the shared dev
 /// database; the seeded exercise catalogue supplies real exercise ids.
 /// </summary>
-public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+[Collection(DatabaseCollection.Name)]
+public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory, DatabaseFixture db)
+    : DatabaseTest(db), IClassFixture<WebApplicationFactory<Program>>
 {
     private async Task<Guid[]> TwoExerciseIdsAsync()
     {

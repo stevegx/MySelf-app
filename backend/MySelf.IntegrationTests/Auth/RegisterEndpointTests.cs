@@ -15,8 +15,9 @@ namespace MySelf.IntegrationTests.Auth;
 /// username/email pair and deletes what it created afterwards, the same pattern as
 /// BarcodeEndpointTests.
 /// </summary>
-public class RegisterEndpointTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+[Collection(DatabaseCollection.Name)]
+public class RegisterEndpointTests(WebApplicationFactory<Program> factory, DatabaseFixture db)
+    : DatabaseTest(db), IClassFixture<WebApplicationFactory<Program>>
 {
     [Fact]
     public async Task Valid_registration_returns_201_with_access_token_and_refresh_cookie()

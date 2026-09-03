@@ -10,8 +10,9 @@ namespace MySelf.IntegrationTests.Auth;
 /// Drives POST /api/v1/auth/login through the real pipeline. Each test registers its own
 /// account first (via the real /register endpoint) and deletes it afterwards.
 /// </summary>
-public class LoginEndpointTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+[Collection(DatabaseCollection.Name)]
+public class LoginEndpointTests(WebApplicationFactory<Program> factory, DatabaseFixture db)
+    : DatabaseTest(db), IClassFixture<WebApplicationFactory<Program>>
 {
     private const string Password = "Str0ng!Passw0rd";
 

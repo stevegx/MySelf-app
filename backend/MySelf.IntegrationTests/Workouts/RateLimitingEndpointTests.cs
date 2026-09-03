@@ -11,8 +11,9 @@ namespace MySelf.IntegrationTests.Workouts;
 /// The rest of the suite runs with rate limiting off (see <see cref="TestBootstrap"/>). This
 /// class opts back in with a deliberately tiny "write" budget so a short loop trips a 429.
 /// </summary>
-public class RateLimitingEndpointTests(RateLimitingEndpointTests.ThrottledFactory factory)
-    : IClassFixture<RateLimitingEndpointTests.ThrottledFactory>
+[Collection(DatabaseCollection.Name)]
+public class RateLimitingEndpointTests(RateLimitingEndpointTests.ThrottledFactory factory, DatabaseFixture db)
+    : DatabaseTest(db), IClassFixture<RateLimitingEndpointTests.ThrottledFactory>
 {
     public sealed class ThrottledFactory : WebApplicationFactory<Program>
     {

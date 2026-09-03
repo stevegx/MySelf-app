@@ -12,8 +12,9 @@ namespace MySelf.IntegrationTests.Me;
 /// validation and the response shape/contract (formula version, disclaimer, the
 /// not-available branch).
 /// </summary>
-public class NutritionEstimateEndpointTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+[Collection(DatabaseCollection.Name)]
+public class NutritionEstimateEndpointTests(WebApplicationFactory<Program> factory, DatabaseFixture db)
+    : DatabaseTest(db), IClassFixture<WebApplicationFactory<Program>>
 {
     private static object ValidBody(string dateOfBirth = "1994-03-21", string goalType = "Lose", string? pace = "Standard") => new
     {

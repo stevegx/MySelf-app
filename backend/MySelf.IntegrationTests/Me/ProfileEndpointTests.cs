@@ -15,8 +15,9 @@ namespace MySelf.IntegrationTests.Me;
 /// against the shared dev database. Each test registers a unique user and deletes it afterwards;
 /// the cascade FK on user_profiles removes the profile row with the account.
 /// </summary>
-public class ProfileEndpointTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+[Collection(DatabaseCollection.Name)]
+public class ProfileEndpointTests(WebApplicationFactory<Program> factory, DatabaseFixture db)
+    : DatabaseTest(db), IClassFixture<WebApplicationFactory<Program>>
 {
     private static readonly object ValidProfile = new
     {

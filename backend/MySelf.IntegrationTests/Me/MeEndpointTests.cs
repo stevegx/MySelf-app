@@ -12,8 +12,9 @@ namespace MySelf.IntegrationTests.Me;
 /// middleware wired up in Program.cs. Proves the middleware both accepts a valid token
 /// issued by /register and rejects missing/invalid ones.
 /// </summary>
-public class MeEndpointTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+[Collection(DatabaseCollection.Name)]
+public class MeEndpointTests(WebApplicationFactory<Program> factory, DatabaseFixture db)
+    : DatabaseTest(db), IClassFixture<WebApplicationFactory<Program>>
 {
     [Fact]
     public async Task Valid_access_token_returns_200_with_the_signed_in_user()

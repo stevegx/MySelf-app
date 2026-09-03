@@ -14,8 +14,9 @@ namespace MySelf.IntegrationTests.Me;
 /// completion modes (estimate / manual / skip), the transaction (goal + snapshot + profile
 /// stamp land together), the once-only guard, and the not-available branches.
 /// </summary>
-public class OnboardingEndpointTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+[Collection(DatabaseCollection.Name)]
+public class OnboardingEndpointTests(WebApplicationFactory<Program> factory, DatabaseFixture db)
+    : DatabaseTest(db), IClassFixture<WebApplicationFactory<Program>>
 {
     private static object Profile(string dateOfBirth = "1994-03-21", string? calculationSex = "Female") => new
     {

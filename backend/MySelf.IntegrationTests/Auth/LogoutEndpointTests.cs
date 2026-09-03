@@ -6,8 +6,9 @@ using static MySelf.IntegrationTests.Auth.AuthTestHelpers;
 namespace MySelf.IntegrationTests.Auth;
 
 /// <summary>Drives POST /api/v1/auth/logout. Cookies are handled manually, as in RefreshEndpointTests.</summary>
-public class LogoutEndpointTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+[Collection(DatabaseCollection.Name)]
+public class LogoutEndpointTests(WebApplicationFactory<Program> factory, DatabaseFixture db)
+    : DatabaseTest(db), IClassFixture<WebApplicationFactory<Program>>
 {
     private const string Password = "Str0ng!Passw0rd";
 

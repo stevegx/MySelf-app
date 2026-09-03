@@ -13,8 +13,9 @@ namespace MySelf.IntegrationTests.Auth;
 /// resetLink (see PasswordResetEndpoints) — this test extracts the token straight from it
 /// rather than needing to read server logs, and reset-password exercises the token for real.
 /// </summary>
-public class PasswordResetEndpointTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+[Collection(DatabaseCollection.Name)]
+public class PasswordResetEndpointTests(WebApplicationFactory<Program> factory, DatabaseFixture db)
+    : DatabaseTest(db), IClassFixture<WebApplicationFactory<Program>>
 {
     private const string OriginalPassword = "Str0ng!Passw0rd";
     private const string NewPassword = "EvenStr0nger!Pass";

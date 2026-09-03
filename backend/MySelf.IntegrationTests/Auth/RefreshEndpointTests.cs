@@ -11,8 +11,9 @@ namespace MySelf.IntegrationTests.Auth;
 /// Set-Cookie, attached via the Cookie header on the next request) rather than relying on
 /// HttpClient's own cookie jar, so each step is explicit about which cookie value it sends.
 /// </summary>
-public class RefreshEndpointTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+[Collection(DatabaseCollection.Name)]
+public class RefreshEndpointTests(WebApplicationFactory<Program> factory, DatabaseFixture db)
+    : DatabaseTest(db), IClassFixture<WebApplicationFactory<Program>>
 {
     private const string Password = "Str0ng!Passw0rd";
 

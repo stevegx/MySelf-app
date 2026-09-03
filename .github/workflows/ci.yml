@@ -47,6 +47,11 @@ jobs:
           dotnet tool restore
           dotnet ef database update --project MySelf.Infrastructure --startup-project MySelf.Api
 
+      # Integration tests need the exercise catalogue. The importer is idempotent and reads
+      # the committed seed-data/wger-catalogue.json; Respawn preserves these rows between tests.
+      - name: Seed exercise catalogue
+        run: dotnet run --project MySelf.Tools.WgerImport --no-build -- import
+
       - name: Test
         run: dotnet test MySelf.sln --no-build --verbosity normal
 
