@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using MySelf.Api;
 using MySelf.Api.Auth;
 using MySelf.Api.Me;
 using MySelf.Api.Nutrition;
@@ -31,6 +32,11 @@ builder.Services.AddOpenApi();
 
 // RFC 7807 ProblemDetails for error responses (docs/04 API conventions).
 builder.Services.AddProblemDetails();
+
+// Rate limiting (docs/04: no rate limiting was a Phase 2 gap). Generous global ceiling plus
+// stricter "auth" / "write" policies; disabled in the integration test environment.
+builder.AddAppRateLimiting();
+var rateLimitingEnabled = builder.Configuration.GetValue($"{RateLimitOptions.SectionName}:Enabled", true);
 
 // Read from configuration key "ConnectionStrings:DefaultConnection". The .env line
 // ConnectionStrings__DefaultConnection=... is mapped to that key by the environment
@@ -157,6 +163,12 @@ app.UseCors("Frontend");
 // endpoints they protect.
 app.UseAuthentication();
 app.UseAuthorization();
+
+// After authentication so the "write" policy can partition by the caller's user id.
+if (rateLimitingEnabled)
+{
+    app.UseRateLimiter();
+}
 
 // Liveness/readiness probe. Deliberately unversioned (not under /api/v1, which is
 // reserved for business resources).

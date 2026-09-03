@@ -13,7 +13,9 @@ public static class WorkoutGroupEndpoints
 {
     public static IEndpointRouteBuilder MapWorkoutGroupEndpoints(this IEndpointRouteBuilder app)
     {
-        var groups = app.MapGroup("/api/v1/workout-groups").RequireAuthorization();
+        var groups = app.MapGroup("/api/v1/workout-groups")
+            .RequireAuthorization()
+            .RequireRateLimiting(RateLimiting.WritePolicy);
 
         groups.MapPut("/{id:guid}", UpdateAsync).WithName("UpdateWorkoutGroup");
         groups.MapDelete("/{id:guid}", DeleteAsync).WithName("DeleteWorkoutGroup");

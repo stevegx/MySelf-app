@@ -13,7 +13,9 @@ public static class ProgramEndpoints
 {
     public static IEndpointRouteBuilder MapProgramEndpoints(this IEndpointRouteBuilder app)
     {
-        var programs = app.MapGroup("/api/v1/programs").RequireAuthorization();
+        var programs = app.MapGroup("/api/v1/programs")
+            .RequireAuthorization()
+            .RequireRateLimiting(RateLimiting.WritePolicy);
 
         programs.MapGet("", ListAsync).WithName("ListPrograms");
         programs.MapPost("", CreateAsync).WithName("CreateProgram");

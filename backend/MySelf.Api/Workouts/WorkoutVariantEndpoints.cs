@@ -16,7 +16,9 @@ public static class WorkoutVariantEndpoints
 {
     public static IEndpointRouteBuilder MapWorkoutVariantEndpoints(this IEndpointRouteBuilder app)
     {
-        var variants = app.MapGroup("/api/v1/workout-variants").RequireAuthorization();
+        var variants = app.MapGroup("/api/v1/workout-variants")
+            .RequireAuthorization()
+            .RequireRateLimiting(RateLimiting.WritePolicy);
 
         variants.MapGet("/{id:guid}", GetAsync).WithName("GetWorkoutVariant");
         variants.MapPut("/{id:guid}", UpdateAsync).WithName("UpdateWorkoutVariant");

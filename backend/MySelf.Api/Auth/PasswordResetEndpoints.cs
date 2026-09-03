@@ -17,7 +17,7 @@ public static class PasswordResetEndpoints
 
     public static IEndpointRouteBuilder MapPasswordResetEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/v1/auth");
+        var group = app.MapGroup("/api/v1/auth").RequireRateLimiting(RateLimiting.AuthPolicy);
 
         group.MapPost("/forgot-password", ForgotPasswordAsync)
             .WithName("ForgotPassword")
