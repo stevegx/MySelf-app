@@ -18,7 +18,9 @@ public static class ProgramEndpoints
             .RequireRateLimiting(RateLimiting.WritePolicy);
 
         programs.MapGet("", ListAsync).WithName("ListPrograms");
+        programs.MapGet("/archived", ListArchivedAsync).WithName("ListArchivedPrograms");
         programs.MapPost("", CreateAsync).WithName("CreateProgram");
+        programs.MapPost("/{id:guid}/restore", RestoreAsync).WithName("RestoreProgram");
         programs.MapGet("/{id:guid}", GetAsync).WithName("GetProgram");
         programs.MapPut("/{id:guid}", UpdateAsync).WithName("UpdateProgram");
         programs.MapDelete("/{id:guid}", ArchiveAsync).WithName("ArchiveProgram");
@@ -46,6 +48,30 @@ public static class ProgramEndpoints
                 p.Name,
                 p.SplitLabel,
                 p.IsActive,
+                p.Groups.Count,
+                p.Groups.SelectMany(g => g.Variants).Count(),
+                p.CreatedAt))
+            .ToListAsync(ct);
+
+        return Results.Ok(items);
+    }
+
+    private static async Task<IResult> ListArchivedAsync(HttpContext http, MySelfDbContext db, CancellationToken ct)
+    {
+        if (!http.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var items = await db.OwnedPrograms(userId)
+            .AsNoTracking()
+            .Where(p => p.ArchivedAt != null)
+            .OrderByDescending(p => p.ArchivedAt)
+            .Select(p => new ProgramListItem(
+                p.Id,
+                p.Name,
+                p.SplitLabel,
+                false,
                 p.Groups.Count,
                 p.Groups.SelectMany(g => g.Variants).Count(),
                 p.CreatedAt))
@@ -195,6 +221,32 @@ public static class ProgramEndpoints
 
         program.ArchivedAt = clock.GetUtcNow();
         program.IsActive = false; // can't have an archived program be the active one
+        await db.SaveChangesAsync(ct);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> RestoreAsync(Guid id, HttpContext http, MySelfDbContext db, CancellationToken ct)
+    {
+        if (!http.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var program = await db.OwnedPrograms(userId)
+            .FirstOrDefaultAsync(p => p.Id == id && p.ArchivedAt != null, ct);
+        if (program is null)
+        {
+            return Results.NotFound();
+        }
+
+        var activeCount = await db.OwnedPrograms(userId).CountAsync(p => p.ArchivedAt == null, ct);
+        if (activeCount >= WorkoutLimits.MaxProgramsPerUser)
+        {
+            return TooMany(
+                $"You can have at most {WorkoutLimits.MaxProgramsPerUser} programs. Archive another before restoring this one.");
+        }
+
+        program.ArchivedAt = null; // restored as a draft — the user activates it explicitly
         await db.SaveChangesAsync(ct);
         return Results.NoContent();
     }

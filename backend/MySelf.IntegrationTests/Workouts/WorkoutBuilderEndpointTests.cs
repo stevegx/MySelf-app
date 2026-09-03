@@ -441,6 +441,37 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory)
     }
 
     [Fact]
+    public async Task Archived_program_can_be_listed_and_restored()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var programId = await CreateProgramAsync(client, "Old plan");
+            Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"/api/v1/programs/{programId}")).StatusCode);
+
+            var archived = await client.GetFromJsonAsync<JsonElement>("/api/v1/programs/archived");
+            Assert.Equal(1, archived.GetArrayLength());
+            Assert.Equal(programId, archived[0].GetProperty("id").GetGuid());
+
+            var restore = await client.PostAsync($"/api/v1/programs/{programId}/restore", null);
+            Assert.Equal(HttpStatusCode.NoContent, restore.StatusCode);
+
+            // Back in the default list, not active, and gone from the archived list.
+            var list = await client.GetFromJsonAsync<JsonElement>("/api/v1/programs");
+            Assert.Equal(1, list.GetArrayLength());
+            Assert.False(list[0].GetProperty("isActive").GetBoolean());
+            Assert.Equal(0, (await client.GetFromJsonAsync<JsonElement>("/api/v1/programs/archived")).GetArrayLength());
+
+            // Restoring an already-active (non-archived) program is a 404.
+            Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsync($"/api/v1/programs/{programId}/restore", null)).StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
     public async Task Put_variant_rejects_an_unknown_exercise_and_a_lonely_superset()
     {
         var (client, email) = await factory.RegisterAndAuthenticateAsync();

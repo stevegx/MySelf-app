@@ -3,7 +3,7 @@ import { ChevronLeft, Plus } from "lucide-react";
 import { Button, Card, CardKicker, Input, PageHeader } from "../../components/ui";
 import { SortableList } from "./SortableList";
 import { VariantEditor } from "./VariantEditor";
-import { useCreateProgram, useMutateProgram, useProgram, usePrograms } from "./api";
+import { useArchivedPrograms, useCreateProgram, useMutateProgram, useProgram, usePrograms } from "./api";
 
 export function WorkoutBuilderScreen() {
   const [programId, setProgramId] = useState<string | null>(null);
@@ -93,7 +93,58 @@ function ProgramList({ onOpen }: { onOpen: (id: string) => void }) {
       ) : (
         <p className="text-sm text-foreground-muted">No programs yet. Create one above.</p>
       )}
+
+      <ArchivedPrograms />
     </>
+  );
+}
+
+function ArchivedPrograms() {
+  const [open, setOpen] = useState(false);
+  const { data: archived, isLoading } = useArchivedPrograms(open);
+  const m = useMutateProgram(null);
+
+  return (
+    <div className="mt-6">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="text-sm font-semibold text-foreground-muted hover:text-foreground"
+      >
+        {open ? "▾" : "▸"} Archived programs
+      </button>
+      {open && (
+        <div className="mt-2 flex flex-col gap-2">
+          {isLoading ? (
+            <p className="text-sm text-foreground-muted">Loading…</p>
+          ) : archived && archived.length > 0 ? (
+            archived.map((p) => (
+              <div
+                key={p.id}
+                className="flex items-center justify-between rounded-card border border-border bg-surface-subtle px-4 py-3"
+              >
+                <span className="text-[13px]">
+                  <span className="font-semibold">{p.name}</span>
+                  <span className="ml-2 text-xs text-foreground-muted">
+                    {p.groupCount} groups · {p.variantCount} variants
+                  </span>
+                </span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={m.restore.isPending}
+                  onClick={() => m.restore.mutate(p.id)}
+                >
+                  Restore
+                </Button>
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-foreground-muted">Nothing archived.</p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

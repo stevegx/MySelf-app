@@ -119,6 +119,15 @@ export function usePrograms() {
   });
 }
 
+export function useArchivedPrograms(enabled: boolean) {
+  const accessToken = useToken();
+  return useQuery({
+    queryKey: ["programs", "archived"],
+    queryFn: () => apiFetch<ProgramListItem[]>("/api/v1/programs/archived", { accessToken }),
+    enabled: accessToken != null && enabled,
+  });
+}
+
 export function useProgram(id: string | null) {
   const accessToken = useToken();
   return useQuery({
@@ -182,6 +191,11 @@ export function useMutateProgram(programId: string | null) {
     clone: useMutation({
       mutationFn: (id: string) =>
         apiFetch<ProgramListItem>(`/api/v1/programs/${id}/clone`, { method: "POST", accessToken }),
+      onSuccess: invalidate,
+    }),
+    restore: useMutation({
+      mutationFn: (id: string) =>
+        apiFetch<void>(`/api/v1/programs/${id}/restore`, { method: "POST", accessToken }),
       onSuccess: invalidate,
     }),
     addGroup: useMutation({
