@@ -1,6 +1,6 @@
 import { ChevronRight, Circle, Dumbbell, Scale, Utensils } from "lucide-react";
 import { useNavigate } from "react-router";
-import { Button, Card, CardKicker, PageHeader, Ring } from "../../components/ui";
+import { Button, Card, CardKicker, PageHeader, Ring, Skeleton } from "../../components/ui";
 import { cn } from "../../lib/cn";
 import { useAuth } from "../auth/auth";
 import { useMe } from "../auth/useMe";
@@ -28,7 +28,7 @@ const SETUP_ITEMS: { label: string; to: string }[] = [
 ];
 
 function useWorkoutFrequency() {
-  const { data } = useSessionHistory();
+  const { data, isLoading } = useSessionHistory();
   const items = data?.items ?? [];
   const today = new Date();
   const weekStart = startOfWeek(today);
@@ -49,7 +49,7 @@ function useWorkoutFrequency() {
     }
   }
   const max = Math.max(1, ...perDay);
-  return { perDay, max, thisWeek, thisMonth, todayIndex: mondayIndex(today) };
+  return { perDay, max, thisWeek, thisMonth, todayIndex: mondayIndex(today), isLoading };
 }
 
 export function DashboardScreen() {
@@ -143,6 +143,13 @@ export function DashboardScreen() {
 
         <Card>
           <CardKicker>Workout frequency</CardKicker>
+          {freq.isLoading ? (
+            <>
+              <Skeleton className="h-16" />
+              <Skeleton className="mb-2 h-3 w-40" />
+            </>
+          ) : (
+          <>
           <div className="flex h-16 items-end gap-1.5 py-1.5">
             {WEEK_DAYS.map((day, i) => (
               <div key={i} className="flex flex-1 flex-col items-center gap-1">
@@ -166,6 +173,8 @@ export function DashboardScreen() {
               ? "No completed workouts this week yet."
               : `${freq.thisWeek} this week · ${freq.thisMonth} this month`}
           </p>
+          </>
+          )}
           <Button variant="secondary" block onClick={startWorkout}>
             {active ? "Resume workout" : "Start a workout"}
           </Button>

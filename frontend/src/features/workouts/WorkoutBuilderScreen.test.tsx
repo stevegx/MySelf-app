@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { Providers } from "../../app/providers";
@@ -49,7 +49,9 @@ describe("WorkoutBuilderScreen", () => {
   it("shows the empty state and the new-program form", async () => {
     installFetch();
     renderScreen();
-    expect(await screen.findByText("No programs yet. Create one above.")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByText("No programs yet. Create one above.")).toBeInTheDocument(),
+    );
     expect(screen.getByPlaceholderText(/Program name/i)).toBeInTheDocument();
   });
 

@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { Card, PageHeader, Tag } from "../../components/ui";
+import { Card, PageHeader, Skeleton, Tag } from "../../components/ui";
 import { useSessionHistory } from "./api";
 import type { WorkoutSessionListItem } from "./api";
 
@@ -51,7 +51,14 @@ export function WorkoutHistoryScreen() {
       />
 
       {isLoading ? (
-        <p className="text-sm text-foreground-muted">Loading…</p>
+        <div className="flex flex-col gap-2">
+          {Array.from({ length: 4 }, (_, i) => (
+            <div key={i} className="rounded-card border border-border bg-surface px-4 py-3">
+              <Skeleton className="mb-2 h-4 w-44" />
+              <Skeleton className="h-3 w-64" />
+            </div>
+          ))}
+        </div>
       ) : data && data.items.length > 0 ? (
         <div className="flex flex-col gap-2">
           {data.items.map((s) => (

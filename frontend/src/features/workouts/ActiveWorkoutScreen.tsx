@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { Button, Card, CardKicker, CardTitle, Field, Input, PageHeader, Tag } from "../../components/ui";
+import { Button, Card, CardKicker, CardTitle, Field, Input, PageHeader, Skeleton, Tag } from "../../components/ui";
 import { ApiError } from "../../lib/api";
 import {
   useActiveSession,
@@ -277,7 +277,15 @@ export function ActiveWorkoutScreen() {
     return (
       <>
         <PageHeader title="Active workout" />
-        <p className="text-sm text-foreground-muted">Loading…</p>
+        <div className="flex flex-col gap-4">
+          {[0, 1].map((i) => (
+            <Card key={i} className="gap-3">
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-9" />
+              <Skeleton className="h-9" />
+            </Card>
+          ))}
+        </div>
       </>
     );
   }

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { ChevronLeft, Plus, Play } from "lucide-react";
 import { ApiError } from "../../lib/api";
 import { cn } from "../../lib/cn";
-import { Button, Card, CardKicker, Checkbox, Input, PageHeader } from "../../components/ui";
+import { Button, Card, CardKicker, Checkbox, Input, PageHeader, Skeleton } from "../../components/ui";
 import { SortableList } from "./SortableList";
 import { DayEditor } from "./DayEditor";
 import { ProgramOverview } from "./ProgramOverview";
@@ -202,7 +202,14 @@ function ProgramList({ onOpen }: { onOpen: (id: string) => void }) {
       <InlineError error={m.remove.error ?? m.clone.error} />
 
       {isLoading ? (
-        <p className="text-sm text-foreground-muted">Loading…</p>
+        <div className="flex flex-col gap-2">
+          {Array.from({ length: 3 }, (_, i) => (
+            <div key={i} className="flex items-center justify-between rounded-card border border-border bg-surface px-4 py-3">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-4 w-12" />
+            </div>
+          ))}
+        </div>
       ) : programs && programs.length > 0 ? (
         <div className="flex flex-col gap-2">
           {programs.map((p) => (
@@ -367,7 +374,11 @@ function ProgramDetail({
     return (
       <>
         <PageHeader title="Program" actions={<BackButton onClick={onBack} label="All programs" />} />
-        <p className="text-sm text-foreground-muted">Loading…</p>
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-9 w-56" />
+          <Skeleton className="h-16" />
+          <Skeleton className="h-16" />
+        </div>
       </>
     );
   }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Card, CardKicker, Input, PageHeader, Segmented, Tag } from "../../components/ui";
+import { Card, CardKicker, Input, PageHeader, Segmented, Skeleton, Tag } from "../../components/ui";
 import { useExerciseHistory, useExerciseSearch } from "../workouts/api";
 import type { ExerciseHistoryEntry, PersonalRecordDetail } from "../workouts/api";
 
@@ -84,7 +84,14 @@ function StrengthTab() {
   }
 
   if (isLoading || !history) {
-    return <p className="text-sm text-foreground-muted">Loading…</p>;
+    return (
+      <Card className="gap-3">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-24" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-2/3" />
+      </Card>
+    );
   }
 
   const e1rmSeries = history.sessions

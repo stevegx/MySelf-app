@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Button, Card, CardKicker, Tag } from "../../components/ui";
+import { Button, Card, CardKicker, Skeleton, Tag } from "../../components/ui";
 import { cn } from "../../lib/cn";
 import { useProgramStats, useWorkoutCalendar } from "./api";
 
@@ -119,11 +119,46 @@ function ProgramMiniCalendar({ programId }: { programId: string }) {
   );
 }
 
-export function ProgramOverview({ programId }: { programId: string }) {
-  const { data: stats, isLoading } = useProgramStats(programId);
+function OverviewSkeleton() {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
+        {Array.from({ length: 6 }, (_, i) => (
+          <Card key={i} className="gap-2">
+            <Skeleton className="h-2 w-16" />
+            <Skeleton className="h-6 w-20" />
+            <Skeleton className="h-2 w-24" />
+          </Card>
+        ))}
+      </div>
+      <Card className="gap-2">
+        <Skeleton className="h-2 w-12" />
+        <Skeleton className="h-4" />
+        <Skeleton className="h-4" />
+      </Card>
+      <Card>
+        <Skeleton className="h-40" />
+      </Card>
+    </div>
+  );
+}
 
-  if (isLoading || !stats || typeof stats.totalSessions !== "number") {
-    return <p className="text-sm text-foreground-muted">Loading…</p>;
+export function ProgramOverview({ programId }: { programId: string }) {
+  const { data: stats, isLoading, isError, refetch, isFetching } = useProgramStats(programId);
+
+  if (isLoading) {
+    return <OverviewSkeleton />;
+  }
+
+  if (isError || !stats || typeof stats.totalSessions !== "number") {
+    return (
+      <Card className="gap-2">
+        <p className="m-0 text-sm text-foreground-muted">Couldn't load this program's stats.</p>
+        <Button variant="secondary" size="sm" className="self-start" onClick={() => refetch()} disabled={isFetching}>
+          {isFetching ? "Retrying…" : "Try again"}
+        </Button>
+      </Card>
+    );
   }
 
   if (stats.totalSessions === 0) {

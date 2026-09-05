@@ -8,3 +8,4 @@ export { PasswordInput } from "./PasswordInput";
 export { Segmented } from "./Segmented";
 export { Ring } from "./Ring";
 export { PageHeader } from "./PageHeader";
+export { Skeleton, SkeletonText } from "./Skeleton";
