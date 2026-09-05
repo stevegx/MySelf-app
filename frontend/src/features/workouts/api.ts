@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "../../lib/api";
+import { ApiError, apiFetch } from "../../lib/api";
 import { useAuth } from "../auth/auth";
 
 // --- types (hand-written until the OpenAPI client lands) ---
@@ -23,22 +23,21 @@ export type ProgramListItem = {
   name: string;
   splitLabel: string | null;
   isActive: boolean;
-  groupCount: number;
-  variantCount: number;
+  dayCount: number;
+  exerciseCount: number;
   createdAt: string;
 };
 
-export type VariantListItem = { id: string; name: string; sortOrder: number; exerciseCount: number };
-export type GroupDetail = { id: string; name: string; sortOrder: number; variants: VariantListItem[] };
+export type DayListItem = { id: string; name: string; sortOrder: number; exerciseCount: number };
 export type ProgramDetail = {
   id: string;
   name: string;
   splitLabel: string | null;
   isActive: boolean;
   createdAt: string;
-  // xmin concurrency token — echo back on PUT /programs and PUT /workout-variants.
+  // xmin concurrency token — echo back on PUT /programs and PUT /workout-days.
   rowVersion: number;
-  groups: GroupDetail[];
+  days: DayListItem[];
 };
 
 export type SetPrescriptionDetail = {
@@ -53,7 +52,7 @@ export type SetPrescriptionDetail = {
   targetRir: number | null;
 };
 
-export type VariantExerciseDetail = {
+export type DayExerciseDetail = {
   id: string;
   exerciseId: string;
   exerciseName: string;
@@ -65,18 +64,18 @@ export type VariantExerciseDetail = {
   sets: SetPrescriptionDetail[];
 };
 
-export type VariantDetail = {
+export type DayDetail = {
   id: string;
   name: string;
   sortOrder: number;
   estimatedDurationMinutes: number | null;
   // The owning program's xmin token; send it back on PUT to guard the edit.
   programRowVersion: number;
-  exercises: VariantExerciseDetail[];
+  exercises: DayExerciseDetail[];
   supersets: { id: string; sortOrder: number; restAfterRoundSeconds: number }[];
 };
 
-export type UpdateVariantExercise = {
+export type UpdateDayExercise = {
   exerciseId: string;
   sortOrder: number;
   supersetRef: string | null;
@@ -95,13 +94,52 @@ export type UpdateVariantExercise = {
   }[];
 };
 
-export type UpdateVariantBody = {
+export type UpdateDayBody = {
   name?: string;
   estimatedDurationMinutes?: number | null;
   // The program xmin token from the last read; omit to accept last-write-wins.
   rowVersion?: number;
-  exercises: UpdateVariantExercise[];
+  exercises: UpdateDayExercise[];
   supersets: { ref: string; sortOrder: number; restAfterRoundSeconds: number }[];
+};
+
+// --- workout sessions (docs/02 "Starting a workout", Story 3A) ---
+
+export type SetLogDetail = {
+  id: string;
+  sortOrder: number;
+  kind: "Standard" | "Drop";
+  isAmrap: boolean;
+  targetToFailure: boolean;
+  targetRepsMin: number | null;
+  targetRepsMax: number | null;
+  targetWeightKg: number | null;
+  targetRir: number | null;
+  weightKg: number | null;
+  reps: number | null;
+  completedAt: string | null;
+  skippedAt: string | null;
+};
+
+export type ExerciseLogDetail = {
+  id: string;
+  exerciseId: string;
+  exerciseName: string;
+  trackingMode: string;
+  sortOrder: number;
+  supersetGroupSnapshotId: string | null;
+  supersetMemberOrder: number;
+  sets: SetLogDetail[];
+};
+
+export type WorkoutSessionDetail = {
+  id: string;
+  sourceDayId: string | null;
+  dayName: string | null;
+  programName: string | null;
+  status: "InProgress" | "Completed" | "Discarded";
+  startedAt: string;
+  exercises: ExerciseLogDetail[];
 };
 
 // --- hooks ---
@@ -137,11 +175,11 @@ export function useProgram(id: string | null) {
   });
 }
 
-export function useVariant(id: string | null) {
+export function useDay(id: string | null) {
   const accessToken = useToken();
   return useQuery({
-    queryKey: ["variant", id],
-    queryFn: () => apiFetch<VariantDetail>(`/api/v1/workout-variants/${id}`, { accessToken }),
+    queryKey: ["day", id],
+    queryFn: () => apiFetch<DayDetail>(`/api/v1/workout-days/${id}`, { accessToken }),
     enabled: accessToken != null && id != null,
   });
 }
@@ -198,64 +236,37 @@ export function useMutateProgram(programId: string | null) {
         apiFetch<void>(`/api/v1/programs/${id}/restore`, { method: "POST", accessToken }),
       onSuccess: invalidate,
     }),
-    addGroup: useMutation({
+    addDay: useMutation({
       mutationFn: (body: { name: string }) =>
-        apiFetch<GroupDetail>(`/api/v1/programs/${programId}/groups`, { method: "POST", body, accessToken }),
+        apiFetch<DayListItem>(`/api/v1/programs/${programId}/days`, { method: "POST", body, accessToken }),
       onSuccess: invalidate,
     }),
-    addVariant: useMutation({
-      mutationFn: ({ groupId, name }: { groupId: string; name: string }) =>
-        apiFetch<VariantListItem>(`/api/v1/workout-groups/${groupId}/variants`, {
-          method: "POST",
-          body: { name },
-          accessToken,
-        }),
+    deleteDay: useMutation({
+      mutationFn: (dayId: string) =>
+        apiFetch<void>(`/api/v1/workout-days/${dayId}`, { method: "DELETE", accessToken }),
       onSuccess: invalidate,
     }),
-    deleteGroup: useMutation({
-      mutationFn: (groupId: string) =>
-        apiFetch<void>(`/api/v1/workout-groups/${groupId}`, { method: "DELETE", accessToken }),
-      onSuccess: invalidate,
-    }),
-    deleteVariant: useMutation({
-      mutationFn: (variantId: string) =>
-        apiFetch<void>(`/api/v1/workout-variants/${variantId}`, { method: "DELETE", accessToken }),
-      onSuccess: invalidate,
-    }),
-    // Rename / relabel a program and/or reorder its groups. Pass the program's rowVersion.
+    // Rename / relabel a program and/or reorder its days. Pass the program's rowVersion.
     updateProgram: useMutation({
-      mutationFn: (body: { name?: string; splitLabel?: string | null; groupOrder?: string[]; rowVersion: number }) =>
+      mutationFn: (body: { name?: string; splitLabel?: string | null; dayOrder?: string[]; rowVersion: number }) =>
         apiFetch<void>(`/api/v1/programs/${programId}`, { method: "PUT", body, accessToken }),
-      onSuccess: invalidate,
-    }),
-    // Rename a group and/or reorder its variants. Pass the program's rowVersion.
-    updateGroup: useMutation({
-      mutationFn: ({
-        groupId,
-        ...body
-      }: {
-        groupId: string;
-        name?: string;
-        variantOrder?: string[];
-        rowVersion: number;
-      }) => apiFetch<void>(`/api/v1/workout-groups/${groupId}`, { method: "PUT", body, accessToken }),
       onSuccess: invalidate,
     }),
   };
 }
 
-export function useUpdateVariant(programId: string | null) {
+export function useUpdateDay(programId: string | null) {
   const accessToken = useToken();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ variantId, body }: { variantId: string; body: UpdateVariantBody }) =>
-      apiFetch<VariantDetail>(`/api/v1/workout-variants/${variantId}`, {
+    mutationFn: ({ dayId, body }: { dayId: string; body: UpdateDayBody }) =>
+      apiFetch<DayDetail>(`/api/v1/workout-days/${dayId}`, {
         method: "PUT",
         body,
         accessToken,
       }),
-    onSuccess: (_data, { variantId }) => {
-      qc.invalidateQueries({ queryKey: ["variant", variantId] });
+    onSuccess: (_data, { dayId }) => {
+      qc.invalidateQueries({ queryKey: ["day", dayId] });
       qc.invalidateQueries({ queryKey: ["program", programId] });
       qc.invalidateQueries({ queryKey: ["programs"] });
     },
@@ -263,29 +274,29 @@ export function useUpdateVariant(programId: string | null) {
 }
 
 export type BulkExercisesArgs = {
-  destVariantId: string;
-  sourceVariantId: string;
-  variantExerciseIds: string[];
+  destDayId: string;
+  sourceDayId: string;
+  dayExerciseIds: string[];
   rowVersion?: number;
 };
 
-/** Copy / move selected exercises between two of the caller's variants (docs/08 Story 7). */
+/** Copy / move selected exercises between two of the caller's days (docs/08 Story 7). */
 export function useBulkExercises(programId: string | null) {
   const accessToken = useToken();
   const qc = useQueryClient();
-  const invalidate = (destVariantId: string, sourceVariantId: string) => {
-    qc.invalidateQueries({ queryKey: ["variant", destVariantId] });
-    qc.invalidateQueries({ queryKey: ["variant", sourceVariantId] });
+  const invalidate = (destDayId: string, sourceDayId: string) => {
+    qc.invalidateQueries({ queryKey: ["day", destDayId] });
+    qc.invalidateQueries({ queryKey: ["day", sourceDayId] });
     qc.invalidateQueries({ queryKey: ["program", programId] });
     qc.invalidateQueries({ queryKey: ["programs"] });
   };
 
   const call = (kind: "copy" | "move") => (args: BulkExercisesArgs) =>
-    apiFetch<VariantDetail>(`/api/v1/workout-variants/${args.destVariantId}/exercises/bulk-${kind}`, {
+    apiFetch<DayDetail>(`/api/v1/workout-days/${args.destDayId}/exercises/bulk-${kind}`, {
       method: "POST",
       body: {
-        sourceVariantId: args.sourceVariantId,
-        variantExerciseIds: args.variantExerciseIds,
+        sourceDayId: args.sourceDayId,
+        dayExerciseIds: args.dayExerciseIds,
         rowVersion: args.rowVersion,
       },
       accessToken,
@@ -294,11 +305,39 @@ export function useBulkExercises(programId: string | null) {
   return {
     copy: useMutation({
       mutationFn: call("copy"),
-      onSuccess: (_d, a) => invalidate(a.destVariantId, a.sourceVariantId),
+      onSuccess: (_d, a) => invalidate(a.destDayId, a.sourceDayId),
     }),
     move: useMutation({
       mutationFn: call("move"),
-      onSuccess: (_d, a) => invalidate(a.destVariantId, a.sourceVariantId),
+      onSuccess: (_d, a) => invalidate(a.destDayId, a.sourceDayId),
     }),
   };
+}
+
+/** The caller's InProgress session, or null when nothing is running — a 404 isn't an error here. */
+export function useActiveSession() {
+  const accessToken = useToken();
+  return useQuery({
+    queryKey: ["workout-session", "active"],
+    queryFn: async () => {
+      try {
+        return await apiFetch<WorkoutSessionDetail>("/api/v1/workout-sessions/active", { accessToken });
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 404) return null;
+        throw e;
+      }
+    },
+    enabled: accessToken != null,
+  });
+}
+
+/** Start a session from a day, or pass null for an ad-hoc session (docs/02 Story 3A). */
+export function useStartSession() {
+  const accessToken = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dayId: string | null) =>
+      apiFetch<WorkoutSessionDetail>("/api/v1/workout-sessions", { method: "POST", body: { dayId }, accessToken }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["workout-session"] }),
+  });
 }

@@ -20,9 +20,9 @@ internal static class OwnedWorkouts
     public static IQueryable<WorkoutProgram> OwnedPrograms(this MySelfDbContext db, Guid userId) =>
         db.WorkoutPrograms.Where(p => p.UserId == userId);
 
-    public static IQueryable<WorkoutGroup> OwnedGroups(this MySelfDbContext db, Guid userId) =>
-        db.WorkoutGroups.Where(g => g.Program.UserId == userId);
+    public static IQueryable<WorkoutDay> OwnedDays(this MySelfDbContext db, Guid userId) =>
+        db.WorkoutDays.Where(d => d.Program.UserId == userId);
 
-    public static IQueryable<WorkoutVariant> OwnedVariants(this MySelfDbContext db, Guid userId) =>
-        db.WorkoutVariants.Where(v => v.Group.Program.UserId == userId);
+    public static IQueryable<WorkoutSession> OwnedSessions(this MySelfDbContext db, Guid userId) =>
+        db.WorkoutSessions.Where(s => s.UserId == userId);
 }

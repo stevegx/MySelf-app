@@ -28,5 +28,5 @@ public class WorkoutProgram
 
     public uint RowVersion { get; set; }
 
-    public List<WorkoutGroup> Groups { get; set; } = [];
+    public List<WorkoutDay> Days { get; set; } = [];
 }

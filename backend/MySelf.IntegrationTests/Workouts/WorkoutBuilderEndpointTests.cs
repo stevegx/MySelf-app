@@ -10,8 +10,8 @@ using static MySelf.IntegrationTests.Auth.AuthTestHelpers;
 namespace MySelf.IntegrationTests.Workouts;
 
 /// <summary>
-/// Drives the program builder (docs/02, Story 3): programs → groups → variants → exercises →
-/// set prescriptions → supersets, plus activation and ownership. Runs against the shared dev
+/// Drives the program builder (docs/02, Story 3): programs → days → exercises → set
+/// prescriptions → supersets, plus activation and ownership. Runs against the shared dev
 /// database; the seeded exercise catalogue supplies real exercise ids.
 /// </summary>
 [Collection(DatabaseCollection.Name)]
@@ -32,40 +32,31 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
         return (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
     }
 
-    private static async Task<Guid> AddGroupAsync(HttpClient client, Guid programId, string name = "Legs")
+    private static async Task<Guid> AddDayAsync(HttpClient client, Guid programId, string name = "Legs")
     {
-        var res = await client.PostAsJsonAsync($"/api/v1/programs/{programId}/groups", new { name });
-        res.EnsureSuccessStatusCode();
-        return (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
-    }
-
-    private static async Task<Guid> AddVariantAsync(HttpClient client, Guid groupId, string name = "Legs #1")
-    {
-        var res = await client.PostAsJsonAsync($"/api/v1/workout-groups/{groupId}/variants", new { name });
+        var res = await client.PostAsJsonAsync($"/api/v1/programs/{programId}/days", new { name });
         res.EnsureSuccessStatusCode();
         return (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
     }
 
     [Fact]
-    public async Task Create_add_group_variant_and_read_the_program_tree()
+    public async Task Create_add_day_and_read_the_program_tree()
     {
         var (client, email) = await factory.RegisterAndAuthenticateAsync();
         try
         {
             var programId = await CreateProgramAsync(client);
-            var groupId = await AddGroupAsync(client, programId, "Legs");
-            var variantId = await AddVariantAsync(client, groupId);
+            var dayId = await AddDayAsync(client, programId, "Legs");
 
             var tree = await client.GetFromJsonAsync<JsonElement>($"/api/v1/programs/{programId}");
-            var group = tree.GetProperty("groups").EnumerateArray().Single();
-            Assert.Equal("Legs", group.GetProperty("name").GetString());
-            var variant = group.GetProperty("variants").EnumerateArray().Single();
-            Assert.Equal(variantId, variant.GetProperty("id").GetGuid());
-            Assert.Equal(0, variant.GetProperty("exerciseCount").GetInt32());
+            var day = tree.GetProperty("days").EnumerateArray().Single();
+            Assert.Equal(dayId, day.GetProperty("id").GetGuid());
+            Assert.Equal("Legs", day.GetProperty("name").GetString());
+            Assert.Equal(0, day.GetProperty("exerciseCount").GetInt32());
 
             var list = await client.GetFromJsonAsync<JsonElement>("/api/v1/programs");
             Assert.Equal(1, list.GetArrayLength());
-            Assert.Equal(1, list[0].GetProperty("variantCount").GetInt32());
+            Assert.Equal(1, list[0].GetProperty("dayCount").GetInt32());
         }
         finally
         {
@@ -74,15 +65,14 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
     }
 
     [Fact]
-    public async Task Put_variant_with_exercises_and_prescriptions_round_trips()
+    public async Task Put_day_with_exercises_and_prescriptions_round_trips()
     {
         var (client, email) = await factory.RegisterAndAuthenticateAsync();
         try
         {
             var ex = await TwoExerciseIdsAsync();
             var programId = await CreateProgramAsync(client);
-            var groupId = await AddGroupAsync(client, programId);
-            var variantId = await AddVariantAsync(client, groupId);
+            var dayId = await AddDayAsync(client, programId);
 
             var body = new
             {
@@ -121,10 +111,10 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
                 supersets = Array.Empty<object>(),
             };
 
-            var put = await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}", body);
+            var put = await client.PutAsJsonAsync($"/api/v1/workout-days/{dayId}", body);
             Assert.Equal(HttpStatusCode.OK, put.StatusCode);
 
-            var detail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-variants/{variantId}");
+            var detail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-days/{dayId}");
             var exercises = detail.GetProperty("exercises").EnumerateArray().ToList();
             Assert.Equal(2, exercises.Count);
             Assert.Equal(ex[0], exercises[0].GetProperty("exerciseId").GetGuid());
@@ -139,15 +129,14 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
     }
 
     [Fact]
-    public async Task Put_variant_with_a_superset_groups_the_members()
+    public async Task Put_day_with_a_superset_groups_the_members()
     {
         var (client, email) = await factory.RegisterAndAuthenticateAsync();
         try
         {
             var ex = await TwoExerciseIdsAsync();
             var programId = await CreateProgramAsync(client);
-            var groupId = await AddGroupAsync(client, programId);
-            var variantId = await AddVariantAsync(client, groupId);
+            var dayId = await AddDayAsync(client, programId);
 
             var body = new
             {
@@ -159,10 +148,10 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
                 supersets = new[] { new { @ref = "A", sortOrder = 0, restAfterRoundSeconds = 90 } },
             };
 
-            var put = await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}", body);
+            var put = await client.PutAsJsonAsync($"/api/v1/workout-days/{dayId}", body);
             Assert.Equal(HttpStatusCode.OK, put.StatusCode);
 
-            var detail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-variants/{variantId}");
+            var detail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-days/{dayId}");
             var supersets = detail.GetProperty("supersets").EnumerateArray().ToList();
             Assert.Single(supersets);
             var supersetId = supersets[0].GetProperty("id").GetGuid();
@@ -180,15 +169,14 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
     }
 
     [Fact]
-    public async Task Put_variant_replaces_the_previous_contents()
+    public async Task Put_day_replaces_the_previous_contents()
     {
         var (client, email) = await factory.RegisterAndAuthenticateAsync();
         try
         {
             var ex = await TwoExerciseIdsAsync();
             var programId = await CreateProgramAsync(client);
-            var groupId = await AddGroupAsync(client, programId);
-            var variantId = await AddVariantAsync(client, groupId);
+            var dayId = await AddDayAsync(client, programId);
 
             object Exercise(Guid id, int order) => new
             {
@@ -197,19 +185,19 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
                 sets = new[] { new { sortOrder = 0, kind = "Standard", isAmrap = false, targetToFailure = false, targetRepsMin = 5, targetRepsMax = 5, targetWeightKg = (double?)null, targetRir = (int?)null } },
             };
 
-            await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}",
+            await client.PutAsJsonAsync($"/api/v1/workout-days/{dayId}",
                 new { exercises = new[] { Exercise(ex[0], 0), Exercise(ex[1], 1) }, supersets = Array.Empty<object>() });
 
-            await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}",
+            await client.PutAsJsonAsync($"/api/v1/workout-days/{dayId}",
                 new { exercises = new[] { Exercise(ex[1], 0) }, supersets = Array.Empty<object>() });
 
-            var detail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-variants/{variantId}");
+            var detail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-days/{dayId}");
             Assert.Equal(1, detail.GetProperty("exercises").GetArrayLength());
             Assert.Equal(ex[1], detail.GetProperty("exercises")[0].GetProperty("exerciseId").GetGuid());
 
             using var scope = factory.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<MySelfDbContext>();
-            var orphanSets = await db.SetPrescriptions.CountAsync(s => s.VariantExercise.VariantId == variantId);
+            var orphanSets = await db.SetPrescriptions.CountAsync(s => s.DayExercise.DayId == dayId);
             Assert.Equal(1, orphanSets); // the two from the first PUT are gone
         }
         finally
@@ -226,9 +214,8 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
         {
             var ex = await TwoExerciseIdsAsync();
             var programId = await CreateProgramAsync(client, "Original");
-            var groupId = await AddGroupAsync(client, programId, "Push");
-            var variantId = await AddVariantAsync(client, groupId, "Push #1");
-            await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}", new
+            var dayId = await AddDayAsync(client, programId, "Push");
+            await client.PutAsJsonAsync($"/api/v1/workout-days/{dayId}", new
             {
                 exercises = new[]
                 {
@@ -248,18 +235,17 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
             Assert.False(cloneSummary.GetProperty("isActive").GetBoolean());
 
             var cloneTree = await client.GetFromJsonAsync<JsonElement>($"/api/v1/programs/{cloneId}");
-            var cloneGroup = cloneTree.GetProperty("groups").EnumerateArray().Single();
-            Assert.Equal("Push", cloneGroup.GetProperty("name").GetString());
-            var cloneVariant = cloneGroup.GetProperty("variants").EnumerateArray().Single();
-            var cloneVariantId = cloneVariant.GetProperty("id").GetGuid();
-            Assert.NotEqual(variantId, cloneVariantId);
+            var cloneDay = cloneTree.GetProperty("days").EnumerateArray().Single();
+            Assert.Equal("Push", cloneDay.GetProperty("name").GetString());
+            var cloneDayId = cloneDay.GetProperty("id").GetGuid();
+            Assert.NotEqual(dayId, cloneDayId);
 
-            var cloneVariantDetail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-variants/{cloneVariantId}");
-            var cloneExercises = cloneVariantDetail.GetProperty("exercises").EnumerateArray().ToList();
+            var cloneDayDetail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-days/{cloneDayId}");
+            var cloneExercises = cloneDayDetail.GetProperty("exercises").EnumerateArray().ToList();
             Assert.Equal(2, cloneExercises.Count);
             Assert.Equal(ex[0], cloneExercises[0].GetProperty("exerciseId").GetGuid());
             Assert.Equal("keep", cloneExercises[0].GetProperty("notes").GetString());
-            var cloneSuperset = cloneVariantDetail.GetProperty("supersets").EnumerateArray().Single();
+            var cloneSuperset = cloneDayDetail.GetProperty("supersets").EnumerateArray().Single();
             Assert.Equal(75, cloneSuperset.GetProperty("restAfterRoundSeconds").GetInt32());
             var cloneSupersetId = cloneSuperset.GetProperty("id").GetGuid();
             foreach (var e in cloneExercises)
@@ -268,9 +254,9 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
             }
 
             // Editing the clone leaves the original untouched.
-            await client.PutAsJsonAsync($"/api/v1/workout-variants/{cloneVariantId}",
+            await client.PutAsJsonAsync($"/api/v1/workout-days/{cloneDayId}",
                 new { exercises = Array.Empty<object>(), supersets = Array.Empty<object>() });
-            var originalDetail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-variants/{variantId}");
+            var originalDetail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-days/{dayId}");
             Assert.Equal(2, originalDetail.GetProperty("exercises").GetArrayLength());
         }
         finally
@@ -287,11 +273,10 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
         {
             var ex = await TwoExerciseIdsAsync();
             var programId = await CreateProgramAsync(client);
-            var groupId = await AddGroupAsync(client, programId);
-            var sourceId = await AddVariantAsync(client, groupId, "Source");
-            var destId = await AddVariantAsync(client, groupId, "Dest");
+            var sourceId = await AddDayAsync(client, programId, "Source");
+            var destId = await AddDayAsync(client, programId, "Dest");
 
-            await client.PutAsJsonAsync($"/api/v1/workout-variants/{sourceId}", new
+            await client.PutAsJsonAsync($"/api/v1/workout-days/{sourceId}", new
             {
                 exercises = new[]
                 {
@@ -301,12 +286,12 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
                 supersets = Array.Empty<object>(),
             });
 
-            var sourceDetail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-variants/{sourceId}");
+            var sourceDetail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-days/{sourceId}");
             var sourceExerciseIds = sourceDetail.GetProperty("exercises").EnumerateArray()
                 .Select(e => e.GetProperty("id").GetGuid()).ToArray();
 
-            var copy = await client.PostAsJsonAsync($"/api/v1/workout-variants/{destId}/exercises/bulk-copy",
-                new { sourceVariantId = sourceId, variantExerciseIds = sourceExerciseIds });
+            var copy = await client.PostAsJsonAsync($"/api/v1/workout-days/{destId}/exercises/bulk-copy",
+                new { sourceDayId = sourceId, dayExerciseIds = sourceExerciseIds });
             Assert.Equal(HttpStatusCode.OK, copy.StatusCode);
 
             var destDetail = await copy.Content.ReadFromJsonAsync<JsonElement>();
@@ -317,7 +302,7 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
                 Assert.DoesNotContain(e.GetProperty("id").GetGuid(), sourceExerciseIds);
             }
 
-            var sourceAfter = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-variants/{sourceId}");
+            var sourceAfter = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-days/{sourceId}");
             Assert.Equal(2, sourceAfter.GetProperty("exercises").GetArrayLength());
         }
         finally
@@ -334,11 +319,10 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
         {
             var ex = await TwoExerciseIdsAsync();
             var programId = await CreateProgramAsync(client);
-            var groupId = await AddGroupAsync(client, programId);
-            var sourceId = await AddVariantAsync(client, groupId, "Source");
-            var destId = await AddVariantAsync(client, groupId, "Dest");
+            var sourceId = await AddDayAsync(client, programId, "Source");
+            var destId = await AddDayAsync(client, programId, "Dest");
 
-            await client.PutAsJsonAsync($"/api/v1/workout-variants/{sourceId}", new
+            await client.PutAsJsonAsync($"/api/v1/workout-days/{sourceId}", new
             {
                 exercises = new[]
                 {
@@ -348,11 +332,11 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
                 supersets = new[] { new { @ref = "A", sortOrder = 0, restAfterRoundSeconds = 60 } },
             });
 
-            var sourceDetail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-variants/{sourceId}");
+            var sourceDetail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-days/{sourceId}");
             var firstExerciseId = sourceDetail.GetProperty("exercises")[0].GetProperty("id").GetGuid();
 
-            var move = await client.PostAsJsonAsync($"/api/v1/workout-variants/{destId}/exercises/bulk-move",
-                new { sourceVariantId = sourceId, variantExerciseIds = new[] { firstExerciseId } });
+            var move = await client.PostAsJsonAsync($"/api/v1/workout-days/{destId}/exercises/bulk-move",
+                new { sourceDayId = sourceId, dayExerciseIds = new[] { firstExerciseId } });
             Assert.Equal(HttpStatusCode.OK, move.StatusCode);
 
             var destDetail = await move.Content.ReadFromJsonAsync<JsonElement>();
@@ -360,7 +344,7 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
             Assert.Equal(firstExerciseId, movedExercise.GetProperty("id").GetGuid()); // identity preserved
             Assert.Equal(JsonValueKind.Null, movedExercise.GetProperty("supersetGroupId").ValueKind); // left its superset
 
-            var sourceAfter = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-variants/{sourceId}");
+            var sourceAfter = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-days/{sourceId}");
             Assert.Equal(1, sourceAfter.GetProperty("exercises").GetArrayLength());
             Assert.Equal(0, sourceAfter.GetProperty("supersets").GetArrayLength()); // 1 member left -> dissolved
         }
@@ -401,20 +385,16 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
         try
         {
             var programId = await CreateProgramAsync(alice);
-            var groupId = await AddGroupAsync(alice, programId);
-            var variantId = await AddVariantAsync(alice, groupId);
+            var dayId = await AddDayAsync(alice, programId);
 
             Assert.Equal(HttpStatusCode.NotFound, (await bob.GetAsync($"/api/v1/programs/{programId}")).StatusCode);
-            Assert.Equal(HttpStatusCode.NotFound, (await bob.PostAsJsonAsync($"/api/v1/programs/{programId}/groups", new { name = "X" })).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await bob.PostAsJsonAsync($"/api/v1/programs/{programId}/days", new { name = "X" })).StatusCode);
             Assert.Equal(HttpStatusCode.NotFound, (await bob.PutAsJsonAsync($"/api/v1/programs/{programId}", new { name = "hijacked" })).StatusCode);
             Assert.Equal(HttpStatusCode.NotFound, (await bob.DeleteAsync($"/api/v1/programs/{programId}")).StatusCode);
             Assert.Equal(HttpStatusCode.NotFound, (await bob.PostAsync($"/api/v1/programs/{programId}/activate", null)).StatusCode);
-            Assert.Equal(HttpStatusCode.NotFound, (await bob.PutAsJsonAsync($"/api/v1/workout-groups/{groupId}", new { name = "X" })).StatusCode);
-            Assert.Equal(HttpStatusCode.NotFound, (await bob.DeleteAsync($"/api/v1/workout-groups/{groupId}")).StatusCode);
-            Assert.Equal(HttpStatusCode.NotFound, (await bob.PostAsJsonAsync($"/api/v1/workout-groups/{groupId}/variants", new { name = "X" })).StatusCode);
-            Assert.Equal(HttpStatusCode.NotFound, (await bob.GetAsync($"/api/v1/workout-variants/{variantId}")).StatusCode);
-            Assert.Equal(HttpStatusCode.NotFound, (await bob.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}", new { exercises = Array.Empty<object>(), supersets = Array.Empty<object>() })).StatusCode);
-            Assert.Equal(HttpStatusCode.NotFound, (await bob.DeleteAsync($"/api/v1/workout-variants/{variantId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await bob.GetAsync($"/api/v1/workout-days/{dayId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await bob.PutAsJsonAsync($"/api/v1/workout-days/{dayId}", new { exercises = Array.Empty<object>(), supersets = Array.Empty<object>() })).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await bob.DeleteAsync($"/api/v1/workout-days/{dayId}")).StatusCode);
             Assert.Equal(0, (await bob.GetFromJsonAsync<JsonElement>("/api/v1/programs")).GetArrayLength());
         }
         finally
@@ -473,24 +453,23 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
     }
 
     [Fact]
-    public async Task Put_variant_rejects_an_unknown_exercise_and_a_lonely_superset()
+    public async Task Put_day_rejects_an_unknown_exercise_and_a_lonely_superset()
     {
         var (client, email) = await factory.RegisterAndAuthenticateAsync();
         try
         {
             var ex = await TwoExerciseIdsAsync();
             var programId = await CreateProgramAsync(client);
-            var groupId = await AddGroupAsync(client, programId);
-            var variantId = await AddVariantAsync(client, groupId);
+            var dayId = await AddDayAsync(client, programId);
 
-            var unknown = await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}", new
+            var unknown = await client.PutAsJsonAsync($"/api/v1/workout-days/{dayId}", new
             {
                 exercises = new[] { new { exerciseId = Guid.NewGuid(), sortOrder = 0, supersetRef = (string?)null, supersetMemberOrder = 0, restSeconds = (int?)null, notes = (string?)null, sets = Array.Empty<object>() } },
                 supersets = Array.Empty<object>(),
             });
             Assert.Equal(HttpStatusCode.BadRequest, unknown.StatusCode);
 
-            var lonely = await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}", new
+            var lonely = await client.PutAsJsonAsync($"/api/v1/workout-days/{dayId}", new
             {
                 exercises = new[] { new { exerciseId = ex[0], sortOrder = 0, supersetRef = "A", supersetMemberOrder = 0, restSeconds = (int?)null, notes = (string?)null, sets = Array.Empty<object>() } },
                 supersets = new[] { new { @ref = "A", sortOrder = 0, restAfterRoundSeconds = 60 } },
@@ -527,20 +506,19 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
     }
 
     [Fact]
-    public async Task Put_variant_conflicts_when_the_program_row_version_is_stale()
+    public async Task Put_day_conflicts_when_the_program_row_version_is_stale()
     {
         var (client, email) = await factory.RegisterAndAuthenticateAsync();
         try
         {
             var programId = await CreateProgramAsync(client);
-            var groupId = await AddGroupAsync(client, programId);
-            var variantId = await AddVariantAsync(client, groupId);
+            var dayId = await AddDayAsync(client, programId);
 
             var tree = await client.GetFromJsonAsync<JsonElement>($"/api/v1/programs/{programId}");
             var staleVersion = tree.GetProperty("rowVersion").GetUInt32();
 
             // First save with the current token succeeds and advances the program's xmin.
-            var first = await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}", new
+            var first = await client.PutAsJsonAsync($"/api/v1/workout-days/{dayId}", new
             {
                 exercises = Array.Empty<object>(),
                 supersets = Array.Empty<object>(),
@@ -552,7 +530,7 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
             Assert.NotEqual(staleVersion, freshVersion);
 
             // Re-using the now-stale token is rejected.
-            var conflict = await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}", new
+            var conflict = await client.PutAsJsonAsync($"/api/v1/workout-days/{dayId}", new
             {
                 exercises = Array.Empty<object>(),
                 supersets = Array.Empty<object>(),
@@ -561,7 +539,7 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
             Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
 
             // The fresh token works again.
-            var ok = await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}", new
+            var ok = await client.PutAsJsonAsync($"/api/v1/workout-days/{dayId}", new
             {
                 exercises = Array.Empty<object>(),
                 supersets = Array.Empty<object>(),
@@ -604,31 +582,30 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
     }
 
     [Fact]
-    public async Task Group_variant_reorder_round_trips_and_honours_the_row_version()
+    public async Task Day_reorder_round_trips_and_honours_the_row_version()
     {
         var (client, email) = await factory.RegisterAndAuthenticateAsync();
         try
         {
             var programId = await CreateProgramAsync(client);
-            var groupId = await AddGroupAsync(client, programId);
-            var a = await AddVariantAsync(client, groupId, "A");
-            var b = await AddVariantAsync(client, groupId, "B");
+            var a = await AddDayAsync(client, programId, "A");
+            var b = await AddDayAsync(client, programId, "B");
 
             var tree = await client.GetFromJsonAsync<JsonElement>($"/api/v1/programs/{programId}");
             var version = tree.GetProperty("rowVersion").GetUInt32();
 
-            var reorder = await client.PutAsJsonAsync($"/api/v1/workout-groups/{groupId}",
-                new { variantOrder = new[] { b, a }, rowVersion = version });
+            var reorder = await client.PutAsJsonAsync($"/api/v1/programs/{programId}",
+                new { dayOrder = new[] { b, a }, rowVersion = version });
             Assert.Equal(HttpStatusCode.NoContent, reorder.StatusCode);
 
             var after = await client.GetFromJsonAsync<JsonElement>($"/api/v1/programs/{programId}");
-            var orderedIds = after.GetProperty("groups")[0].GetProperty("variants").EnumerateArray()
-                .Select(v => v.GetProperty("id").GetGuid()).ToArray();
+            var orderedIds = after.GetProperty("days").EnumerateArray()
+                .Select(d => d.GetProperty("id").GetGuid()).ToArray();
             Assert.Equal(new[] { b, a }, orderedIds);
 
             // The token moved on with the first reorder.
-            var stale = await client.PutAsJsonAsync($"/api/v1/workout-groups/{groupId}",
-                new { variantOrder = new[] { a, b }, rowVersion = version });
+            var stale = await client.PutAsJsonAsync($"/api/v1/programs/{programId}",
+                new { dayOrder = new[] { a, b }, rowVersion = version });
             Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
         }
         finally
@@ -654,15 +631,14 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
     }
 
     [Fact]
-    public async Task Put_variant_rejects_out_of_range_numbers()
+    public async Task Put_day_rejects_out_of_range_numbers()
     {
         var (client, email) = await factory.RegisterAndAuthenticateAsync();
         try
         {
             var ex = await TwoExerciseIdsAsync();
             var programId = await CreateProgramAsync(client);
-            var groupId = await AddGroupAsync(client, programId);
-            var variantId = await AddVariantAsync(client, groupId);
+            var dayId = await AddDayAsync(client, programId);
 
             object ExerciseWithRest(int rest) => new
             {
@@ -670,11 +646,11 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
                 restSeconds = (int?)rest, notes = (string?)null, sets = Array.Empty<object>(),
             };
 
-            var badRest = await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}",
+            var badRest = await client.PutAsJsonAsync($"/api/v1/workout-days/{dayId}",
                 new { exercises = new[] { ExerciseWithRest(999_999) }, supersets = Array.Empty<object>() });
             Assert.Equal(HttpStatusCode.BadRequest, badRest.StatusCode);
 
-            var badRir = await client.PutAsJsonAsync($"/api/v1/workout-variants/{variantId}", new
+            var badRir = await client.PutAsJsonAsync($"/api/v1/workout-days/{dayId}", new
             {
                 exercises = new[]
                 {
@@ -699,19 +675,19 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
     }
 
     [Fact]
-    public async Task Adding_a_31st_group_is_rejected()
+    public async Task Adding_a_61st_day_is_rejected()
     {
         var (client, email) = await factory.RegisterAndAuthenticateAsync();
         try
         {
             var programId = await CreateProgramAsync(client);
-            for (var i = 0; i < 30; i++)
+            for (var i = 0; i < 60; i++)
             {
-                var ok = await client.PostAsJsonAsync($"/api/v1/programs/{programId}/groups", new { name = $"G{i}" });
+                var ok = await client.PostAsJsonAsync($"/api/v1/programs/{programId}/days", new { name = $"D{i}" });
                 ok.EnsureSuccessStatusCode();
             }
 
-            var over = await client.PostAsJsonAsync($"/api/v1/programs/{programId}/groups", new { name = "G31" });
+            var over = await client.PostAsJsonAsync($"/api/v1/programs/{programId}/days", new { name = "D61" });
             Assert.Equal(HttpStatusCode.Conflict, over.StatusCode);
         }
         finally

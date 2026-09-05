@@ -1,82 +1,90 @@
-import { Check, Clock } from "lucide-react";
-import {
-  Button,
-  Card,
-  CardKicker,
-  CardTitle,
-  Field,
-  Input,
-  PageHeader,
-  Tag,
-} from "../../components/ui";
+import { Link } from "react-router";
+import { Card, CardKicker, CardTitle, Field, Input, PageHeader, Tag } from "../../components/ui";
+import { useActiveSession } from "./api";
+
+function targetLabel(set: { targetRepsMin: number | null; targetRepsMax: number | null; targetWeightKg: number | null }) {
+  const reps =
+    set.targetRepsMin != null && set.targetRepsMax != null
+      ? set.targetRepsMin === set.targetRepsMax
+        ? `${set.targetRepsMin} reps`
+        : `${set.targetRepsMin}–${set.targetRepsMax} reps`
+      : null;
+  const weight = set.targetWeightKg != null ? `${set.targetWeightKg} kg` : null;
+  return [weight, reps].filter(Boolean).join(" × ") || "No target set";
+}
 
 export function ActiveWorkoutScreen() {
+  const { data: session, isLoading } = useActiveSession();
+
+  if (isLoading) {
+    return (
+      <>
+        <PageHeader title="Active workout" />
+        <p className="text-sm text-foreground-muted">Loading…</p>
+      </>
+    );
+  }
+
+  if (!session) {
+    return (
+      <>
+        <PageHeader title="Active workout" subtitle="Nothing in progress right now." />
+        <Card>
+          <p className="text-sm text-foreground-muted">
+            Start a workout from a variant in{" "}
+            <Link to="/workouts/builder" className="text-primary underline">
+              your programs
+            </Link>
+            .
+          </p>
+        </Card>
+      </>
+    );
+  }
+
   return (
     <>
       <PageHeader
-        title="Legs #1"
-        subtitle="Set 2 of 3 · Back Squat"
-        actions={
-          <div className="flex items-center gap-2.5">
-            <Tag tone="primary">
-              <Clock size={12} aria-hidden />
-              18:42
-            </Tag>
-            <Button variant="secondary">Finish workout</Button>
-          </div>
-        }
+        title={session.dayName ?? "Ad-hoc workout"}
+        subtitle={session.programName ?? "No source program"}
       />
 
-      <Card className="mb-4">
-        <div className="flex items-center justify-between">
-          <CardTitle>Back Squat</CardTitle>
-          <Tag tone="neutral">Working set</Tag>
-        </div>
-        <div className="flex gap-6 text-[13px] text-foreground-muted">
-          <span>Target: 8–10 reps</span>
-          <span>Previous: 90 kg × 8</span>
-        </div>
-        <div className="mt-1.5 flex flex-wrap items-end gap-2.5">
-          <Field label="Weight (kg)" className="w-[120px]">
-            <Input defaultValue="92.5" inputMode="decimal" />
-          </Field>
-          <Field label="Reps" className="w-[100px]">
-            <Input defaultValue="8" inputMode="numeric" />
-          </Field>
-          <Field label="RIR" className="w-[100px]">
-            <Input placeholder="2" inputMode="numeric" />
-          </Field>
-          <Button variant="secondary">Copy previous</Button>
-          <Button variant="primary">
-            <Check size={15} aria-hidden />
-            Complete set
-          </Button>
-        </div>
-      </Card>
-
-      <CardKicker>Up next — superset B</CardKicker>
-      <Card className="mt-2">
-        <div className="flex items-center justify-between">
-          <CardTitle>Round 1 of 3</CardTitle>
-          <Tag tone="warning">Rest starts after round</Tag>
-        </div>
-        <div className="mt-1 flex flex-col gap-2">
-          <div className="flex items-center gap-3 rounded-control border border-border px-3 py-2.5">
-            <Tag tone="outline">B1</Tag>
-            <div className="flex-1 text-sm">Walking Lunge — 12 reps/side</div>
-            <Button variant="secondary" size="sm">
-              Complete
-            </Button>
+      {session.exercises.length === 0 ? (
+        <Card>
+          <p className="text-sm text-foreground-muted">
+            No exercises yet in this ad-hoc session. Adding exercises during a workout is coming soon.
+          </p>
+        </Card>
+      ) : (
+        session.exercises.map((exercise) => (
+          <div key={exercise.id} className="mb-4">
+            <CardKicker>{exercise.trackingMode.replace(/([A-Z])/g, " $1").trim()}</CardKicker>
+            <Card>
+              <div className="flex items-center justify-between">
+                <CardTitle>{exercise.exerciseName}</CardTitle>
+                <Tag tone="neutral">{exercise.sets.length} sets</Tag>
+              </div>
+              <div className="flex flex-col gap-2">
+                {exercise.sets.map((set, i) => (
+                  <div key={set.id} className="flex flex-wrap items-end gap-2.5 border-t border-border pt-2 first:border-t-0 first:pt-0">
+                    <span className="w-14 text-xs text-foreground-muted">Set {i + 1}</span>
+                    <span className="text-[13px] text-foreground-muted">Target: {targetLabel(set)}</span>
+                    <Field label="Weight (kg)" className="ml-auto w-[110px]">
+                      <Input disabled placeholder="—" />
+                    </Field>
+                    <Field label="Reps" className="w-[90px]">
+                      <Input disabled placeholder="—" />
+                    </Field>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-foreground-muted">
+                Logging sets, the rest timer and finishing the workout are coming in the next update.
+              </p>
+            </Card>
           </div>
-          <div className="flex items-center gap-3 rounded-control border border-border px-3 py-2.5 opacity-55">
-            <Tag tone="outline">B2</Tag>
-            <div className="flex-1 text-sm">Leg Extension — 15 reps</div>
-            <Button variant="secondary" size="sm">
-              Complete
-            </Button>
-          </div>
-        </div>
-      </Card>
+        ))
+      )}
     </>
   );
 }

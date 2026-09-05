@@ -11,7 +11,7 @@ public sealed record ExerciseSearchResult(IReadOnlyList<ExerciseListItem> Items,
 public sealed record CreateProgramRequest(string? Name, string? SplitLabel);
 
 /// <summary>
-/// Rename / relabel a program and (optionally) reorder its groups by id.
+/// Rename / relabel a program and (optionally) reorder its days by id.
 /// <paramref name="RowVersion"/> is the <c>xmin</c> token the client last read (from
 /// <see cref="ProgramDetail"/>); when supplied, the update is rejected with 409 if the
 /// program changed in the meantime. Omit it to accept last-write-wins.
@@ -19,7 +19,7 @@ public sealed record CreateProgramRequest(string? Name, string? SplitLabel);
 public sealed record UpdateProgramRequest(
     string? Name,
     string? SplitLabel,
-    IReadOnlyList<Guid>? GroupOrder,
+    IReadOnlyList<Guid>? DayOrder,
     uint? RowVersion);
 
 public sealed record ProgramListItem(
@@ -27,8 +27,8 @@ public sealed record ProgramListItem(
     string Name,
     string? SplitLabel,
     bool IsActive,
-    int GroupCount,
-    int VariantCount,
+    int DayCount,
+    int ExerciseCount,
     DateTimeOffset CreatedAt);
 
 public sealed record ProgramDetail(
@@ -38,31 +38,25 @@ public sealed record ProgramDetail(
     bool IsActive,
     DateTimeOffset CreatedAt,
     uint RowVersion,
-    IReadOnlyList<GroupDetail> Groups);
+    IReadOnlyList<DayListItem> Days);
 
-public sealed record GroupDetail(Guid Id, string Name, int SortOrder, IReadOnlyList<VariantListItem> Variants);
+public sealed record DayListItem(Guid Id, string Name, int SortOrder, int ExerciseCount);
 
-public sealed record VariantListItem(Guid Id, string Name, int SortOrder, int ExerciseCount);
+public sealed record CreateDayRequest(string? Name);
 
-public sealed record CreateGroupRequest(string? Name);
+// --- day detail ---
 
-public sealed record UpdateGroupRequest(string? Name, IReadOnlyList<Guid>? VariantOrder, uint? RowVersion);
-
-public sealed record CreateVariantRequest(string? Name);
-
-// --- variant detail ---
-
-public sealed record VariantDetail(
+public sealed record DayDetail(
     Guid Id,
     string Name,
     int SortOrder,
     int? EstimatedDurationMinutes,
     // The owning program's xmin token — send it back on PUT to guard the edit.
     uint ProgramRowVersion,
-    IReadOnlyList<VariantExerciseDetail> Exercises,
+    IReadOnlyList<DayExerciseDetail> Exercises,
     IReadOnlyList<SupersetDetail> Supersets);
 
-public sealed record VariantExerciseDetail(
+public sealed record DayExerciseDetail(
     Guid Id,
     Guid ExerciseId,
     string ExerciseName,
@@ -86,17 +80,17 @@ public sealed record SetPrescriptionDetail(
 
 public sealed record SupersetDetail(Guid Id, int SortOrder, int RestAfterRoundSeconds);
 
-// --- PUT /workout-variants/{id}: the whole desired state, replacing what's there ---
+// --- PUT /workout-days/{id}: the whole desired state, replacing what's there ---
 
-public sealed record UpdateVariantRequest(
+public sealed record UpdateDayRequest(
     string? Name,
     int? EstimatedDurationMinutes,
-    IReadOnlyList<UpdateVariantExercise>? Exercises,
+    IReadOnlyList<UpdateDayExercise>? Exercises,
     IReadOnlyList<UpdateSuperset>? Supersets,
     // The owning program's xmin token from the last read; 409 if it moved on. Optional.
     uint? RowVersion);
 
-public sealed record UpdateVariantExercise(
+public sealed record UpdateDayExercise(
     Guid ExerciseId,
     int SortOrder,
     string? SupersetRef,
@@ -117,14 +111,53 @@ public sealed record UpdateSetPrescription(
 
 public sealed record UpdateSuperset(string Ref, int SortOrder, int RestAfterRoundSeconds);
 
-// --- bulk copy / move exercises between variants (docs/08 Story 7) ---
+// --- bulk copy / move exercises between days (docs/08 Story 7) ---
 
 /// <summary>
-/// Copy or move <paramref name="VariantExerciseIds"/> from <paramref name="SourceVariantId"/>
-/// into the variant named in the route. Both variants must belong to the caller.
+/// Copy or move <paramref name="DayExerciseIds"/> from <paramref name="SourceDayId"/>
+/// into the day named in the route. Both days must belong to the caller.
 /// <paramref name="RowVersion"/> guards on the destination program's xmin (optional).
 /// </summary>
 public sealed record BulkExerciseRequest(
-    Guid SourceVariantId,
-    IReadOnlyList<Guid>? VariantExerciseIds,
+    Guid SourceDayId,
+    IReadOnlyList<Guid>? DayExerciseIds,
     uint? RowVersion);
+
+// --- workout sessions (docs/02 "Starting a workout", Story 3A) ---
+
+/// <summary>Null <paramref name="DayId"/> starts an ad-hoc session with no exercises yet.</summary>
+public sealed record StartSessionRequest(Guid? DayId);
+
+public sealed record WorkoutSessionDetail(
+    Guid Id,
+    Guid? SourceDayId,
+    string? DayName,
+    string? ProgramName,
+    string Status,
+    DateTimeOffset StartedAt,
+    IReadOnlyList<ExerciseLogDetail> Exercises);
+
+public sealed record ExerciseLogDetail(
+    Guid Id,
+    Guid ExerciseId,
+    string ExerciseName,
+    string TrackingMode,
+    int SortOrder,
+    Guid? SupersetGroupSnapshotId,
+    int SupersetMemberOrder,
+    IReadOnlyList<SetLogDetail> Sets);
+
+public sealed record SetLogDetail(
+    Guid Id,
+    int SortOrder,
+    string Kind,
+    bool IsAmrap,
+    bool TargetToFailure,
+    int? TargetRepsMin,
+    int? TargetRepsMax,
+    decimal? TargetWeightKg,
+    int? TargetRir,
+    decimal? WeightKg,
+    int? Reps,
+    DateTimeOffset? CompletedAt,
+    DateTimeOffset? SkippedAt);

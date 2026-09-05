@@ -5,15 +5,14 @@ import { Button, Checkbox, Input, Segmented } from "../../components/ui";
 import { ApiError } from "../../lib/api";
 import { ExercisePicker } from "./ExercisePicker";
 import { SortableList } from "./SortableList";
-import { useBulkExercises, useProgram, useUpdateVariant, useVariant } from "./api";
-import type { ExerciseListItem, UpdateVariantBody, VariantDetail } from "./api";
+import { useBulkExercises, useProgram, useUpdateDay, useDay } from "./api";
+import type { DayDetail, ExerciseListItem, UpdateDayBody } from "./api";
 
 /**
- * Edits one variant in full: every exercise, every prescribed set (kind, rep range,
- * weight, AMRAP, to-failure, RIR), optional superset grouping with a rest-after-round, plus
- * bulk copy/move of exercises to another variant. Round-trips per-set detail losslessly —
- * loading a variant with drop sets / an AMRAP last set / per-set weights and saving no
- * longer flattens it.
+ * Edits one day in full: every exercise, every prescribed set (kind, rep range, weight,
+ * AMRAP, to-failure, RIR), optional superset grouping with a rest-after-round, plus bulk
+ * copy/move of exercises to another day. Round-trips per-set detail losslessly — loading a
+ * day with drop sets / an AMRAP last set / per-set weights and saving no longer flattens it.
  */
 
 type EditSet = {
@@ -29,7 +28,7 @@ type EditSet = {
 
 type EditExercise = {
   key: string;
-  serverId: string | null; // the persisted VariantExercise id; null for a freshly added row
+  serverId: string | null; // the persisted DayExercise id; null for a freshly added row
   exerciseId: string;
   exerciseName: string;
   restSeconds: string;
@@ -48,9 +47,9 @@ const uid = (prefix: string) => `${prefix}-${(seq += 1)}`;
 
 const numOrNull = (s: string) => (s.trim() === "" ? null : Number(s));
 
-function seed(variant: VariantDetail): EditState {
+function seed(day: DayDetail): EditState {
   const supersetKeyByServerId = new Map<string, string>();
-  const supersets: EditSuperset[] = variant.supersets
+  const supersets: EditSuperset[] = day.supersets
     .slice()
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((s) => {
@@ -59,7 +58,7 @@ function seed(variant: VariantDetail): EditState {
       return { key, restAfterRoundSeconds: String(s.restAfterRoundSeconds) };
     });
 
-  const exercises: EditExercise[] = variant.exercises
+  const exercises: EditExercise[] = day.exercises
     .slice()
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((e) => ({
@@ -116,18 +115,18 @@ const fingerprint = (s: EditState) =>
     })),
   });
 
-export function VariantEditor({
-  variantId,
+export function DayEditor({
+  dayId,
   programId,
   onClose,
 }: {
-  variantId: string;
+  dayId: string;
   programId: string;
   onClose: () => void;
 }) {
-  const { data: variant, isLoading } = useVariant(variantId);
+  const { data: day, isLoading } = useDay(dayId);
   const { data: program } = useProgram(programId);
-  const update = useUpdateVariant(programId);
+  const update = useUpdateDay(programId);
   const bulk = useBulkExercises(programId);
 
   const [state, setState] = useState<EditState>({ exercises: [], supersets: [] });
@@ -138,11 +137,11 @@ export function VariantEditor({
   const [error, setError] = useState<string | null>(null);
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
 
-  // Seed editable state the first time this variant's data arrives (React's recommended
+  // Seed editable state the first time this day's data arrives (React's recommended
   // "set state during render, guarded by a changing value" pattern).
-  if (variant && loadedFrom !== variant.id) {
-    const seeded = seed(variant);
-    setLoadedFrom(variant.id);
+  if (day && loadedFrom !== day.id) {
+    const seeded = seed(day);
+    setLoadedFrom(day.id);
     setState(seeded);
     setBaseline(fingerprint(seeded));
     setSelected(new Set());
@@ -160,15 +159,13 @@ export function VariantEditor({
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
 
-  const otherVariants = useMemo(() => {
+  const otherDays = useMemo(() => {
     if (!program) return [];
-    return program.groups.flatMap((g) =>
-      g.variants.filter((v) => v.id !== variantId).map((v) => ({ id: v.id, label: `${g.name} · ${v.name}` })),
-    );
-  }, [program, variantId]);
+    return program.days.filter((d) => d.id !== dayId).map((d) => ({ id: d.id, label: d.name }));
+  }, [program, dayId]);
 
-  if (isLoading || !variant) {
-    return <p className="text-sm text-foreground-muted">Loading variant…</p>;
+  if (isLoading || !day) {
+    return <p className="text-sm text-foreground-muted">Loading day…</p>;
   }
 
   const patchExercise = (key: string, patch: Partial<EditExercise>) =>
@@ -239,11 +236,11 @@ export function VariantEditor({
       return next;
     });
 
-  function buildBody(): UpdateVariantBody {
+  function buildBody(): UpdateDayBody {
     const memberOrder = new Map<string, number>();
     return {
-      name: variant!.name,
-      rowVersion: variant!.programRowVersion,
+      name: day!.name,
+      rowVersion: day!.programRowVersion,
       exercises: state.exercises.map((e, index) => {
         let supersetMemberOrder = 0;
         if (e.supersetKey) {
@@ -284,12 +281,12 @@ export function VariantEditor({
   async function save() {
     setError(null);
     try {
-      await update.mutateAsync({ variantId, body: buildBody() });
+      await update.mutateAsync({ dayId, body: buildBody() });
       onClose();
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         setError(
-          "This program changed in another tab since you opened this variant. Reload the page to get the latest, then reapply your changes.",
+          "This program changed in another tab since you opened this day. Reload the page to get the latest, then reapply your changes.",
         );
         return;
       }
@@ -297,19 +294,19 @@ export function VariantEditor({
     }
   }
 
-  async function runBulk(kind: "copy" | "move", destVariantId: string) {
+  async function runBulk(kind: "copy" | "move", destDayId: string) {
     setError(null);
     const ids = [...selected];
     try {
       await (kind === "copy" ? bulk.copy : bulk.move).mutateAsync({
-        destVariantId,
-        sourceVariantId: variantId,
-        variantExerciseIds: ids,
-        rowVersion: variant!.programRowVersion,
+        destDayId,
+        sourceDayId: dayId,
+        dayExerciseIds: ids,
+        rowVersion: day!.programRowVersion,
       });
       setSelected(new Set());
       if (kind === "move") {
-        // Rows left this variant — reseed from the server on the next render.
+        // Rows left this day — reseed from the server on the next render.
         setLoadedFrom(null);
       }
     } catch (e) {
@@ -328,7 +325,7 @@ export function VariantEditor({
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
         <h3 className="m-0 text-base font-bold">
-          {variant.name}
+          {day.name}
           {dirty ? <span className="ml-2 text-xs font-normal text-warning">Unsaved changes</span> : null}
         </h3>
         <div className="flex gap-2">
@@ -336,14 +333,14 @@ export function VariantEditor({
             {dirty ? "Close" : "Cancel"}
           </Button>
           <Button variant="primary" onClick={save} disabled={update.isPending}>
-            {update.isPending ? "Saving…" : "Save variant"}
+            {update.isPending ? "Saving…" : "Save day"}
           </Button>
         </div>
       </div>
 
       {confirmingDiscard && (
         <div className="flex items-center justify-between gap-3 rounded-control border border-warning/40 bg-warning-soft px-3 py-2 text-sm">
-          <span>Discard your unsaved changes to this variant?</span>
+          <span>Discard your unsaved changes to this day?</span>
           <span className="flex gap-2">
             <Button variant="ghost" size="sm" onClick={() => setConfirmingDiscard(false)}>
               Keep editing
@@ -366,12 +363,12 @@ export function VariantEditor({
           <span className="font-semibold">{selected.size} selected</span>
           {dirty ? (
             <span className="text-xs text-foreground-muted">Save your changes before copying or moving.</span>
-          ) : otherVariants.length === 0 ? (
-            <span className="text-xs text-foreground-muted">No other variant to copy or move to.</span>
+          ) : otherDays.length === 0 ? (
+            <span className="text-xs text-foreground-muted">No other day to copy or move to.</span>
           ) : (
             <>
-              <BulkTargetMenu label="Copy to…" icon={<Copy size={13} aria-hidden />} targets={otherVariants} onPick={(id) => runBulk("copy", id)} />
-              <BulkTargetMenu label="Move to…" icon={<ArrowDown size={13} aria-hidden />} targets={otherVariants} onPick={(id) => runBulk("move", id)} />
+              <BulkTargetMenu label="Copy to…" icon={<Copy size={13} aria-hidden />} targets={otherDays} onPick={(id) => runBulk("copy", id)} />
+              <BulkTargetMenu label="Move to…" icon={<ArrowDown size={13} aria-hidden />} targets={otherDays} onPick={(id) => runBulk("move", id)} />
             </>
           )}
           <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>

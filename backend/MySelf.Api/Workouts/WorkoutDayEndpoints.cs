@@ -6,25 +6,25 @@ using static MySelf.Api.Workouts.ProgramEndpoints;
 namespace MySelf.Api.Workouts;
 
 /// <summary>
-/// Reading and rewriting a single variant's contents (docs/04 §12
-/// <c>PUT /workout-variants/{id}</c>). The PUT takes the <em>whole</em> desired state —
-/// exercises, their set prescriptions, and superset groupings — and replaces what's stored,
-/// inside one transaction. That keeps reorder / add / remove / regroup a single, atomic
-/// operation instead of a dozen fiddly endpoints.
+/// Reading and rewriting a single day's contents (docs/04 §12 <c>PUT /workout-days/{id}</c>).
+/// The PUT takes the <em>whole</em> desired state — exercises, their set prescriptions, and
+/// superset groupings — and replaces what's stored, inside one transaction. That keeps
+/// reorder / add / remove / regroup a single, atomic operation instead of a dozen fiddly
+/// endpoints.
 /// </summary>
-public static class WorkoutVariantEndpoints
+public static class WorkoutDayEndpoints
 {
-    public static IEndpointRouteBuilder MapWorkoutVariantEndpoints(this IEndpointRouteBuilder app)
+    public static IEndpointRouteBuilder MapWorkoutDayEndpoints(this IEndpointRouteBuilder app)
     {
-        var variants = app.MapGroup("/api/v1/workout-variants")
+        var days = app.MapGroup("/api/v1/workout-days")
             .RequireAuthorization()
             .RequireRateLimiting(RateLimiting.WritePolicy);
 
-        variants.MapGet("/{id:guid}", GetAsync).WithName("GetWorkoutVariant");
-        variants.MapPut("/{id:guid}", UpdateAsync).WithName("UpdateWorkoutVariant");
-        variants.MapDelete("/{id:guid}", DeleteAsync).WithName("DeleteWorkoutVariant");
-        variants.MapPost("/{id:guid}/exercises/bulk-copy", BulkCopyAsync).WithName("BulkCopyVariantExercises");
-        variants.MapPost("/{id:guid}/exercises/bulk-move", BulkMoveAsync).WithName("BulkMoveVariantExercises");
+        days.MapGet("/{id:guid}", GetAsync).WithName("GetWorkoutDay");
+        days.MapPut("/{id:guid}", UpdateAsync).WithName("UpdateWorkoutDay");
+        days.MapDelete("/{id:guid}", DeleteAsync).WithName("DeleteWorkoutDay");
+        days.MapPost("/{id:guid}/exercises/bulk-copy", BulkCopyAsync).WithName("BulkCopyDayExercises");
+        days.MapPost("/{id:guid}/exercises/bulk-move", BulkMoveAsync).WithName("BulkMoveDayExercises");
 
         return app;
     }
@@ -36,18 +36,18 @@ public static class WorkoutVariantEndpoints
             return Unauthorized();
         }
 
-        var variant = await db.OwnedVariants(userId)
+        var day = await db.OwnedDays(userId)
             .AsNoTracking()
-            .Where(v => v.Id == id)
-            .Select(v => new VariantDetail(
-                v.Id,
-                v.Name,
-                v.SortOrder,
-                v.EstimatedDurationMinutes,
-                v.Group.Program.RowVersion,
-                v.Exercises
+            .Where(d => d.Id == id)
+            .Select(d => new DayDetail(
+                d.Id,
+                d.Name,
+                d.SortOrder,
+                d.EstimatedDurationMinutes,
+                d.Program.RowVersion,
+                d.Exercises
                     .OrderBy(e => e.SortOrder)
-                    .Select(e => new VariantExerciseDetail(
+                    .Select(e => new DayExerciseDetail(
                         e.Id,
                         e.ExerciseId,
                         e.Exercise.Name,
@@ -70,18 +70,18 @@ public static class WorkoutVariantEndpoints
                                 s.TargetRir))
                             .ToList()))
                     .ToList(),
-                v.Supersets
+                d.Supersets
                     .OrderBy(s => s.SortOrder)
                     .Select(s => new SupersetDetail(s.Id, s.SortOrder, s.RestAfterRoundSeconds))
                     .ToList()))
             .FirstOrDefaultAsync(ct);
 
-        return variant is null ? Results.NotFound() : Results.Ok(variant);
+        return day is null ? Results.NotFound() : Results.Ok(day);
     }
 
     private static async Task<IResult> UpdateAsync(
         Guid id,
-        UpdateVariantRequest request,
+        UpdateDayRequest request,
         HttpContext http,
         MySelfDbContext db,
         CancellationToken ct)
@@ -91,19 +91,18 @@ public static class WorkoutVariantEndpoints
             return Unauthorized();
         }
 
-        var variant = await db.OwnedVariants(userId)
-            .Include(v => v.Group)
-            .Include(v => v.Exercises).ThenInclude(e => e.Sets)
-            .Include(v => v.Supersets)
-            .FirstOrDefaultAsync(v => v.Id == id, ct);
-        if (variant is null)
+        var day = await db.OwnedDays(userId)
+            .Include(d => d.Exercises).ThenInclude(e => e.Sets)
+            .Include(d => d.Supersets)
+            .FirstOrDefaultAsync(d => d.Id == id, ct);
+        if (day is null)
         {
             return Results.NotFound();
         }
 
         // The concurrency token lives on the program (docs/04). Load it tracked so the save
         // can guard on — and bump — its xmin: any edit in the tree moves the program version.
-        var program = await db.WorkoutPrograms.FirstAsync(p => p.Id == variant.Group.ProgramId, ct);
+        var program = await db.WorkoutPrograms.FirstAsync(p => p.Id == day.ProgramId, ct);
 
         var exercises = request.Exercises ?? [];
         var supersets = request.Supersets ?? [];
@@ -113,10 +112,10 @@ public static class WorkoutVariantEndpoints
             var name = request.Name.Trim();
             if (string.IsNullOrWhiteSpace(name) || name.Length > 80)
             {
-                return Validation("name", "Enter a variant name (1–80 characters).");
+                return Validation("name", "Enter a day name (1–80 characters).");
             }
 
-            variant.Name = name;
+            day.Name = name;
         }
 
         if (request.EstimatedDurationMinutes is { } dur &&
@@ -126,14 +125,14 @@ public static class WorkoutVariantEndpoints
                 $"Estimated duration must be between 0 and {WorkoutLimits.MaxEstimatedDurationMinutes} minutes.");
         }
 
-        if (exercises.Count > WorkoutLimits.MaxExercisesPerVariant)
+        if (exercises.Count > WorkoutLimits.MaxExercisesPerDay)
         {
-            return Validation("exercises", $"A variant can hold at most {WorkoutLimits.MaxExercisesPerVariant} exercises.");
+            return Validation("exercises", $"A day can hold at most {WorkoutLimits.MaxExercisesPerDay} exercises.");
         }
 
-        if (supersets.Count > WorkoutLimits.MaxSupersetsPerVariant)
+        if (supersets.Count > WorkoutLimits.MaxSupersetsPerDay)
         {
-            return Validation("supersets", $"A variant can hold at most {WorkoutLimits.MaxSupersetsPerVariant} supersets.");
+            return Validation("supersets", $"A day can hold at most {WorkoutLimits.MaxSupersetsPerDay} supersets.");
         }
 
         foreach (var e in exercises)
@@ -232,9 +231,9 @@ public static class WorkoutVariantEndpoints
         }
 
         // --- replace children, all in this one change set / transaction ---
-        db.SetPrescriptions.RemoveRange(variant.Exercises.SelectMany(e => e.Sets));
-        db.VariantExercises.RemoveRange(variant.Exercises);
-        db.SupersetGroups.RemoveRange(variant.Supersets);
+        db.SetPrescriptions.RemoveRange(day.Exercises.SelectMany(e => e.Sets));
+        db.DayExercises.RemoveRange(day.Exercises);
+        db.SupersetGroups.RemoveRange(day.Supersets);
 
         var refToId = new Dictionary<string, Guid>(StringComparer.Ordinal);
         foreach (var s in supersets)
@@ -242,7 +241,7 @@ public static class WorkoutVariantEndpoints
             var groupEntity = new SupersetGroup
             {
                 Id = Guid.NewGuid(),
-                VariantId = variant.Id,
+                DayId = day.Id,
                 SortOrder = s.SortOrder,
                 RestAfterRoundSeconds = Math.Clamp(s.RestAfterRoundSeconds, 0, 3600),
             };
@@ -252,10 +251,10 @@ public static class WorkoutVariantEndpoints
 
         foreach (var e in exercises)
         {
-            var variantExercise = new VariantExercise
+            var dayExercise = new DayExercise
             {
                 Id = Guid.NewGuid(),
-                VariantId = variant.Id,
+                DayId = day.Id,
                 ExerciseId = e.ExerciseId,
                 SortOrder = e.SortOrder,
                 SupersetGroupId = e.SupersetRef is { } r ? refToId[r] : null,
@@ -266,7 +265,7 @@ public static class WorkoutVariantEndpoints
 
             foreach (var s in e.Sets ?? [])
             {
-                variantExercise.Sets.Add(new SetPrescription
+                dayExercise.Sets.Add(new SetPrescription
                 {
                     Id = Guid.NewGuid(),
                     SortOrder = s.SortOrder,
@@ -280,10 +279,10 @@ public static class WorkoutVariantEndpoints
                 });
             }
 
-            db.VariantExercises.Add(variantExercise);
+            db.DayExercises.Add(dayExercise);
         }
 
-        variant.EstimatedDurationMinutes = request.EstimatedDurationMinutes;
+        day.EstimatedDurationMinutes = request.EstimatedDurationMinutes;
 
         if (!await TrySaveWithRowVersionAsync(db, program, request.RowVersion, ct))
         {
@@ -300,19 +299,19 @@ public static class WorkoutVariantEndpoints
             return Unauthorized();
         }
 
-        var variant = await db.OwnedVariants(userId).FirstOrDefaultAsync(v => v.Id == id, ct);
-        if (variant is null)
+        var day = await db.OwnedDays(userId).FirstOrDefaultAsync(d => d.Id == id, ct);
+        if (day is null)
         {
             return Results.NotFound();
         }
 
-        db.WorkoutVariants.Remove(variant);
+        db.WorkoutDays.Remove(day);
         await db.SaveChangesAsync(ct);
         return Results.NoContent();
     }
 
     /// <summary>
-    /// Copy the chosen exercises from another of the caller's variants into this one, as
+    /// Copy the chosen exercises from another of the caller's days into this one, as
     /// independent rows (new ids, copied sets — docs/08 Story 7 "copy creates independent
     /// ids"). A source superset is recreated here only if two or more of its members are in
     /// the selection; otherwise the copies land ungrouped. Appended after the current
@@ -330,25 +329,24 @@ public static class WorkoutVariantEndpoints
             return Unauthorized();
         }
 
-        var selectedIds = (request.VariantExerciseIds ?? []).Distinct().ToList();
+        var selectedIds = (request.DayExerciseIds ?? []).Distinct().ToList();
         if (selectedIds.Count == 0)
         {
-            return Validation("variantExerciseIds", "Choose at least one exercise to copy.");
+            return Validation("dayExerciseIds", "Choose at least one exercise to copy.");
         }
 
-        var destination = await db.OwnedVariants(userId)
-            .Include(v => v.Group)
-            .Include(v => v.Exercises)
-            .FirstOrDefaultAsync(v => v.Id == id, ct);
+        var destination = await db.OwnedDays(userId)
+            .Include(d => d.Exercises)
+            .FirstOrDefaultAsync(d => d.Id == id, ct);
         if (destination is null)
         {
             return Results.NotFound();
         }
 
-        var source = await db.OwnedVariants(userId)
-            .Include(v => v.Exercises).ThenInclude(e => e.Sets)
-            .Include(v => v.Supersets)
-            .FirstOrDefaultAsync(v => v.Id == request.SourceVariantId, ct);
+        var source = await db.OwnedDays(userId)
+            .Include(d => d.Exercises).ThenInclude(e => e.Sets)
+            .Include(d => d.Supersets)
+            .FirstOrDefaultAsync(d => d.Id == request.SourceDayId, ct);
         if (source is null)
         {
             return Results.NotFound();
@@ -357,15 +355,15 @@ public static class WorkoutVariantEndpoints
         var picked = source.Exercises.Where(e => selectedIds.Contains(e.Id)).OrderBy(e => e.SortOrder).ToList();
         if (picked.Count != selectedIds.Count)
         {
-            return Validation("variantExerciseIds", "One or more exercises are not in the source variant.");
+            return Validation("dayExerciseIds", "One or more exercises are not in the source day.");
         }
 
-        if (destination.Exercises.Count + picked.Count > WorkoutLimits.MaxExercisesPerVariant)
+        if (destination.Exercises.Count + picked.Count > WorkoutLimits.MaxExercisesPerDay)
         {
-            return TooMany($"A variant can hold at most {WorkoutLimits.MaxExercisesPerVariant} exercises.");
+            return TooMany($"A day can hold at most {WorkoutLimits.MaxExercisesPerDay} exercises.");
         }
 
-        var program = await db.WorkoutPrograms.FirstAsync(p => p.Id == destination.Group.ProgramId, ct);
+        var program = await db.WorkoutPrograms.FirstAsync(p => p.Id == destination.ProgramId, ct);
         var nextSort = destination.Exercises.Count == 0 ? 0 : destination.Exercises.Max(e => e.SortOrder) + 1;
 
         // Recreate a superset here only when 2+ of its members were picked.
@@ -381,7 +379,7 @@ public static class WorkoutVariantEndpoints
             .ToDictionary(s => s.Id, s => new SupersetGroup
             {
                 Id = Guid.NewGuid(),
-                VariantId = destination.Id,
+                DayId = destination.Id,
                 SortOrder = s.SortOrder,
                 RestAfterRoundSeconds = s.RestAfterRoundSeconds,
             });
@@ -393,10 +391,10 @@ public static class WorkoutVariantEndpoints
 
         foreach (var e in picked)
         {
-            var copy = new VariantExercise
+            var copy = new DayExercise
             {
                 Id = Guid.NewGuid(),
-                VariantId = destination.Id,
+                DayId = destination.Id,
                 ExerciseId = e.ExerciseId,
                 SortOrder = nextSort++,
                 SupersetGroup = e.SupersetGroupId is { } gid && newGroupBySourceId.TryGetValue(gid, out var ng) ? ng : null,
@@ -416,7 +414,7 @@ public static class WorkoutVariantEndpoints
                     TargetRir = s.TargetRir,
                 }).ToList(),
             };
-            db.VariantExercises.Add(copy);
+            db.DayExercises.Add(copy);
         }
 
         if (!await TrySaveWithRowVersionAsync(db, program, request.RowVersion, ct))
@@ -428,10 +426,10 @@ public static class WorkoutVariantEndpoints
     }
 
     /// <summary>
-    /// Move the chosen exercises from another of the caller's variants into this one,
-    /// keeping their identity and sets (docs/04 "move preserves identity where the parent
-    /// change allows"). Moved exercises leave their superset; a source superset left with
-    /// fewer than two members is dissolved.
+    /// Move the chosen exercises from another of the caller's days into this one, keeping
+    /// their identity and sets (docs/04 "move preserves identity where the parent change
+    /// allows"). Moved exercises leave their superset; a source superset left with fewer
+    /// than two members is dissolved.
     /// </summary>
     private static async Task<IResult> BulkMoveAsync(
         Guid id,
@@ -445,30 +443,29 @@ public static class WorkoutVariantEndpoints
             return Unauthorized();
         }
 
-        if (request.SourceVariantId == id)
+        if (request.SourceDayId == id)
         {
-            return Validation("sourceVariantId", "Source and destination variant must differ.");
+            return Validation("sourceDayId", "Source and destination day must differ.");
         }
 
-        var selectedIds = (request.VariantExerciseIds ?? []).Distinct().ToList();
+        var selectedIds = (request.DayExerciseIds ?? []).Distinct().ToList();
         if (selectedIds.Count == 0)
         {
-            return Validation("variantExerciseIds", "Choose at least one exercise to move.");
+            return Validation("dayExerciseIds", "Choose at least one exercise to move.");
         }
 
-        var destination = await db.OwnedVariants(userId)
-            .Include(v => v.Group)
-            .Include(v => v.Exercises)
-            .FirstOrDefaultAsync(v => v.Id == id, ct);
+        var destination = await db.OwnedDays(userId)
+            .Include(d => d.Exercises)
+            .FirstOrDefaultAsync(d => d.Id == id, ct);
         if (destination is null)
         {
             return Results.NotFound();
         }
 
-        var source = await db.OwnedVariants(userId)
-            .Include(v => v.Exercises)
-            .Include(v => v.Supersets)
-            .FirstOrDefaultAsync(v => v.Id == request.SourceVariantId, ct);
+        var source = await db.OwnedDays(userId)
+            .Include(d => d.Exercises)
+            .Include(d => d.Supersets)
+            .FirstOrDefaultAsync(d => d.Id == request.SourceDayId, ct);
         if (source is null)
         {
             return Results.NotFound();
@@ -477,22 +474,22 @@ public static class WorkoutVariantEndpoints
         var picked = source.Exercises.Where(e => selectedIds.Contains(e.Id)).OrderBy(e => e.SortOrder).ToList();
         if (picked.Count != selectedIds.Count)
         {
-            return Validation("variantExerciseIds", "One or more exercises are not in the source variant.");
+            return Validation("dayExerciseIds", "One or more exercises are not in the source day.");
         }
 
-        if (destination.Exercises.Count + picked.Count > WorkoutLimits.MaxExercisesPerVariant)
+        if (destination.Exercises.Count + picked.Count > WorkoutLimits.MaxExercisesPerDay)
         {
-            return TooMany($"A variant can hold at most {WorkoutLimits.MaxExercisesPerVariant} exercises.");
+            return TooMany($"A day can hold at most {WorkoutLimits.MaxExercisesPerDay} exercises.");
         }
 
-        var program = await db.WorkoutPrograms.FirstAsync(p => p.Id == destination.Group.ProgramId, ct);
+        var program = await db.WorkoutPrograms.FirstAsync(p => p.Id == destination.ProgramId, ct);
         var nextSort = destination.Exercises.Count == 0 ? 0 : destination.Exercises.Max(e => e.SortOrder) + 1;
         var touchedSourceGroupIds = picked.Where(e => e.SupersetGroupId is not null)
             .Select(e => e.SupersetGroupId!.Value).Distinct().ToList();
 
         foreach (var e in picked)
         {
-            e.VariantId = destination.Id;
+            e.DayId = destination.Id;
             e.SortOrder = nextSort++;
             e.SupersetGroupId = null;
             e.SupersetMemberOrder = 0;

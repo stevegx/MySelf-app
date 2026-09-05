@@ -1,19 +1,19 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Providers } from "../../app/providers";
-import { VariantEditor } from "./VariantEditor";
+import { DayEditor } from "./DayEditor";
 
 const session = { accessToken: "test-token", user: { id: "u1", username: "demo", email: "demo@example.com" } };
 
-const variant = {
-  id: "v1",
+const day = {
+  id: "d1",
   name: "Legs #1",
   sortOrder: 0,
   estimatedDurationMinutes: null,
   programRowVersion: 42,
   exercises: [
     {
-      id: "ve1",
+      id: "de1",
       exerciseId: "ex1",
       exerciseName: "Back Squat",
       sortOrder: 0,
@@ -37,7 +37,7 @@ const program = {
   isActive: false,
   createdAt: "2026-09-03T00:00:00Z",
   rowVersion: 42,
-  groups: [{ id: "g1", name: "Legs", sortOrder: 0, variants: [{ id: "v1", name: "Legs #1", sortOrder: 0, exerciseCount: 1 }] }],
+  days: [{ id: "d1", name: "Legs #1", sortOrder: 0, exerciseCount: 1 }],
 };
 
 function installFetch() {
@@ -50,8 +50,8 @@ function installFetch() {
       Promise.resolve(new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } }));
 
     if (url.includes("/auth/refresh")) return json(session);
-    if (url.includes("/api/v1/workout-variants/v1") && method === "GET") return json(variant);
-    if (url.includes("/api/v1/workout-variants/v1") && method === "PUT") return json(variant);
+    if (url.includes("/api/v1/workout-days/d1") && method === "GET") return json(day);
+    if (url.includes("/api/v1/workout-days/d1") && method === "PUT") return json(day);
     if (url.includes("/api/v1/programs/p1")) return json(program);
     return Promise.resolve(new Response(null, { status: 404 }));
   });
@@ -59,14 +59,14 @@ function installFetch() {
   return calls;
 }
 
-describe("VariantEditor", () => {
+describe("DayEditor", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("shows every prescribed set instead of flattening them", async () => {
     installFetch();
     render(
       <Providers>
-        <VariantEditor variantId="v1" programId="p1" onClose={() => {}} />
+        <DayEditor dayId="d1" programId="p1" onClose={() => {}} />
       </Providers>,
     );
 
@@ -82,12 +82,12 @@ describe("VariantEditor", () => {
     const user = userEvent.setup();
     render(
       <Providers>
-        <VariantEditor variantId="v1" programId="p1" onClose={() => {}} />
+        <DayEditor dayId="d1" programId="p1" onClose={() => {}} />
       </Providers>,
     );
 
     await screen.findByText("Back Squat");
-    await user.click(screen.getByRole("button", { name: /Save variant/i }));
+    await user.click(screen.getByRole("button", { name: /Save day/i }));
 
     const put = calls.find((c) => c.method === "PUT");
     expect(put).toBeTruthy();
@@ -103,7 +103,7 @@ describe("VariantEditor", () => {
     const user = userEvent.setup();
     render(
       <Providers>
-        <VariantEditor variantId="v1" programId="p1" onClose={() => {}} />
+        <DayEditor dayId="d1" programId="p1" onClose={() => {}} />
       </Providers>,
     );
 
@@ -123,7 +123,7 @@ describe("VariantEditor", () => {
     const user = userEvent.setup();
     render(
       <Providers>
-        <VariantEditor variantId="v1" programId="p1" onClose={onClose} />
+        <DayEditor dayId="d1" programId="p1" onClose={onClose} />
       </Providers>,
     );
 

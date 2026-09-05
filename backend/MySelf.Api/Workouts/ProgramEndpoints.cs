@@ -5,9 +5,9 @@ using MySelf.Infrastructure.Persistence;
 namespace MySelf.Api.Workouts;
 
 /// <summary>
-/// The custom program builder's top level (docs/02, Story 3): a user's programs, their
-/// groups, and activation. Every handler is scoped to the caller — another user's program id
-/// returns 404, never someone else's data.
+/// The custom program builder's top level (docs/02, Story 3): a user's programs, their days,
+/// and activation. Every handler is scoped to the caller — another user's program id returns
+/// 404, never someone else's data.
 /// </summary>
 public static class ProgramEndpoints
 {
@@ -26,7 +26,7 @@ public static class ProgramEndpoints
         programs.MapDelete("/{id:guid}", ArchiveAsync).WithName("ArchiveProgram");
         programs.MapPost("/{id:guid}/activate", ActivateAsync).WithName("ActivateProgram");
         programs.MapPost("/{id:guid}/clone", CloneAsync).WithName("CloneProgram");
-        programs.MapPost("/{id:guid}/groups", AddGroupAsync).WithName("AddWorkoutGroup");
+        programs.MapPost("/{id:guid}/days", AddDayAsync).WithName("AddWorkoutDay");
 
         return app;
     }
@@ -48,8 +48,8 @@ public static class ProgramEndpoints
                 p.Name,
                 p.SplitLabel,
                 p.IsActive,
-                p.Groups.Count,
-                p.Groups.SelectMany(g => g.Variants).Count(),
+                p.Days.Count,
+                p.Days.SelectMany(d => d.Exercises).Count(),
                 p.CreatedAt))
             .ToListAsync(ct);
 
@@ -72,8 +72,8 @@ public static class ProgramEndpoints
                 p.Name,
                 p.SplitLabel,
                 false,
-                p.Groups.Count,
-                p.Groups.SelectMany(g => g.Variants).Count(),
+                p.Days.Count,
+                p.Days.SelectMany(d => d.Exercises).Count(),
                 p.CreatedAt))
             .ToListAsync(ct);
 
@@ -138,16 +138,9 @@ public static class ProgramEndpoints
                 p.IsActive,
                 p.CreatedAt,
                 p.RowVersion,
-                p.Groups
-                    .OrderBy(g => g.SortOrder)
-                    .Select(g => new GroupDetail(
-                        g.Id,
-                        g.Name,
-                        g.SortOrder,
-                        g.Variants
-                            .OrderBy(v => v.SortOrder)
-                            .Select(v => new VariantListItem(v.Id, v.Name, v.SortOrder, v.Exercises.Count))
-                            .ToList()))
+                p.Days
+                    .OrderBy(d => d.SortOrder)
+                    .Select(d => new DayListItem(d.Id, d.Name, d.SortOrder, d.Exercises.Count))
                     .ToList()))
             .FirstOrDefaultAsync(ct);
 
@@ -167,7 +160,7 @@ public static class ProgramEndpoints
         }
 
         var program = await db.OwnedPrograms(userId)
-            .Include(p => p.Groups)
+            .Include(p => p.Days)
             .FirstOrDefaultAsync(p => p.Id == id, ct);
 
         if (program is null)
@@ -188,9 +181,9 @@ public static class ProgramEndpoints
 
         program.SplitLabel = Trimmed(request.SplitLabel);
 
-        if (request.GroupOrder is { Count: > 0 } order)
+        if (request.DayOrder is { Count: > 0 } order)
         {
-            ApplyOrder(program.Groups, g => g.Id, order, (g, i) => g.SortOrder = i);
+            ApplyOrder(program.Days, d => d.Id, order, (d, i) => d.SortOrder = i);
         }
 
         if (!await TrySaveWithRowVersionAsync(db, program, request.RowVersion, ct))
@@ -301,8 +294,8 @@ public static class ProgramEndpoints
         var source = await db.OwnedPrograms(userId)
             .AsNoTracking()
             .Where(p => p.Id == id && p.ArchivedAt == null)
-            .Include(p => p.Groups).ThenInclude(g => g.Variants).ThenInclude(v => v.Exercises).ThenInclude(e => e.Sets)
-            .Include(p => p.Groups).ThenInclude(g => g.Variants).ThenInclude(v => v.Supersets)
+            .Include(p => p.Days).ThenInclude(d => d.Exercises).ThenInclude(e => e.Sets)
+            .Include(p => p.Days).ThenInclude(d => d.Supersets)
             .FirstOrDefaultAsync(ct);
         if (source is null)
         {
@@ -323,9 +316,9 @@ public static class ProgramEndpoints
             SplitLabel = source.SplitLabel,
             IsActive = false, // a clone is always a draft — the user activates it explicitly
             CreatedAt = clock.GetUtcNow(),
-            Groups = source.Groups
-                .OrderBy(g => g.SortOrder)
-                .Select(CloneGroup)
+            Days = source.Days
+                .OrderBy(d => d.SortOrder)
+                .Select(CloneDay)
                 .ToList(),
         };
 
@@ -335,19 +328,11 @@ public static class ProgramEndpoints
         return Results.Json(
             new ProgramListItem(
                 clone.Id, clone.Name, clone.SplitLabel, false,
-                clone.Groups.Count, clone.Groups.Sum(g => g.Variants.Count), clone.CreatedAt),
+                clone.Days.Count, clone.Days.Sum(d => d.Exercises.Count), clone.CreatedAt),
             statusCode: StatusCodes.Status201Created);
     }
 
-    private static WorkoutGroup CloneGroup(WorkoutGroup source) => new()
-    {
-        Id = Guid.NewGuid(),
-        Name = source.Name,
-        SortOrder = source.SortOrder,
-        Variants = source.Variants.OrderBy(v => v.SortOrder).Select(CloneVariant).ToList(),
-    };
-
-    private static WorkoutVariant CloneVariant(WorkoutVariant source)
+    private static WorkoutDay CloneDay(WorkoutDay source)
     {
         // New superset rows, keyed by the source id so the exercises can point at the copies.
         var supersetByOldId = source.Supersets.ToDictionary(
@@ -359,7 +344,7 @@ public static class ProgramEndpoints
                 RestAfterRoundSeconds = s.RestAfterRoundSeconds,
             });
 
-        return new WorkoutVariant
+        return new WorkoutDay
         {
             Id = Guid.NewGuid(),
             Name = source.Name,
@@ -368,7 +353,7 @@ public static class ProgramEndpoints
             Supersets = supersetByOldId.Values.ToList(),
             Exercises = source.Exercises
                 .OrderBy(e => e.SortOrder)
-                .Select(e => new VariantExercise
+                .Select(e => new DayExercise
                 {
                     Id = Guid.NewGuid(),
                     ExerciseId = e.ExerciseId, // catalogue reference — shared, not copied
@@ -400,9 +385,9 @@ public static class ProgramEndpoints
     private static string Truncate(string value, int max) =>
         value.Length <= max ? value : value[..max];
 
-    private static async Task<IResult> AddGroupAsync(
+    private static async Task<IResult> AddDayAsync(
         Guid id,
-        CreateGroupRequest request,
+        CreateDayRequest request,
         HttpContext http,
         MySelfDbContext db,
         CancellationToken ct)
@@ -413,7 +398,7 @@ public static class ProgramEndpoints
         }
 
         var program = await db.OwnedPrograms(userId)
-            .Include(p => p.Groups)
+            .Include(p => p.Days)
             .FirstOrDefaultAsync(p => p.Id == id, ct);
         if (program is null)
         {
@@ -423,30 +408,30 @@ public static class ProgramEndpoints
         var name = request.Name?.Trim();
         if (string.IsNullOrWhiteSpace(name) || name.Length > 80)
         {
-            return Validation("name", "Enter a group name (1–80 characters).");
+            return Validation("name", "Enter a day name (1–80 characters).");
         }
 
-        if (program.Groups.Count >= WorkoutLimits.MaxGroupsPerProgram)
+        if (program.Days.Count >= WorkoutLimits.MaxDaysPerProgram)
         {
-            return TooMany($"A program can have at most {WorkoutLimits.MaxGroupsPerProgram} groups.");
+            return TooMany($"A program can have at most {WorkoutLimits.MaxDaysPerProgram} days.");
         }
 
-        var groupEntity = new WorkoutGroup
+        var day = new WorkoutDay
         {
             Id = Guid.NewGuid(),
             ProgramId = program.Id,
             Name = name,
-            SortOrder = program.Groups.Count == 0 ? 0 : program.Groups.Max(g => g.SortOrder) + 1,
+            SortOrder = program.Days.Count == 0 ? 0 : program.Days.Max(d => d.SortOrder) + 1,
         };
-        db.WorkoutGroups.Add(groupEntity);
+        db.WorkoutDays.Add(day);
         await db.SaveChangesAsync(ct);
 
         return Results.Json(
-            new GroupDetail(groupEntity.Id, groupEntity.Name, groupEntity.SortOrder, []),
+            new DayListItem(day.Id, day.Name, day.SortOrder, 0),
             statusCode: StatusCodes.Status201Created);
     }
 
-    // --- helpers shared with the group/variant endpoints ---
+    // --- helpers shared with the day endpoints ---
 
     /// <summary>
     /// Renumbers <paramref name="items"/> by the position of their id in

@@ -182,8 +182,8 @@ app.MapNutritionEstimateEndpoints();
 app.MapOnboardingEndpoints();
 app.MapExerciseEndpoints();
 app.MapProgramEndpoints();
-app.MapWorkoutGroupEndpoints();
-app.MapWorkoutVariantEndpoints();
+app.MapWorkoutDayEndpoints();
+app.MapWorkoutSessionEndpoints();
 
 app.Run();
 

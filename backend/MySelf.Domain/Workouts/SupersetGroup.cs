@@ -10,8 +10,8 @@ public class SupersetGroup
 {
     public Guid Id { get; set; }
 
-    public Guid VariantId { get; set; }
-    public WorkoutVariant Variant { get; set; } = null!;
+    public Guid DayId { get; set; }
+    public WorkoutDay Day { get; set; } = null!;
 
     public int SortOrder { get; set; }
     public int RestAfterRoundSeconds { get; set; }

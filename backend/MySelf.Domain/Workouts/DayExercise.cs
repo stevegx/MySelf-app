@@ -3,17 +3,17 @@ using MySelf.Domain.Exercises;
 namespace MySelf.Domain.Workouts;
 
 /// <summary>
-/// One exercise as it appears in a variant: a reference to a catalogue
-/// <see cref="Exercise"/>, its position, its set prescriptions, and (optionally) its place
-/// in a superset. Custom (user-created) exercises are a later addition; the builder uses the
-/// seeded catalogue for now.
+/// One exercise as it appears in a day: a reference to a catalogue <see cref="Exercise"/>,
+/// its position, its set prescriptions, and (optionally) its place in a superset. Custom
+/// (user-created) exercises are a later addition; the builder uses the seeded catalogue for
+/// now.
 /// </summary>
-public class VariantExercise
+public class DayExercise
 {
     public Guid Id { get; set; }
 
-    public Guid VariantId { get; set; }
-    public WorkoutVariant Variant { get; set; } = null!;
+    public Guid DayId { get; set; }
+    public WorkoutDay Day { get; set; } = null!;
 
     public Guid ExerciseId { get; set; }
     public Exercise Exercise { get; set; } = null!;

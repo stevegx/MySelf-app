@@ -34,11 +34,14 @@ public class MySelfDbContext(DbContextOptions<MySelfDbContext> options)
     public DbSet<NutritionEstimateSnapshot> NutritionEstimateSnapshots => Set<NutritionEstimateSnapshot>();
 
     public DbSet<WorkoutProgram> WorkoutPrograms => Set<WorkoutProgram>();
-    public DbSet<WorkoutGroup> WorkoutGroups => Set<WorkoutGroup>();
-    public DbSet<WorkoutVariant> WorkoutVariants => Set<WorkoutVariant>();
+    public DbSet<WorkoutDay> WorkoutDays => Set<WorkoutDay>();
     public DbSet<SupersetGroup> SupersetGroups => Set<SupersetGroup>();
-    public DbSet<VariantExercise> VariantExercises => Set<VariantExercise>();
+    public DbSet<DayExercise> DayExercises => Set<DayExercise>();
     public DbSet<SetPrescription> SetPrescriptions => Set<SetPrescription>();
+
+    public DbSet<WorkoutSession> WorkoutSessions => Set<WorkoutSession>();
+    public DbSet<ExerciseLog> ExerciseLogs => Set<ExerciseLog>();
+    public DbSet<SetLog> SetLogs => Set<SetLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

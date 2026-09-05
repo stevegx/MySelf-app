@@ -1,7 +1,7 @@
 namespace MySelf.Domain.Workouts;
 
 /// <summary>
-/// A single prescribed set for a <see cref="VariantExercise"/> (docs/04 §11). Targets are
+/// A single prescribed set for a <see cref="DayExercise"/> (docs/04 §11). Targets are
 /// all optional — the user prescribes as much or as little as they want. There is no
 /// automatic inheritance between sets (locked decision #10).
 /// </summary>
@@ -9,8 +9,8 @@ public class SetPrescription
 {
     public Guid Id { get; set; }
 
-    public Guid VariantExerciseId { get; set; }
-    public VariantExercise VariantExercise { get; set; } = null!;
+    public Guid DayExerciseId { get; set; }
+    public DayExercise DayExercise { get; set; } = null!;
 
     public int SortOrder { get; set; }
 

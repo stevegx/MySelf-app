@@ -10,11 +10,10 @@ internal static class WorkoutLimits
 {
     // --- tree size (checked before an insert) ---
     public const int MaxProgramsPerUser = 50;
-    public const int MaxGroupsPerProgram = 30;
-    public const int MaxVariantsPerGroup = 20;
-    public const int MaxExercisesPerVariant = 50;
+    public const int MaxDaysPerProgram = 60;
+    public const int MaxExercisesPerDay = 50;
     public const int MaxSetsPerExercise = 20;
-    public const int MaxSupersetsPerVariant = 25;
+    public const int MaxSupersetsPerDay = 25;
 
     // --- free-text / search ---
     public const int MaxSearchTermLength = 100;

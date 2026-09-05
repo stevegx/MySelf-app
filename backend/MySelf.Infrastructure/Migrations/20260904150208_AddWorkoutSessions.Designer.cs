@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using MySelf.Infrastructure.Persistence;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MySelf.Infrastructure.Migrations
 {
     [DbContext(typeof(MySelfDbContext))]
-    partial class MySelfDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260904150208_AddWorkoutSessions")]
+    partial class AddWorkoutSessions
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -527,45 +530,6 @@ namespace MySelf.Infrastructure.Migrations
                     b.ToTable("food_cache_entries", (string)null);
                 });
 
-            modelBuilder.Entity("MySelf.Domain.Workouts.DayExercise", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("DayId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ExerciseId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<int?>("RestSeconds")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid?>("SupersetGroupId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("SupersetMemberOrder")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ExerciseId");
-
-                    b.HasIndex("SupersetGroupId");
-
-                    b.HasIndex("DayId", "SortOrder");
-
-                    b.ToTable("day_exercises", (string)null);
-                });
-
             modelBuilder.Entity("MySelf.Domain.Workouts.ExerciseLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -693,9 +657,6 @@ namespace MySelf.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("DayExerciseId")
-                        .HasColumnType("uuid");
-
                     b.Property<bool>("IsAmrap")
                         .HasColumnType("boolean");
 
@@ -723,9 +684,12 @@ namespace MySelf.Infrastructure.Migrations
                         .HasPrecision(6, 2)
                         .HasColumnType("numeric(6,2)");
 
+                    b.Property<Guid>("VariantExerciseId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("DayExerciseId", "SortOrder");
+                    b.HasIndex("VariantExerciseId", "SortOrder");
 
                     b.ToTable("set_prescriptions", (string)null);
                 });
@@ -736,30 +700,66 @@ namespace MySelf.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("DayId")
-                        .HasColumnType("uuid");
-
                     b.Property<int>("RestAfterRoundSeconds")
                         .HasColumnType("integer");
 
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer");
 
+                    b.Property<Guid>("VariantId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("DayId");
+                    b.HasIndex("VariantId");
 
                     b.ToTable("superset_groups", (string)null);
                 });
 
-            modelBuilder.Entity("MySelf.Domain.Workouts.WorkoutDay", b =>
+            modelBuilder.Entity("MySelf.Domain.Workouts.VariantExercise", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<int?>("EstimatedDurationMinutes")
+                    b.Property<Guid>("ExerciseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int?>("RestSeconds")
                         .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("SupersetGroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SupersetMemberOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("VariantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExerciseId");
+
+                    b.HasIndex("SupersetGroupId");
+
+                    b.HasIndex("VariantId", "SortOrder");
+
+                    b.ToTable("variant_exercises", (string)null);
+                });
+
+            modelBuilder.Entity("MySelf.Domain.Workouts.WorkoutGroup", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -776,7 +776,7 @@ namespace MySelf.Infrastructure.Migrations
 
                     b.HasIndex("ProgramId", "SortOrder");
 
-                    b.ToTable("workout_days", (string)null);
+                    b.ToTable("workout_groups", (string)null);
                 });
 
             modelBuilder.Entity("MySelf.Domain.Workouts.WorkoutProgram", b =>
@@ -831,7 +831,7 @@ namespace MySelf.Infrastructure.Migrations
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("DayName")
+                    b.Property<string>("GroupName")
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
 
@@ -846,7 +846,7 @@ namespace MySelf.Infrastructure.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)");
 
-                    b.Property<Guid?>("SourceDayId")
+                    b.Property<Guid?>("SourceVariantId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("StartedAt")
@@ -860,6 +860,10 @@ namespace MySelf.Infrastructure.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("VariantName")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("UserId")
@@ -868,6 +872,33 @@ namespace MySelf.Infrastructure.Migrations
                         .HasFilter("\"Status\" = 'InProgress'");
 
                     b.ToTable("workout_sessions", (string)null);
+                });
+
+            modelBuilder.Entity("MySelf.Domain.Workouts.WorkoutVariant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("EstimatedDurationMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GroupId", "SortOrder");
+
+                    b.ToTable("workout_variants", (string)null);
                 });
 
             modelBuilder.Entity("MySelf.Infrastructure.Identity.ApplicationUser", b =>
@@ -1038,32 +1069,6 @@ namespace MySelf.Infrastructure.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("MySelf.Domain.Workouts.DayExercise", b =>
-                {
-                    b.HasOne("MySelf.Domain.Workouts.WorkoutDay", "Day")
-                        .WithMany("Exercises")
-                        .HasForeignKey("DayId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("MySelf.Domain.Exercises.Exercise", "Exercise")
-                        .WithMany()
-                        .HasForeignKey("ExerciseId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("MySelf.Domain.Workouts.SupersetGroup", "SupersetGroup")
-                        .WithMany()
-                        .HasForeignKey("SupersetGroupId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Day");
-
-                    b.Navigation("Exercise");
-
-                    b.Navigation("SupersetGroup");
-                });
-
             modelBuilder.Entity("MySelf.Domain.Workouts.ExerciseLog", b =>
                 {
                     b.HasOne("MySelf.Domain.Exercises.Exercise", null)
@@ -1094,30 +1099,56 @@ namespace MySelf.Infrastructure.Migrations
 
             modelBuilder.Entity("MySelf.Domain.Workouts.SetPrescription", b =>
                 {
-                    b.HasOne("MySelf.Domain.Workouts.DayExercise", "DayExercise")
+                    b.HasOne("MySelf.Domain.Workouts.VariantExercise", "VariantExercise")
                         .WithMany("Sets")
-                        .HasForeignKey("DayExerciseId")
+                        .HasForeignKey("VariantExerciseId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("DayExercise");
+                    b.Navigation("VariantExercise");
                 });
 
             modelBuilder.Entity("MySelf.Domain.Workouts.SupersetGroup", b =>
                 {
-                    b.HasOne("MySelf.Domain.Workouts.WorkoutDay", "Day")
+                    b.HasOne("MySelf.Domain.Workouts.WorkoutVariant", "Variant")
                         .WithMany("Supersets")
-                        .HasForeignKey("DayId")
+                        .HasForeignKey("VariantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Day");
+                    b.Navigation("Variant");
                 });
 
-            modelBuilder.Entity("MySelf.Domain.Workouts.WorkoutDay", b =>
+            modelBuilder.Entity("MySelf.Domain.Workouts.VariantExercise", b =>
+                {
+                    b.HasOne("MySelf.Domain.Exercises.Exercise", "Exercise")
+                        .WithMany()
+                        .HasForeignKey("ExerciseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MySelf.Domain.Workouts.SupersetGroup", "SupersetGroup")
+                        .WithMany()
+                        .HasForeignKey("SupersetGroupId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("MySelf.Domain.Workouts.WorkoutVariant", "Variant")
+                        .WithMany("Exercises")
+                        .HasForeignKey("VariantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Exercise");
+
+                    b.Navigation("SupersetGroup");
+
+                    b.Navigation("Variant");
+                });
+
+            modelBuilder.Entity("MySelf.Domain.Workouts.WorkoutGroup", b =>
                 {
                     b.HasOne("MySelf.Domain.Workouts.WorkoutProgram", "Program")
-                        .WithMany("Days")
+                        .WithMany("Groups")
                         .HasForeignKey("ProgramId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -1143,6 +1174,17 @@ namespace MySelf.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("MySelf.Domain.Workouts.WorkoutVariant", b =>
+                {
+                    b.HasOne("MySelf.Domain.Workouts.WorkoutGroup", "Group")
+                        .WithMany("Variants")
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Group");
+                });
+
             modelBuilder.Entity("MySelf.Domain.Exercises.Equipment", b =>
                 {
                     b.Navigation("ExerciseEquipment");
@@ -1165,31 +1207,36 @@ namespace MySelf.Infrastructure.Migrations
                     b.Navigation("ExerciseMuscles");
                 });
 
-            modelBuilder.Entity("MySelf.Domain.Workouts.DayExercise", b =>
-                {
-                    b.Navigation("Sets");
-                });
-
             modelBuilder.Entity("MySelf.Domain.Workouts.ExerciseLog", b =>
                 {
                     b.Navigation("Sets");
                 });
 
-            modelBuilder.Entity("MySelf.Domain.Workouts.WorkoutDay", b =>
+            modelBuilder.Entity("MySelf.Domain.Workouts.VariantExercise", b =>
                 {
-                    b.Navigation("Exercises");
+                    b.Navigation("Sets");
+                });
 
-                    b.Navigation("Supersets");
+            modelBuilder.Entity("MySelf.Domain.Workouts.WorkoutGroup", b =>
+                {
+                    b.Navigation("Variants");
                 });
 
             modelBuilder.Entity("MySelf.Domain.Workouts.WorkoutProgram", b =>
                 {
-                    b.Navigation("Days");
+                    b.Navigation("Groups");
                 });
 
             modelBuilder.Entity("MySelf.Domain.Workouts.WorkoutSession", b =>
                 {
                     b.Navigation("ExerciseLogs");
+                });
+
+            modelBuilder.Entity("MySelf.Domain.Workouts.WorkoutVariant", b =>
+                {
+                    b.Navigation("Exercises");
+
+                    b.Navigation("Supersets");
                 });
 #pragma warning restore 612, 618
         }

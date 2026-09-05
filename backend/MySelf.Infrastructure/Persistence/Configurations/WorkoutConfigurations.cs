@@ -35,46 +35,30 @@ public class WorkoutProgramConfiguration : IEntityTypeConfiguration<WorkoutProgr
             .HasForeignKey(p => p.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasMany(p => p.Groups)
-            .WithOne(g => g.Program)
-            .HasForeignKey(g => g.ProgramId)
+        builder.HasMany(p => p.Days)
+            .WithOne(d => d.Program)
+            .HasForeignKey(d => d.ProgramId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }
 
-public class WorkoutGroupConfiguration : IEntityTypeConfiguration<WorkoutGroup>
+public class WorkoutDayConfiguration : IEntityTypeConfiguration<WorkoutDay>
 {
-    public void Configure(EntityTypeBuilder<WorkoutGroup> builder)
+    public void Configure(EntityTypeBuilder<WorkoutDay> builder)
     {
-        builder.ToTable("workout_groups");
-        builder.HasKey(g => g.Id);
-        builder.Property(g => g.Name).HasMaxLength(80).IsRequired();
-        builder.HasIndex(g => new { g.ProgramId, g.SortOrder });
+        builder.ToTable("workout_days");
+        builder.HasKey(d => d.Id);
+        builder.Property(d => d.Name).HasMaxLength(80).IsRequired();
+        builder.HasIndex(d => new { d.ProgramId, d.SortOrder });
 
-        builder.HasMany(g => g.Variants)
-            .WithOne(v => v.Group)
-            .HasForeignKey(v => v.GroupId)
-            .OnDelete(DeleteBehavior.Cascade);
-    }
-}
-
-public class WorkoutVariantConfiguration : IEntityTypeConfiguration<WorkoutVariant>
-{
-    public void Configure(EntityTypeBuilder<WorkoutVariant> builder)
-    {
-        builder.ToTable("workout_variants");
-        builder.HasKey(v => v.Id);
-        builder.Property(v => v.Name).HasMaxLength(80).IsRequired();
-        builder.HasIndex(v => new { v.GroupId, v.SortOrder });
-
-        builder.HasMany(v => v.Exercises)
-            .WithOne(e => e.Variant)
-            .HasForeignKey(e => e.VariantId)
+        builder.HasMany(d => d.Exercises)
+            .WithOne(e => e.Day)
+            .HasForeignKey(e => e.DayId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasMany(v => v.Supersets)
-            .WithOne(s => s.Variant)
-            .HasForeignKey(s => s.VariantId)
+        builder.HasMany(d => d.Supersets)
+            .WithOne(s => s.Day)
+            .HasForeignKey(s => s.DayId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }
@@ -88,14 +72,14 @@ public class SupersetGroupConfiguration : IEntityTypeConfiguration<SupersetGroup
     }
 }
 
-public class VariantExerciseConfiguration : IEntityTypeConfiguration<VariantExercise>
+public class DayExerciseConfiguration : IEntityTypeConfiguration<DayExercise>
 {
-    public void Configure(EntityTypeBuilder<VariantExercise> builder)
+    public void Configure(EntityTypeBuilder<DayExercise> builder)
     {
-        builder.ToTable("variant_exercises");
+        builder.ToTable("day_exercises");
         builder.HasKey(e => e.Id);
         builder.Property(e => e.Notes).HasMaxLength(500);
-        builder.HasIndex(e => new { e.VariantId, e.SortOrder });
+        builder.HasIndex(e => new { e.DayId, e.SortOrder });
 
         // Restrict, not Cascade: a catalogue exercise must never be deletable out from under
         // a program that references it.
@@ -111,8 +95,8 @@ public class VariantExerciseConfiguration : IEntityTypeConfiguration<VariantExer
             .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasMany(e => e.Sets)
-            .WithOne(s => s.VariantExercise)
-            .HasForeignKey(s => s.VariantExerciseId)
+            .WithOne(s => s.DayExercise)
+            .HasForeignKey(s => s.DayExerciseId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }
@@ -125,6 +109,6 @@ public class SetPrescriptionConfiguration : IEntityTypeConfiguration<SetPrescrip
         builder.HasKey(s => s.Id);
         builder.Property(s => s.Kind).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(s => s.TargetWeightKg).HasPrecision(6, 2);
-        builder.HasIndex(s => new { s.VariantExerciseId, s.SortOrder });
+        builder.HasIndex(s => new { s.DayExerciseId, s.SortOrder });
     }
 }
