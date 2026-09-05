@@ -370,6 +370,70 @@ public class WorkoutSessionEndpointTests(WebApplicationFactory<Program> factory,
     }
 
     [Fact]
+    public async Task Program_stats_count_completed_sessions_started_from_the_program()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var dayId = await CreateDayWithExercisesAsync(client);
+            var programId = (await client.GetFromJsonAsync<JsonElement>("/api/v1/programs"))
+                .EnumerateArray().First().GetProperty("id").GetGuid();
+
+            // Empty program: zeros, and the day listed at zero.
+            var before = await client.GetFromJsonAsync<JsonElement>($"/api/v1/programs/{programId}/stats");
+            Assert.Equal(0, before.GetProperty("totalSessions").GetInt32());
+            Assert.Equal(1, before.GetProperty("perDay").GetArrayLength());
+            Assert.Equal(0, before.GetProperty("perDay")[0].GetProperty("sessions").GetInt32());
+
+            // Run one session from that day.
+            var start = await client.PostAsJsonAsync("/api/v1/workout-sessions", new { dayId });
+            var startBody = await start.Content.ReadFromJsonAsync<JsonElement>();
+            var sessionId = startBody.GetProperty("id").GetGuid();
+            var ex = startBody.GetProperty("exercises").EnumerateArray().First();
+            var setId = ex.GetProperty("sets").EnumerateArray().First().GetProperty("id").GetGuid();
+            await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/set-logs", LogBodyFor(setId, ex.GetProperty("trackingMode").GetString()!));
+            await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/complete", new { localDate = "2026-09-05", notes = (string?)null });
+
+            var after = await client.GetFromJsonAsync<JsonElement>($"/api/v1/programs/{programId}/stats?today=2026-09-05");
+            Assert.Equal(1, after.GetProperty("totalSessions").GetInt32());
+            Assert.Equal(1, after.GetProperty("sessionsThisWeek").GetInt32());
+            Assert.Equal("2026-09-05", after.GetProperty("lastPerformedOn").GetString());
+            Assert.Equal(1, after.GetProperty("completedSets").GetInt32());
+            Assert.Equal(1, after.GetProperty("perDay")[0].GetProperty("sessions").GetInt32());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task An_archived_program_can_still_be_hard_deleted()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            await CreateDayWithExercisesAsync(client);
+            var programId = (await client.GetFromJsonAsync<JsonElement>("/api/v1/programs"))
+                .EnumerateArray().First().GetProperty("id").GetGuid();
+
+            Assert.Equal(HttpStatusCode.NoContent,
+                (await client.PostAsync($"/api/v1/programs/{programId}/archive", null)).StatusCode);
+            Assert.Equal(1, (await client.GetFromJsonAsync<JsonElement>("/api/v1/programs/archived")).GetArrayLength());
+
+            Assert.Equal(HttpStatusCode.NoContent,
+                (await client.DeleteAsync($"/api/v1/programs/{programId}")).StatusCode);
+            Assert.Equal(0, (await client.GetFromJsonAsync<JsonElement>("/api/v1/programs/archived")).GetArrayLength());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
     public async Task Discarding_a_session_frees_the_slot_for_a_new_one()
     {
         var (client, email) = await factory.RegisterAndAuthenticateAsync();
