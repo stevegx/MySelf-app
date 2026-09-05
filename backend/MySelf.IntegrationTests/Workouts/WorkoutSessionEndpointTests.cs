@@ -359,4 +359,74 @@ public class WorkoutSessionEndpointTests(WebApplicationFactory<Program> factory,
             await factory.DeleteUsersAsync(ownerEmail, otherEmail);
         }
     }
+
+    [Fact]
+    public async Task Completed_session_carries_a_summary_and_shows_up_in_history()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (sessionId, setId, mode) = await StartWithASetAsync(client);
+            await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/set-logs", LogBodyFor(setId, mode));
+            await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/complete", new { localDate = "2026-09-04", notes = (string?)null });
+
+            var detail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-sessions/{sessionId}");
+            var summary = detail.GetProperty("summary");
+            Assert.Equal(1, summary.GetProperty("completedSetCount").GetInt32());
+            Assert.True(summary.GetProperty("durationSeconds").GetInt32() >= 0);
+
+            var history = await client.GetFromJsonAsync<JsonElement>("/api/v1/workout-sessions?status=Completed");
+            Assert.True(history.GetProperty("total").GetInt32() >= 1);
+            var first = history.GetProperty("items").EnumerateArray().First();
+            Assert.Equal(sessionId, first.GetProperty("id").GetGuid());
+            Assert.Equal("2026-09-04", first.GetProperty("performedOnLocalDate").GetString());
+            Assert.Equal(1, first.GetProperty("summary").GetProperty("completedSetCount").GetInt32());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task History_defaults_to_completed_and_can_filter_by_status()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            await client.PostAsJsonAsync("/api/v1/workout-sessions", new { dayId = (Guid?)null });
+
+            var completedDefault = await client.GetFromJsonAsync<JsonElement>("/api/v1/workout-sessions");
+            Assert.Equal(0, completedDefault.GetProperty("items").GetArrayLength());
+
+            var inProgress = await client.GetFromJsonAsync<JsonElement>("/api/v1/workout-sessions?status=InProgress");
+            Assert.Equal(1, inProgress.GetProperty("items").GetArrayLength());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task History_only_lists_your_own_sessions()
+    {
+        var (owner, ownerEmail) = await factory.RegisterAndAuthenticateAsync();
+        var (other, otherEmail) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (sessionId, setId, mode) = await StartWithASetAsync(owner);
+            await owner.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/set-logs", LogBodyFor(setId, mode));
+            await owner.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/complete", new { localDate = "2026-09-04", notes = (string?)null });
+
+            var otherHistory = await other.GetFromJsonAsync<JsonElement>("/api/v1/workout-sessions?status=Completed");
+            Assert.Equal(0, otherHistory.GetProperty("items").GetArrayLength());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(ownerEmail, otherEmail);
+        }
+    }
 }

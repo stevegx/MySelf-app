@@ -450,3 +450,15 @@ GET {{MySelf.Api_HostAddress}}/api/v1/workout-sessions/SESSION_ID
 Authorization: Bearer {{accessToken}}
 
 ###
+
+# Workout history (default status=Completed, newest first) -> paginated list with per-session summary
+GET {{MySelf.Api_HostAddress}}/api/v1/workout-sessions?status=Completed&page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+
+###
+
+# In-progress sessions only
+GET {{MySelf.Api_HostAddress}}/api/v1/workout-sessions?status=InProgress
+Authorization: Bearer {{accessToken}}
+
+###

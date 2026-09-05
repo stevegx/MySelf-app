@@ -20,6 +20,7 @@ public static class WorkoutSessionEndpoints
             .RequireRateLimiting(RateLimiting.WritePolicy);
 
         sessions.MapPost("", StartAsync).WithName("StartWorkoutSession");
+        sessions.MapGet("", ListAsync).WithName("ListWorkoutSessions");
         sessions.MapGet("/active", GetActiveAsync).WithName("GetActiveWorkoutSession");
         sessions.MapGet("/{id:guid}", GetByIdAsync).WithName("GetWorkoutSession");
         sessions.MapPost("/{id:guid}/set-logs", LogSetAsync).WithName("LogWorkoutSet");
@@ -97,6 +98,50 @@ public static class WorkoutSessionEndpoints
         }
 
         return Results.Json(ToDetail(session), statusCode: StatusCodes.Status201Created);
+    }
+
+    private static async Task<IResult> ListAsync(
+        HttpContext http,
+        MySelfDbContext db,
+        CancellationToken ct,
+        string status = "Completed",
+        int page = 1,
+        int pageSize = 20)
+    {
+        if (!http.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        if (!Enum.TryParse<SessionStatus>(status, ignoreCase: true, out var wanted))
+        {
+            return Validation("status", "status must be InProgress, Completed or Discarded.");
+        }
+
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 50);
+
+        var query = db.OwnedSessions(userId)
+            .AsNoTracking()
+            .Where(s => s.Status == wanted);
+
+        var total = await query.CountAsync(ct);
+
+        var sessions = await query
+            .Include(s => s.ExerciseLogs).ThenInclude(e => e.Sets)
+            .OrderByDescending(s => s.PerformedOnLocalDate)
+            .ThenByDescending(s => s.StartedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        var items = sessions
+            .Select(s => new WorkoutSessionListItem(
+                s.Id, s.DayName, s.ProgramName, s.Status.ToString(),
+                s.StartedAt, s.CompletedAt, s.PerformedOnLocalDate, ToSummary(s)))
+            .ToList();
+
+        return Results.Ok(new WorkoutSessionListResult(items, page, pageSize, total));
     }
 
     private static async Task<IResult> GetActiveAsync(HttpContext http, MySelfDbContext db, CancellationToken ct)
@@ -345,6 +390,7 @@ public static class WorkoutSessionEndpoints
         s.CompletedAt,
         s.PerformedOnLocalDate,
         s.Notes,
+        ToSummary(s),
         s.ExerciseLogs
             .OrderBy(e => e.SortOrder)
             .Select(e => new ExerciseLogDetail(
@@ -357,6 +403,13 @@ public static class WorkoutSessionEndpoints
                 e.SupersetMemberOrder,
                 e.Sets.OrderBy(set => set.SortOrder).Select(ToSetDetail).ToList()))
             .ToList());
+
+    private static SessionSummary ToSummary(WorkoutSession s)
+    {
+        var r = SessionSummaryCalculator.Of(s);
+        return new SessionSummary(
+            r.DurationSeconds, r.CompletedSetCount, r.SkippedSetCount, r.TotalReps, r.TotalVolumeKg);
+    }
 
     private static SetLogDetail ToSetDetail(SetLog set) => new(
         set.Id,

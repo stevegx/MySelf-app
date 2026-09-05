@@ -214,11 +214,59 @@ the styled `useConfirm` dialog). Each action is its own request; the query inval
 re-renders from the server's response. `useCompleteSession` builds the local `YYYY-MM-DD`
 from `new Date()` before posting.
 
+---
+
+## Part 4 — Closing the logging loop (added same day)
+
+Three small things that turn "I logged a workout" into "I can see what I've done".
+
+### Finish summary (`Domain/Workouts/SessionSummaryCalculator.cs`)
+
+A pure roll-up of a session's logged sets — duration, completed/skipped counts, total reps,
+total volume — now attached to `WorkoutSessionDetail.summary` and every history row.
+
+```
+volume (kg) = Σ over completed sets of  load × reps,  where load = WeightKg ?? AddedWeightKg ?? 0
+```
+
+Bodyweight-only, assisted, reps-only and duration sets add 0 to *volume* (locked decision
+#11 — the body weight is never part of load) but still count toward the set count and total
+reps. Duration is null until the session is completed. e1RM and PR detection are the next
+slice.
+
+The Domain class is `SessionSummaryCalculator` (not `SessionSummary`) because the API
+contract record is also called `SessionSummary` and they'd collide in the endpoint file —
+`*Calculator` matches `AgeCalculator`.
+
+### History list — `GET /api/v1/workout-sessions?status=&page=&pageSize=`
+
+The caller's sessions, default `Completed`, ordered by `PerformedOnLocalDate` then
+`StartedAt` (both descending), paginated (`pageSize` capped at 50). Each row carries the
+same summary. `WorkoutHistoryScreen` renders it; `WorkoutBuilderScreen` links to it and
+`ActiveWorkoutScreen` navigates there after "Finish workout".
+
+### Copy previous set (front end only)
+
+A pending set shows a **Copy previous** button when there's an earlier *completed* set for
+the same exercise in this session. It prefills the inputs from that set and **does not
+submit** — locked rule: "fills both fields but never completes the set automatically". The
+"previous completed set" is just
+`exercise.sets.slice(0, i).reverse().find(s => s.completedAt != null)` — no API call, the
+data is already in the session detail.
+
+### Tests
+
+- Backend: +3 unit (`SessionSummaryCalculator`), +3 integration (detail carries summary;
+  history lists completed newest-first with summary; default filters to Completed;
+  another user's sessions aren't listed).
+- Frontend: +3 (`WorkoutHistoryScreen` list + empty state; "Copy previous" prefill).
+
+Totals: **41 unit + 89 integration + 51 frontend**.
+
 ### Still not built (rest of Phase 3)
 
-`Copy previous set`, PR / volume / e1RM calculation and the finish summary, add / replace
-exercise mid-session, the history list, the workout calendar, the in-app rest timer, and
-the offline draft + sync.
+PR / e1RM detection + Progress charts, add / replace exercise mid-session, the workout
+**calendar**, the in-app **rest timer**, and the **offline draft + sync**.
 
 ---
 

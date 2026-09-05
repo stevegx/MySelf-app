@@ -160,7 +160,33 @@ public sealed record WorkoutSessionDetail(
     DateTimeOffset? CompletedAt,
     DateOnly? PerformedOnLocalDate,
     string? Notes,
+    SessionSummary Summary,
     IReadOnlyList<ExerciseLogDetail> Exercises);
+
+/// <summary>Roll-up shown on the finish screen and in history (docs/02). PRs/e1RM come later.</summary>
+public sealed record SessionSummary(
+    int? DurationSeconds,
+    int CompletedSetCount,
+    int SkippedSetCount,
+    int TotalReps,
+    decimal TotalVolumeKg);
+
+/// <summary>One row of the workout history list (GET /api/v1/workout-sessions).</summary>
+public sealed record WorkoutSessionListItem(
+    Guid Id,
+    string? DayName,
+    string? ProgramName,
+    string Status,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? CompletedAt,
+    DateOnly? PerformedOnLocalDate,
+    SessionSummary Summary);
+
+public sealed record WorkoutSessionListResult(
+    IReadOnlyList<WorkoutSessionListItem> Items,
+    int Page,
+    int PageSize,
+    int Total);
 
 public sealed record ExerciseLogDetail(
     Guid Id,

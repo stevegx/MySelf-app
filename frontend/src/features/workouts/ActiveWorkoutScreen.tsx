@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { Button, Card, CardKicker, CardTitle, Field, Input, PageHeader, Tag } from "../../components/ui";
 import { ApiError } from "../../lib/api";
 import {
@@ -41,7 +41,19 @@ function fieldsFor(mode: string): { key: FieldKey; label: string }[] {
   }
 }
 
-function SetRow({ sessionId, set, index, mode }: { sessionId: string; set: SetLogDetail; index: number; mode: string }) {
+function SetRow({
+  sessionId,
+  set,
+  index,
+  mode,
+  prevCompleted,
+}: {
+  sessionId: string;
+  set: SetLogDetail;
+  index: number;
+  mode: string;
+  prevCompleted: SetLogDetail | undefined;
+}) {
   const fields = fieldsFor(mode);
   const [values, setValues] = useState<Record<string, string>>(() => ({
     weightKg: set.weightKg?.toString() ?? "",
@@ -97,6 +109,27 @@ function SetRow({ sessionId, set, index, mode }: { sessionId: string; set: SetLo
             <Button variant={done ? "secondary" : "primary"} size="sm" onClick={log} disabled={busy}>
               {done ? "Update" : "Log set"}
             </Button>
+            {!done && prevCompleted && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  // Prefill from the previous completed set of this exercise; never auto-completes
+                  // (locked decision: "Copy previous set fills both fields but never completes").
+                  setValues((v) => ({
+                    ...v,
+                    weightKg: prevCompleted.weightKg?.toString() ?? v.weightKg,
+                    addedWeightKg: prevCompleted.addedWeightKg?.toString() ?? v.addedWeightKg,
+                    assistanceKg: prevCompleted.assistanceKg?.toString() ?? v.assistanceKg,
+                    reps: prevCompleted.reps?.toString() ?? v.reps,
+                    durationSeconds: prevCompleted.durationSeconds?.toString() ?? v.durationSeconds,
+                  }))
+                }
+                disabled={busy}
+              >
+                Copy previous
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
@@ -128,7 +161,14 @@ function ExerciseCard({ sessionId, exercise }: { sessionId: string; exercise: Ex
         </div>
         <div className="flex flex-col gap-2">
           {exercise.sets.map((set, i) => (
-            <SetRow key={set.id} sessionId={sessionId} set={set} index={i} mode={exercise.trackingMode} />
+            <SetRow
+              key={set.id}
+              sessionId={sessionId}
+              set={set}
+              index={i}
+              mode={exercise.trackingMode}
+              prevCompleted={[...exercise.sets.slice(0, i)].reverse().find((s) => s.completedAt != null)}
+            />
           ))}
         </div>
       </Card>
@@ -178,8 +218,12 @@ function RunningSession({
   confirm: ReturnType<typeof useConfirm>["confirm"];
   dialog: ReturnType<typeof useConfirm>["dialog"];
 }) {
+  const navigate = useNavigate();
   const complete = useCompleteSession(session.id);
   const discard = useDiscardSession(session.id);
+
+  const finish = () =>
+    complete.mutate(undefined, { onSuccess: () => navigate("/workouts/history") });
 
   const totalSets = session.exercises.reduce((n, e) => n + e.sets.length, 0);
   const actedSets = session.exercises.reduce(
@@ -214,7 +258,7 @@ function RunningSession({
             </Button>
             <Button
               variant="primary"
-              onClick={() => complete.mutate(undefined)}
+              onClick={finish}
               disabled={complete.isPending || discard.isPending}
             >
               {complete.isPending ? "Finishing…" : "Finish workout"}

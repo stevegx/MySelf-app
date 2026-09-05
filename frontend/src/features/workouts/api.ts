@@ -139,6 +139,14 @@ export type ExerciseLogDetail = {
   sets: SetLogDetail[];
 };
 
+export type SessionSummary = {
+  durationSeconds: number | null;
+  completedSetCount: number;
+  skippedSetCount: number;
+  totalReps: number;
+  totalVolumeKg: number;
+};
+
 export type WorkoutSessionDetail = {
   id: string;
   sourceDayId: string | null;
@@ -149,7 +157,26 @@ export type WorkoutSessionDetail = {
   completedAt: string | null;
   performedOnLocalDate: string | null;
   notes: string | null;
+  summary: SessionSummary;
   exercises: ExerciseLogDetail[];
+};
+
+export type WorkoutSessionListItem = {
+  id: string;
+  dayName: string | null;
+  programName: string | null;
+  status: "InProgress" | "Completed" | "Discarded";
+  startedAt: string;
+  completedAt: string | null;
+  performedOnLocalDate: string | null;
+  summary: SessionSummary;
+};
+
+export type WorkoutSessionListResult = {
+  items: WorkoutSessionListItem[];
+  page: number;
+  pageSize: number;
+  total: number;
 };
 
 export type LogSetBody = {
@@ -361,6 +388,17 @@ export function useStartSession() {
     mutationFn: (dayId: string | null) =>
       apiFetch<WorkoutSessionDetail>("/api/v1/workout-sessions", { method: "POST", body: { dayId }, accessToken }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["workout-session"] }),
+  });
+}
+
+/** Past workouts, newest first (default status Completed). */
+export function useSessionHistory(status: "Completed" | "Discarded" = "Completed") {
+  const accessToken = useToken();
+  return useQuery({
+    queryKey: ["workout-session", "history", status],
+    queryFn: () =>
+      apiFetch<WorkoutSessionListResult>(`/api/v1/workout-sessions?status=${status}&pageSize=50`, { accessToken }),
+    enabled: accessToken != null,
   });
 }
 

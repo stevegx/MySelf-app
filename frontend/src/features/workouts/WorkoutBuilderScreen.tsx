@@ -63,6 +63,7 @@ function BackButton({ onClick, label }: { onClick: () => void; label: string }) 
 }
 
 function ProgramList({ onOpen }: { onOpen: (id: string) => void }) {
+  const navigate = useNavigate();
   const { data: programs, isLoading } = usePrograms();
   const create = useCreateProgram();
   const startWorkout = useStartWorkout();
@@ -83,10 +84,15 @@ function ProgramList({ onOpen }: { onOpen: (id: string) => void }) {
         title="Workout programs"
         subtitle="Build the workouts you train from. No fixed days."
         actions={
-          <Button variant="secondary" onClick={() => startWorkout(null)}>
-            <Play size={14} aria-hidden />
-            Start ad-hoc workout
-          </Button>
+          <>
+            <Button variant="ghost" onClick={() => navigate("/workouts/history")}>
+              History
+            </Button>
+            <Button variant="secondary" onClick={() => startWorkout(null)}>
+              <Play size={14} aria-hidden />
+              Start ad-hoc workout
+            </Button>
+          </>
         }
       />
 

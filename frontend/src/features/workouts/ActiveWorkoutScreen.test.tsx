@@ -6,6 +6,40 @@ import { ActiveWorkoutScreen } from "./ActiveWorkoutScreen";
 
 const AUTH = { accessToken: "test-token", user: { id: "u1", username: "demo", email: "demo@example.com" } };
 
+const SUMMARY = {
+  durationSeconds: null,
+  completedSetCount: 0,
+  skippedSetCount: 0,
+  totalReps: 0,
+  totalVolumeKg: 0,
+};
+
+function makeSet(id: string, over: Partial<Record<string, unknown>> = {}) {
+  return {
+    id,
+    sortOrder: 0,
+    kind: "Standard",
+    isAmrap: false,
+    targetToFailure: false,
+    targetRepsMin: 8,
+    targetRepsMax: 8,
+    targetWeightKg: 100,
+    targetRir: 2,
+    weightKg: null,
+    addedWeightKg: null,
+    assistanceKg: null,
+    reps: null,
+    durationSeconds: null,
+    distanceMeters: null,
+    rir: null,
+    reachedFailure: false,
+    completedAt: null,
+    skippedAt: null,
+    skippedReason: null,
+    ...over,
+  };
+}
+
 function sessionWithOneSet(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: "s1",
@@ -17,6 +51,7 @@ function sessionWithOneSet(overrides: Partial<Record<string, unknown>> = {}) {
     completedAt: null,
     performedOnLocalDate: null,
     notes: null,
+    summary: SUMMARY,
     exercises: [
       {
         id: "e1",
@@ -86,6 +121,7 @@ function renderScreen() {
     [
       { path: "/", element: <ActiveWorkoutScreen /> },
       { path: "/workouts/builder", element: <div>Builder</div> },
+      { path: "/workouts/history", element: <div>History screen</div> },
     ],
     { initialEntries: ["/"] },
   );
@@ -135,5 +171,36 @@ describe("ActiveWorkoutScreen", () => {
     const completeCall = fetchSpy.mock.calls.find(([u, i]) => String(u).endsWith("/complete") && i?.method === "POST");
     expect(completeCall).toBeTruthy();
     expect(JSON.parse((completeCall![1] as RequestInit).body as string)).toHaveProperty("localDate");
+    expect(await screen.findByText("History screen")).toBeInTheDocument();
+  });
+
+  it("copies the previous completed set's values into a pending set", async () => {
+    const twoSetSession = {
+      ...sessionWithOneSet(),
+      exercises: [
+        {
+          id: "e1",
+          exerciseId: "x1",
+          exerciseName: "Back Squat",
+          trackingMode: "WeightAndReps",
+          sortOrder: 0,
+          supersetGroupSnapshotId: null,
+          supersetMemberOrder: 0,
+          sets: [
+            makeSet("setA", { sortOrder: 0, weightKg: 100, reps: 8, completedAt: "2026-09-04T09:05:00Z" }),
+            makeSet("setB", { sortOrder: 1 }),
+          ],
+        },
+      ],
+    };
+    installFetch({ active: twoSetSession });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await screen.findByText("Back Squat");
+    await user.click(screen.getByRole("button", { name: "Copy previous" }));
+
+    expect((screen.getByLabelText("Set 2 Weight (kg)") as HTMLInputElement).value).toBe("100");
+    expect((screen.getByLabelText("Set 2 Reps") as HTMLInputElement).value).toBe("8");
   });
 });
