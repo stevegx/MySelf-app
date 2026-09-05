@@ -248,3 +248,111 @@ running-workout screen? The second is less code and no new screen, but the
 session temporarily vanishes from History/Calendar while you edit, and an
 abandoned edit leaves it stuck "in progress". I lean toward the dedicated edit
 screen.
+
+---
+
+## Phase 4a — Program insights (same session, later)
+
+You asked for two more things: **archived programs wouldn't delete**, and you
+want **stats + a calendar when you open a program**, not just the day list.
+
+### The archived-delete bug
+
+On the latest code the delete path is fine end to end — `DELETE
+/api/v1/programs/{id}` removes archived programs too. The reason it failed for
+you: **your running API predates commit `4ac03a4`**, which is the commit that
+first added that route. The request 404s and, until now, the UI threw the error
+away with no message.
+
+Fix (`68e08d1`, shipped): an `InlineError` component on the program list, the
+archived list and the program header that renders whatever `ApiError` a failed
+`remove` / `restore` / `archive` / `clone` produced. And: **restart the API** and
+the delete itself works.
+
+### Attributing a session to a program
+
+A `WorkoutSession` stored `SourceDayId` (a soft pointer, no foreign key) and a
+`ProgramName` *string* — but no program id. So "sessions from this program"
+couldn't be queried.
+
+Fix: add `WorkoutSession.SourceProgramId` (`Guid?`, soft pointer, indexed), set
+at start from the source day's program. The migration also **backfills** existing
+rows:
+
+```sql
+UPDATE "workout_sessions" s
+   SET "SourceProgramId" = d."ProgramId"
+  FROM "workout_days" d
+ WHERE s."SourceDayId" = d."Id";
+```
+
+Why a snapshot column instead of a live join every time? Same reason
+`SourceDayId` is soft: if you later move a day to another program or delete it,
+history shouldn't move or vanish. A join would do both.
+
+### `ProgramStatsCalculator` (pure, unit-tested)
+
+Same pattern as `SessionSummaryCalculator` — a static class, no EF, no DI, so it
+runs in the fast `MySelf.UnitTests` project (which builds even while the API
+holds the main build lock). Given a program's completed sessions + its current
+days + "today", it returns:
+
+- total sessions, first / last performed date
+- sessions this week, this month
+- **weekly average** = sessions in range ÷ weeks in range, where the range is how
+  many weeks the program has existed, **capped at 8**. Deliberately *not* an
+  adherence % or missed-workout rate — docs/02 forbids those without a fixed
+  plan.
+- total volume (Σ of each session's volume), average duration
+- completed vs skipped set counts + a skipped rate
+- per-day: how many sessions used each day, and the last date
+
+PRs ("records set here") are gathered in the endpoint, not the calculator,
+because they need a join to the exercise catalogue for the name.
+
+### `GET /api/v1/programs/{id}/stats`
+
+Loads the program's days + its completed sessions (`SourceProgramId == id`),
+calls the calculator, then joins `PersonalRecords` whose `SessionId` is one of
+those sessions. `?today=YYYY-MM-DD` lets the client pass its local date (locked
+decision #8); falls back to the server's UTC date.
+
+The workout-calendar endpoint got one new optional query param, `?programId=`,
+which just adds `&& s.SourceProgramId == programId` to its existing filter.
+
+### The Overview tab (frontend)
+
+`ProgramDetail` now has two tabs:
+
+- **Overview** (default) — `ProgramOverview.tsx`: a grid of stat cards, a "by
+  day" table, a compact month calendar (reuses the calendar endpoint with
+  `?programId=`, has its own prev/next month), and a PR list.
+- **Days** — exactly what the page was before (the sortable editable day list +
+  "New day"). Kept mounted but `hidden` when Overview is active so the
+  drag-and-drop state doesn't reset on every tab switch.
+
+New in `api.ts`: `useProgramStats(id)`, an optional `programId` arg on
+`useWorkoutCalendar`, and `complete` / `reschedule` now also invalidate
+`["program-stats"]` so the Overview refreshes after you finish or move a workout.
+
+### State of play
+
+| Piece | Status |
+| --- | --- |
+| `68e08d1` archived-delete error surfacing | shipped, 61→62 frontend tests |
+| `ada9fb7` `SourceProgramId` + config | compiles (via the unit-test build) |
+| `ada9fb7` `ProgramStatsCalculator` + 4 unit tests | green |
+| `ada9fb7` `/programs/{id}/stats` endpoint + `?programId=` | **written, not compiled** (API build lock) |
+| `ada9fb7` migration | **not created** — needs the API stopped |
+| `373289a` Overview tab UI | shipped, 62 frontend tests, build clean |
+
+**To finish Phase 4a**, once the dev API is stopped:
+
+```bash
+taskkill /PID 8512 /F        # or Ctrl-C in its terminal
+cd backend
+dotnet ef migrations add AddSessionSourceProgram --project MySelf.Infrastructure --startup-project MySelf.Api
+#  -> then paste the backfill UPDATE (above) into the new migration's Up()
+dotnet test MySelf.sln
+dotnet run --project MySelf.Api
+```
