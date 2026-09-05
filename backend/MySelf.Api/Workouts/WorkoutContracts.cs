@@ -228,6 +228,14 @@ public sealed record WorkoutSessionListResult(
     int PageSize,
     int Total);
 
+/// <summary>Completed sessions on one local calendar date (docs/04 §12 /workout-calendar).</summary>
+public sealed record CalendarDay(DateOnly Date, IReadOnlyList<WorkoutSessionListItem> Sessions);
+
+public sealed record WorkoutCalendarResult(DateOnly From, DateOnly To, IReadOnlyList<CalendarDay> Days);
+
+/// <summary>Correct which local date a completed session counts against (docs/01 §3 Story 3A).</summary>
+public sealed record RescheduleSessionRequest(DateOnly LocalDate);
+
 public sealed record ExerciseLogDetail(
     Guid Id,
     Guid ExerciseId,

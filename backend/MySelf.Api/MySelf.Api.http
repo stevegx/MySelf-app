@@ -511,3 +511,20 @@ DELETE {{MySelf.Api_HostAddress}}/api/v1/workout-sessions/SESSION_ID/exercises/E
 Authorization: Bearer {{accessToken}}
 
 ###
+
+# --- calendar (Phase 3) ---
+
+# Completed sessions in a date range, grouped by local performed-date
+GET {{MySelf.Api_HostAddress}}/api/v1/workout-calendar?from=2026-09-01&to=2026-09-30
+Authorization: Bearer {{accessToken}}
+
+###
+
+# Correct which local date a completed session counts against (409 if not completed)
+POST {{MySelf.Api_HostAddress}}/api/v1/workout-sessions/SESSION_ID/reschedule
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{ "localDate": "2026-09-12" }
+
+###

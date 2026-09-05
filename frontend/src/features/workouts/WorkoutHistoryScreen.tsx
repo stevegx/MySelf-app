@@ -51,10 +51,15 @@ export function WorkoutHistoryScreen() {
         title="Workout history"
         subtitle="Sessions you've completed, most recent first."
         actions={
-          <Button variant="ghost" onClick={() => navigate("/workouts/builder")}>
-            <ChevronLeft size={15} aria-hidden />
-            Programs
-          </Button>
+          <>
+            <Button variant="ghost" onClick={() => navigate("/workouts/calendar")}>
+              Calendar
+            </Button>
+            <Button variant="ghost" onClick={() => navigate("/workouts/builder")}>
+              <ChevronLeft size={15} aria-hidden />
+              Programs
+            </Button>
+          </>
         }
       />
 

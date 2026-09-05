@@ -580,6 +580,57 @@ public class WorkoutSessionEndpointTests(WebApplicationFactory<Program> factory,
     }
 
     [Fact]
+    public async Task Completed_session_appears_on_the_calendar_and_can_be_rescheduled()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (dayId, _) = await CreateWeightRepsDayAsync(client);
+            var (sessionId, setId) = await StartAndGetFirstSetAsync(client, dayId);
+            await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/set-logs",
+                new { setLogId = setId, weightKg = 100.0, reps = 5, reachedFailure = false });
+            await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/complete",
+                new { localDate = "2026-09-10", notes = (string?)null });
+
+            var cal = await client.GetFromJsonAsync<JsonElement>("/api/v1/workout-calendar?from=2026-09-01&to=2026-09-30");
+            var day = cal.GetProperty("days").EnumerateArray().Single();
+            Assert.Equal("2026-09-10", day.GetProperty("date").GetString());
+            Assert.Equal(sessionId, day.GetProperty("sessions")[0].GetProperty("id").GetGuid());
+
+            var moved = await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/reschedule",
+                new { localDate = "2026-09-12" });
+            Assert.Equal(HttpStatusCode.OK, moved.StatusCode);
+
+            var cal2 = await client.GetFromJsonAsync<JsonElement>("/api/v1/workout-calendar?from=2026-09-01&to=2026-09-30");
+            var day2 = cal2.GetProperty("days").EnumerateArray().Single();
+            Assert.Equal("2026-09-12", day2.GetProperty("date").GetString());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Rescheduling_an_in_progress_session_is_rejected()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var start = await client.PostAsJsonAsync("/api/v1/workout-sessions", new { dayId = (Guid?)null });
+            var sessionId = (await start.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+            var moved = await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/reschedule",
+                new { localDate = "2026-09-12" });
+            Assert.Equal(HttpStatusCode.Conflict, moved.StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
     public async Task History_only_lists_your_own_sessions()
     {
         var (owner, ownerEmail) = await factory.RegisterAndAuthenticateAsync();

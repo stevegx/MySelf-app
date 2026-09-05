@@ -13,6 +13,7 @@ import { DashboardScreen } from "../features/dashboard/DashboardScreen";
 import { WorkoutBuilderScreen } from "../features/workouts/WorkoutBuilderScreen";
 import { ActiveWorkoutScreen } from "../features/workouts/ActiveWorkoutScreen";
 import { WorkoutHistoryScreen } from "../features/workouts/WorkoutHistoryScreen";
+import { WorkoutCalendarScreen } from "../features/workouts/WorkoutCalendarScreen";
 import { NutritionScreen } from "../features/nutrition/NutritionScreen";
 import { AddFoodScreen } from "../features/nutrition/AddFoodScreen";
 import { ProgressScreen } from "../features/progress/ProgressScreen";
@@ -57,6 +58,7 @@ export const router = createBrowserRouter([
               { path: "workouts/builder", element: <WorkoutBuilderScreen /> },
               { path: "workouts/active", element: <ActiveWorkoutScreen /> },
               { path: "workouts/history", element: <WorkoutHistoryScreen /> },
+              { path: "workouts/calendar", element: <WorkoutCalendarScreen /> },
               { path: "nutrition", element: <NutritionScreen /> },
               { path: "nutrition/add", element: <AddFoodScreen /> },
               { path: "progress", element: <ProgressScreen /> },

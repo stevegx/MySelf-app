@@ -32,8 +32,89 @@ public static class WorkoutSessionEndpoints
         sessions.MapDelete("/{id:guid}/exercises/{exerciseLogId:guid}", RemoveExerciseAsync).WithName("RemoveSessionExercise");
         sessions.MapPost("/{id:guid}/complete", CompleteAsync).WithName("CompleteWorkoutSession");
         sessions.MapPost("/{id:guid}/discard", DiscardAsync).WithName("DiscardWorkoutSession");
+        sessions.MapPost("/{id:guid}/reschedule", RescheduleAsync).WithName("RescheduleWorkoutSession");
+
+        app.MapGet("/api/v1/workout-calendar", CalendarAsync)
+            .WithName("WorkoutCalendar")
+            .RequireAuthorization();
 
         return app;
+    }
+
+    private static async Task<IResult> CalendarAsync(
+        HttpContext http,
+        MySelfDbContext db,
+        CancellationToken ct,
+        DateOnly? from = null,
+        DateOnly? to = null)
+    {
+        if (!http.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var start = from ?? today.AddDays(-42);
+        var end = to ?? today;
+        if (end < start)
+        {
+            (start, end) = (end, start);
+        }
+
+        var rows = await db.OwnedSessions(userId)
+            .AsNoTracking()
+            .Include(s => s.ExerciseLogs).ThenInclude(e => e.Sets)
+            .Where(s => s.Status == SessionStatus.Completed
+                && s.PerformedOnLocalDate >= start
+                && s.PerformedOnLocalDate <= end)
+            .ToListAsync(ct);
+
+        var days = rows
+            .GroupBy(s => s.PerformedOnLocalDate!.Value)
+            .OrderBy(g => g.Key)
+            .Select(g => new CalendarDay(
+                g.Key,
+                g.OrderBy(s => s.StartedAt)
+                    .Select(s => new WorkoutSessionListItem(
+                        s.Id, s.DayName, s.ProgramName, s.Status.ToString(),
+                        s.StartedAt, s.CompletedAt, s.PerformedOnLocalDate, ToSummary(s)))
+                    .ToList()))
+            .ToList();
+
+        return Results.Ok(new WorkoutCalendarResult(start, end, days));
+    }
+
+    private static async Task<IResult> RescheduleAsync(
+        Guid id,
+        RescheduleSessionRequest request,
+        HttpContext http,
+        MySelfDbContext db,
+        CancellationToken ct)
+    {
+        if (!http.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var session = await db.OwnedSessions(userId)
+            .Include(s => s.ExerciseLogs).ThenInclude(e => e.Sets)
+            .FirstOrDefaultAsync(s => s.Id == id, ct);
+        if (session is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (session.Status != SessionStatus.Completed)
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "Session is not completed",
+                detail: "Only a completed session has a calendar date to move.");
+        }
+
+        session.PerformedOnLocalDate = request.LocalDate;
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(ToDetail(session));
     }
 
     private static async Task<IResult> StartAsync(

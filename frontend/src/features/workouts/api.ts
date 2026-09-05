@@ -215,6 +215,9 @@ export type WorkoutSessionListResult = {
   total: number;
 };
 
+export type CalendarDay = { date: string; sessions: WorkoutSessionListItem[] };
+export type WorkoutCalendarResult = { from: string; to: string; days: CalendarDay[] };
+
 export type LogSetBody = {
   setLogId: string;
   weightKg?: number | null;
@@ -452,6 +455,35 @@ export function useStrengthAnalytics(exerciseId: string | null, range: string) {
         { accessToken },
       ),
     enabled: accessToken != null && exerciseId != null,
+  });
+}
+
+/** Completed sessions between two ISO dates, grouped by local performed-date. */
+export function useWorkoutCalendar(from: string, to: string) {
+  const accessToken = useToken();
+  return useQuery({
+    queryKey: ["workout-calendar", from, to],
+    queryFn: () =>
+      apiFetch<WorkoutCalendarResult>(`/api/v1/workout-calendar?from=${from}&to=${to}`, { accessToken }),
+    enabled: accessToken != null,
+  });
+}
+
+/** Correct the local date a completed session counts against. */
+export function useRescheduleSession() {
+  const accessToken = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sessionId, localDate }: { sessionId: string; localDate: string }) =>
+      apiFetch<WorkoutSessionDetail>(`/api/v1/workout-sessions/${sessionId}/reschedule`, {
+        method: "POST",
+        body: { localDate },
+        accessToken,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["workout-calendar"] });
+      qc.invalidateQueries({ queryKey: ["workout-session"] });
+    },
   });
 }
 
