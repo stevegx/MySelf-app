@@ -52,6 +52,7 @@ function sessionWithOneSet(overrides: Partial<Record<string, unknown>> = {}) {
     performedOnLocalDate: null,
     notes: null,
     summary: SUMMARY,
+    newPersonalRecords: [],
     exercises: [
       {
         id: "e1",
@@ -104,11 +105,20 @@ function installFetch(opts: { active?: unknown } = {}) {
         ? Promise.resolve(new Response(null, { status: 404 }))
         : json(opts.active);
     }
+    if (url.includes("/history")) {
+      return json({ exerciseId: "x1", exerciseName: "Back Squat", personalRecords: [], sessions: [] });
+    }
     if (url.endsWith("/set-logs") && method === "POST") {
       return json({ id: "set1", completedAt: "2026-09-04T09:05:00Z", skippedAt: null });
     }
     if (url.endsWith("/complete") && method === "POST") {
-      return json({ ...sessionWithOneSet(), status: "Completed" });
+      return json({
+        ...sessionWithOneSet(),
+        status: "Completed",
+        completedAt: "2026-09-04T10:00:00Z",
+        summary: { durationSeconds: 3600, completedSetCount: 1, skippedSetCount: 0, totalReps: 8, totalVolumeKg: 800 },
+        newPersonalRecords: [{ type: "HeaviestWeight", value: 100, weightKg: 100, reps: 8, achievedOn: "2026-09-04" }],
+      });
     }
     return Promise.resolve(new Response(null, { status: 404 }));
   });
@@ -171,6 +181,11 @@ describe("ActiveWorkoutScreen", () => {
     const completeCall = fetchSpy.mock.calls.find(([u, i]) => String(u).endsWith("/complete") && i?.method === "POST");
     expect(completeCall).toBeTruthy();
     expect(JSON.parse((completeCall![1] as RequestInit).body as string)).toHaveProperty("localDate");
+
+    // Completion panel: summary + the new PR, then "View history".
+    expect(await screen.findByText("Workout complete")).toBeInTheDocument();
+    expect(screen.getByText(/Heaviest weight/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "View history" }));
     expect(await screen.findByText("History screen")).toBeInTheDocument();
   });
 

@@ -6,10 +6,11 @@ import {
   useActiveSession,
   useCompleteSession,
   useDiscardSession,
+  useExerciseHistory,
   useLogSet,
   useSkipSet,
 } from "./api";
-import type { ExerciseLogDetail, LogSetBody, SetLogDetail } from "./api";
+import type { ExerciseLogDetail, LogSetBody, SetLogDetail, WorkoutSessionDetail } from "./api";
 import { useConfirm } from "./useConfirm";
 
 function targetLabel(set: SetLogDetail) {
@@ -149,6 +150,9 @@ function SetRow({
 
 function ExerciseCard({ sessionId, exercise }: { sessionId: string; exercise: ExerciseLogDetail }) {
   const doneCount = exercise.sets.filter((s) => s.completedAt || s.skippedAt).length;
+  const { data: history } = useExerciseHistory(exercise.exerciseId);
+  const prev = history?.sessions.find((s) => s.sessionId !== sessionId && s.topSetWeightKg != null);
+
   return (
     <div className="mb-4">
       <CardKicker>{exercise.trackingMode.replace(/([A-Z])/g, " $1").trim()}</CardKicker>
@@ -159,6 +163,12 @@ function ExerciseCard({ sessionId, exercise }: { sessionId: string; exercise: Ex
             {doneCount}/{exercise.sets.length} sets
           </Tag>
         </div>
+        {prev && (
+          <p className="m-0 text-xs text-foreground-muted">
+            Previous: {prev.topSetWeightKg} kg × {prev.topSetReps} ·{" "}
+            {new Date(`${prev.performedOn}T00:00:00`).toLocaleDateString()}
+          </p>
+        )}
         <div className="flex flex-col gap-2">
           {exercise.sets.map((set, i) => (
             <SetRow
@@ -221,9 +231,13 @@ function RunningSession({
   const navigate = useNavigate();
   const complete = useCompleteSession(session.id);
   const discard = useDiscardSession(session.id);
+  const [finished, setFinished] = useState<WorkoutSessionDetail | null>(null);
 
-  const finish = () =>
-    complete.mutate(undefined, { onSuccess: () => navigate("/workouts/history") });
+  const finish = () => complete.mutate(undefined, { onSuccess: (data) => setFinished(data) });
+
+  if (finished) {
+    return <SessionComplete session={finished} onDone={() => navigate("/workouts/history")} />;
+  }
 
   const totalSets = session.exercises.reduce((n, e) => n + e.sets.length, 0);
   const actedSets = session.exercises.reduce(
@@ -285,6 +299,59 @@ function RunningSession({
           <ExerciseCard key={exercise.id} sessionId={session.id} exercise={exercise} />
         ))
       )}
+    </>
+  );
+}
+
+const PR_LABEL: Record<string, string> = {
+  HeaviestWeight: "Heaviest weight",
+  BestEstimatedOneRepMax: "New estimated 1RM",
+  MostRepsAtWeight: "Most reps at a weight",
+  BestExerciseVolume: "Highest exercise volume",
+};
+
+function SessionComplete({ session, onDone }: { session: WorkoutSessionDetail; onDone: () => void }) {
+  const s = session.summary;
+  const minutes = s.durationSeconds != null ? Math.round(s.durationSeconds / 60) : null;
+
+  return (
+    <>
+      <PageHeader title="Workout complete" subtitle={session.dayName ?? "Ad-hoc workout"} />
+      <Card className="mb-4 gap-2">
+        <CardKicker>Summary</CardKicker>
+        <div className="flex flex-wrap gap-2">
+          {minutes != null && <Tag tone="neutral">{minutes} min</Tag>}
+          <Tag tone="neutral">{s.completedSetCount} sets</Tag>
+          {s.skippedSetCount > 0 && <Tag tone="warning">{s.skippedSetCount} skipped</Tag>}
+          <Tag tone="neutral">{s.totalReps} reps</Tag>
+          {s.totalVolumeKg > 0 && <Tag tone="neutral">{Math.round(s.totalVolumeKg).toLocaleString()} kg volume</Tag>}
+        </div>
+      </Card>
+
+      {session.newPersonalRecords.length > 0 && (
+        <Card className="mb-4 gap-2">
+          <CardKicker>Personal records</CardKicker>
+          <div className="flex flex-col gap-1.5">
+            {session.newPersonalRecords.map((pr, i) => (
+              <div key={i} className="flex items-center gap-2 text-[13px]">
+                <Tag tone="success">PR</Tag>
+                <span>
+                  {PR_LABEL[pr.type] ?? pr.type}:{" "}
+                  <strong>
+                    {pr.type === "MostRepsAtWeight"
+                      ? `${pr.value} reps @ ${pr.weightKg} kg`
+                      : `${Math.round(pr.value * 10) / 10} kg`}
+                  </strong>
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <Button variant="primary" onClick={onDone}>
+        View history
+      </Button>
     </>
   );
 }

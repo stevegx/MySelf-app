@@ -161,7 +161,38 @@ public sealed record WorkoutSessionDetail(
     DateOnly? PerformedOnLocalDate,
     string? Notes,
     SessionSummary Summary,
+    IReadOnlyList<PersonalRecordDetail> NewPersonalRecords,
     IReadOnlyList<ExerciseLogDetail> Exercises);
+
+/// <summary>A personal best (docs/02 §7). Emitted by <c>complete</c> for records set this session, and by exercise history.</summary>
+public sealed record PersonalRecordDetail(
+    string Type,
+    decimal Value,
+    decimal? WeightKg,
+    int? Reps,
+    DateOnly AchievedOn);
+
+// --- exercise history / strength analytics ---
+
+public sealed record ExerciseHistoryResult(
+    Guid ExerciseId,
+    string ExerciseName,
+    IReadOnlyList<PersonalRecordDetail> PersonalRecords,
+    IReadOnlyList<ExerciseHistoryEntry> Sessions);
+
+public sealed record ExerciseHistoryEntry(
+    Guid SessionId,
+    DateOnly PerformedOn,
+    string? DayName,
+    decimal? TopSetWeightKg,
+    int? TopSetReps,
+    decimal? EstimatedOneRepMax,
+    decimal Volume,
+    int CompletedSets);
+
+public sealed record StrengthPoint(DateOnly Date, decimal? EstimatedOneRepMax, decimal Volume);
+
+public sealed record StrengthAnalyticsResult(Guid ExerciseId, string Range, IReadOnlyList<StrengthPoint> Points);
 
 /// <summary>Roll-up shown on the finish screen and in history (docs/02). PRs/e1RM come later.</summary>
 public sealed record SessionSummary(

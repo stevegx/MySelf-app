@@ -147,6 +147,20 @@ export type SessionSummary = {
   totalVolumeKg: number;
 };
 
+export type PersonalRecordType =
+  | "HeaviestWeight"
+  | "BestEstimatedOneRepMax"
+  | "MostRepsAtWeight"
+  | "BestExerciseVolume";
+
+export type PersonalRecordDetail = {
+  type: PersonalRecordType;
+  value: number;
+  weightKg: number | null;
+  reps: number | null;
+  achievedOn: string;
+};
+
 export type WorkoutSessionDetail = {
   id: string;
   sourceDayId: string | null;
@@ -158,8 +172,30 @@ export type WorkoutSessionDetail = {
   performedOnLocalDate: string | null;
   notes: string | null;
   summary: SessionSummary;
+  newPersonalRecords: PersonalRecordDetail[];
   exercises: ExerciseLogDetail[];
 };
+
+export type ExerciseHistoryEntry = {
+  sessionId: string;
+  performedOn: string;
+  dayName: string | null;
+  topSetWeightKg: number | null;
+  topSetReps: number | null;
+  estimatedOneRepMax: number | null;
+  volume: number;
+  completedSets: number;
+};
+
+export type ExerciseHistoryResult = {
+  exerciseId: string;
+  exerciseName: string;
+  personalRecords: PersonalRecordDetail[];
+  sessions: ExerciseHistoryEntry[];
+};
+
+export type StrengthPoint = { date: string; estimatedOneRepMax: number | null; volume: number };
+export type StrengthAnalyticsResult = { exerciseId: string; range: string; points: StrengthPoint[] };
 
 export type WorkoutSessionListItem = {
   id: string;
@@ -388,6 +424,34 @@ export function useStartSession() {
     mutationFn: (dayId: string | null) =>
       apiFetch<WorkoutSessionDetail>("/api/v1/workout-sessions", { method: "POST", body: { dayId }, accessToken }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["workout-session"] }),
+  });
+}
+
+/** Per-exercise history: current PRs + one entry per completed session it appears in. */
+export function useExerciseHistory(exerciseId: string | null, dayId?: string) {
+  const accessToken = useToken();
+  return useQuery({
+    queryKey: ["exercise-history", exerciseId, dayId ?? null],
+    queryFn: () =>
+      apiFetch<ExerciseHistoryResult>(
+        `/api/v1/exercises/${exerciseId}/history${dayId ? `?dayId=${dayId}` : ""}`,
+        { accessToken },
+      ),
+    enabled: accessToken != null && exerciseId != null,
+  });
+}
+
+/** e1RM + volume trend for one exercise over a range ("30d" | "90d" | "1y" | "all"). */
+export function useStrengthAnalytics(exerciseId: string | null, range: string) {
+  const accessToken = useToken();
+  return useQuery({
+    queryKey: ["strength-analytics", exerciseId, range],
+    queryFn: () =>
+      apiFetch<StrengthAnalyticsResult>(
+        `/api/v1/analytics/strength?exerciseId=${exerciseId}&range=${range}`,
+        { accessToken },
+      ),
+    enabled: accessToken != null && exerciseId != null,
   });
 }
 

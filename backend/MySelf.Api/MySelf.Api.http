@@ -462,3 +462,17 @@ GET {{MySelf.Api_HostAddress}}/api/v1/workout-sessions?status=InProgress
 Authorization: Bearer {{accessToken}}
 
 ###
+
+# --- strength (Phase 3) ---
+
+# Per-exercise history: current PRs + one entry per completed session
+GET {{MySelf.Api_HostAddress}}/api/v1/exercises/EXERCISE_ID/history
+Authorization: Bearer {{accessToken}}
+
+###
+
+# e1RM + volume trend for charting  (range: 30d | 90d | 1y | all)
+GET {{MySelf.Api_HostAddress}}/api/v1/analytics/strength?exerciseId=EXERCISE_ID&range=90d
+Authorization: Bearer {{accessToken}}
+
+###

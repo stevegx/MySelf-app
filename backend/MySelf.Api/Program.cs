@@ -184,6 +184,7 @@ app.MapExerciseEndpoints();
 app.MapProgramEndpoints();
 app.MapWorkoutDayEndpoints();
 app.MapWorkoutSessionEndpoints();
+app.MapStrengthEndpoints();
 
 app.Run();
 

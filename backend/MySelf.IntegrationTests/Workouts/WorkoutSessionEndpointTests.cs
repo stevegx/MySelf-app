@@ -409,6 +409,87 @@ public class WorkoutSessionEndpointTests(WebApplicationFactory<Program> factory,
         }
     }
 
+    private async Task<(Guid DayId, Guid ExerciseId)> CreateWeightRepsDayAsync(HttpClient client)
+    {
+        Guid exerciseId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<MySelfDbContext>();
+            exerciseId = await db.Exercises
+                .Where(e => e.DefaultTrackingMode == MySelf.Domain.Exercises.TrackingMode.WeightAndReps)
+                .OrderBy(e => e.Name)
+                .Select(e => e.Id)
+                .FirstAsync();
+        }
+
+        var programId = (await (await client.PostAsJsonAsync("/api/v1/programs", new { name = "S" })).Content
+            .ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var dayId = (await (await client.PostAsJsonAsync($"/api/v1/programs/{programId}/days", new { name = "Day" })).Content
+            .ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        var put = await client.PutAsJsonAsync($"/api/v1/workout-days/{dayId}", new
+        {
+            exercises = new[]
+            {
+                new
+                {
+                    exerciseId, sortOrder = 0, supersetRef = (string?)null, supersetMemberOrder = 0,
+                    restSeconds = (int?)null, notes = (string?)null,
+                    sets = new[]
+                    {
+                        new { sortOrder = 0, kind = "Standard", isAmrap = false, targetToFailure = false, targetRepsMin = (int?)5, targetRepsMax = (int?)5, targetWeightKg = (double?)100.0, targetRir = (int?)null },
+                    },
+                },
+            },
+            supersets = Array.Empty<object>(),
+        });
+        put.EnsureSuccessStatusCode();
+        return (dayId, exerciseId);
+    }
+
+    private static async Task<(Guid SessionId, Guid SetId)> StartAndGetFirstSetAsync(HttpClient client, Guid dayId)
+    {
+        var start = await client.PostAsJsonAsync("/api/v1/workout-sessions", new { dayId });
+        start.EnsureSuccessStatusCode();
+        var detail = await start.Content.ReadFromJsonAsync<JsonElement>();
+        return (
+            detail.GetProperty("id").GetGuid(),
+            detail.GetProperty("exercises")[0].GetProperty("sets")[0].GetProperty("id").GetGuid());
+    }
+
+    [Fact]
+    public async Task Completing_reports_new_personal_records_and_they_show_in_exercise_history()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (dayId, exerciseId) = await CreateWeightRepsDayAsync(client);
+            var (sessionId, setId) = await StartAndGetFirstSetAsync(client, dayId);
+
+            await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/set-logs",
+                new { setLogId = setId, weightKg = 120.0, reps = 5, reachedFailure = false });
+
+            var completed = await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/complete",
+                new { localDate = "2026-09-05", notes = (string?)null });
+            var body = await completed.Content.ReadFromJsonAsync<JsonElement>();
+            var prs = body.GetProperty("newPersonalRecords").EnumerateArray().ToList();
+            Assert.Contains(prs, p => p.GetProperty("type").GetString() == "HeaviestWeight" && p.GetProperty("value").GetDecimal() == 120m);
+
+            var history = await client.GetFromJsonAsync<JsonElement>($"/api/v1/exercises/{exerciseId}/history");
+            Assert.True(history.GetProperty("personalRecords").GetArrayLength() >= 1);
+            var firstSession = history.GetProperty("sessions").EnumerateArray().First();
+            Assert.Equal(sessionId, firstSession.GetProperty("sessionId").GetGuid());
+            Assert.True(firstSession.GetProperty("estimatedOneRepMax").GetDecimal() > 120m);
+
+            var trend = await client.GetFromJsonAsync<JsonElement>($"/api/v1/analytics/strength?exerciseId={exerciseId}&range=all");
+            Assert.Equal(1, trend.GetProperty("points").GetArrayLength());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
     [Fact]
     public async Task History_only_lists_your_own_sessions()
     {

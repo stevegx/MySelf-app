@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using MySelf.Domain.Exercises;
 using MySelf.Domain.Workouts;
 using MySelf.Infrastructure.Persistence;
 using static MySelf.Api.Workouts.ProgramEndpoints;
@@ -297,9 +298,54 @@ public static class WorkoutSessionEndpoints
         session.PerformedOnLocalDate = request.LocalDate ?? DateOnly.FromDateTime(now.UtcDateTime);
         session.Notes = Trimmed(request.Notes);
 
+        // PRs are computed here, exactly once (docs/02: "finish calculates summary and PRs").
+        var newPrs = await DetectPersonalRecordsAsync(db, userId, session, now, ct);
+        db.PersonalRecords.AddRange(newPrs);
+
         await db.SaveChangesAsync(ct);
-        return Results.Ok(ToDetail(session));
+        return Results.Ok(ToDetail(session, newPrs.Select(ToPrDetail).ToList()));
     }
+
+    /// <summary>
+    /// For each weight-and-reps exercise in the just-finished session, compares its completed
+    /// sets against the user's stored PRs for that exercise and returns the new records.
+    /// </summary>
+    private static async Task<List<PersonalRecord>> DetectPersonalRecordsAsync(
+        MySelfDbContext db, Guid userId, WorkoutSession session, DateTimeOffset now, CancellationToken ct)
+    {
+        var performedOn = session.PerformedOnLocalDate ?? DateOnly.FromDateTime(now.UtcDateTime);
+        var result = new List<PersonalRecord>();
+
+        var weightRepsExercises = session.ExerciseLogs
+            .Where(e => e.TrackingMode == TrackingMode.WeightAndReps)
+            .GroupBy(e => e.ExerciseId);
+
+        foreach (var group in weightRepsExercises)
+        {
+            var lifts = group
+                .SelectMany(e => e.Sets)
+                .Where(s => s.CompletedAt is not null && s.WeightKg is not null && s.Reps is not null)
+                .Select(s => new CompletedLift(s.Id, s.WeightKg!.Value, s.Reps!.Value))
+                .ToList();
+
+            if (lifts.Count == 0)
+            {
+                continue;
+            }
+
+            var existing = await db.PersonalRecords
+                .Where(p => p.UserId == userId && p.ExerciseId == group.Key)
+                .ToListAsync(ct);
+
+            result.AddRange(PersonalRecordDetector.Detect(
+                userId, group.Key, session.Id, performedOn, now, lifts, existing));
+        }
+
+        return result;
+    }
+
+    private static PersonalRecordDetail ToPrDetail(PersonalRecord p) =>
+        new(p.Type.ToString(), p.Value, p.WeightKg, p.Reps, p.AchievedOn);
 
     private static async Task<IResult> DiscardAsync(Guid id, HttpContext http, MySelfDbContext db, TimeProvider clock, CancellationToken ct)
     {
@@ -380,7 +426,7 @@ public static class WorkoutSessionEndpoints
         TargetRir = s.TargetRir,
     };
 
-    private static WorkoutSessionDetail ToDetail(WorkoutSession s) => new(
+    private static WorkoutSessionDetail ToDetail(WorkoutSession s, IReadOnlyList<PersonalRecordDetail>? newPrs = null) => new(
         s.Id,
         s.SourceDayId,
         s.DayName,
@@ -391,6 +437,7 @@ public static class WorkoutSessionEndpoints
         s.PerformedOnLocalDate,
         s.Notes,
         ToSummary(s),
+        newPrs ?? [],
         s.ExerciseLogs
             .OrderBy(e => e.SortOrder)
             .Select(e => new ExerciseLogDetail(
