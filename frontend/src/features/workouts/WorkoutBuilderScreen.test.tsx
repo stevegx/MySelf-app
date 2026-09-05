@@ -88,6 +88,39 @@ describe("WorkoutBuilderScreen", () => {
     expect(await screen.findAllByRole("button", { name: "Drag to reorder" })).toHaveLength(2);
   });
 
+  it("multi-selects programs and bulk-deletes them", async () => {
+    const list = [
+      { id: "p1", name: "Alpha", splitLabel: null, isActive: false, dayCount: 0, exerciseCount: 0, createdAt: "2026-09-02T00:00:00Z" },
+      { id: "p2", name: "Beta", splitLabel: null, isActive: false, dayCount: 0, exerciseCount: 0, createdAt: "2026-09-02T00:00:00Z" },
+    ];
+    const spy = vi.fn<typeof fetch>((input, init) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const json = (d: unknown, s = 200) =>
+        Promise.resolve(new Response(JSON.stringify(d), { status: s, headers: { "content-type": "application/json" } }));
+      if (url.includes("/auth/refresh"))
+        return json({ accessToken: "t", user: { id: "u1", username: "demo", email: "d@e.com" } });
+      if (url.match(/\/api\/v1\/programs\/p[12]$/) && init?.method === "DELETE")
+        return Promise.resolve(new Response(null, { status: 204 }));
+      if (url.endsWith("/api/v1/programs")) return json(list);
+      return Promise.resolve(new Response(null, { status: 404 }));
+    });
+    vi.stubGlobal("fetch", spy);
+    const user = userEvent.setup();
+
+    renderScreen();
+    await screen.findByText("Alpha");
+    await user.click(screen.getByRole("button", { name: "Select" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select Alpha" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select Beta" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await user.click(await screen.findByRole("button", { name: "Delete 2" })); // dialog confirm
+
+    await vi.waitFor(() => {
+      const deletes = spy.mock.calls.filter(([u, i]) => /\/programs\/p[12]$/.test(String(u)) && i?.method === "DELETE");
+      expect(deletes).toHaveLength(2);
+    });
+  });
+
   it("hard-deletes a program via DELETE after confirming", async () => {
     const populated = {
       id: "p1",

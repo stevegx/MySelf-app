@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { ChevronLeft, Plus, Play } from "lucide-react";
 import { ApiError } from "../../lib/api";
-import { Button, Card, CardKicker, Input, PageHeader } from "../../components/ui";
+import { cn } from "../../lib/cn";
+import { Button, Card, CardKicker, Checkbox, Input, PageHeader } from "../../components/ui";
 import { SortableList } from "./SortableList";
 import { DayEditor } from "./DayEditor";
 import { useConfirm } from "./useConfirm";
@@ -66,8 +67,25 @@ function ProgramList({ onOpen }: { onOpen: (id: string) => void }) {
   const { data: programs, isLoading } = usePrograms();
   const create = useCreateProgram();
   const startWorkout = useStartWorkout();
+  const m = useMutateProgram(null);
+  const { confirm, dialog } = useConfirm();
   const [name, setName] = useState("");
   const [splitLabel, setSplitLabel] = useState("");
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const toggle = (id: string) =>
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const exitSelect = () => {
+    setSelecting(false);
+    setSelected(new Set());
+  };
 
   async function onCreate() {
     if (!name.trim()) return;
@@ -77,53 +95,137 @@ function ProgramList({ onOpen }: { onOpen: (id: string) => void }) {
     onOpen(created.id);
   }
 
+  async function deleteSelected() {
+    const ids = [...selected];
+    if (
+      await confirm({
+        title: `Delete ${ids.length} program${ids.length > 1 ? "s" : ""}?`,
+        message: "This can't be undone. Workouts you already logged from them are kept.",
+        confirmLabel: `Delete ${ids.length}`,
+      })
+    ) {
+      await Promise.all(ids.map((id) => m.remove.mutateAsync(id).catch(() => {})));
+      exitSelect();
+    }
+  }
+
+  async function duplicateSelected() {
+    const ids = [...selected];
+    await Promise.all(ids.map((id) => m.clone.mutateAsync(id).catch(() => {})));
+    exitSelect();
+  }
+
+  const busy = m.remove.isPending || m.clone.isPending;
+
   return (
     <>
+      {dialog}
       <PageHeader
         title="Workout programs"
         subtitle="Build the workouts you train from. No fixed days."
         actions={
-          <Button variant="secondary" onClick={() => startWorkout(null)}>
-            <Play size={14} aria-hidden />
-            Start ad-hoc workout
-          </Button>
+          <>
+            {programs && programs.length > 0 && (
+              <Button variant="ghost" onClick={() => (selecting ? exitSelect() : setSelecting(true))}>
+                {selecting ? "Cancel" : "Select"}
+              </Button>
+            )}
+            <Button variant="secondary" onClick={() => startWorkout(null)}>
+              <Play size={14} aria-hidden />
+              Start ad-hoc workout
+            </Button>
+          </>
         }
       />
 
-      <Card className="mb-4 gap-2">
-        <CardKicker>New program</CardKicker>
-        <div className="flex flex-wrap gap-2">
-          <Input placeholder="Program name (e.g. PPL)" value={name} onChange={(e) => setName(e.target.value)} className="max-w-[220px]" />
-          <Input placeholder="Split label (optional)" value={splitLabel} onChange={(e) => setSplitLabel(e.target.value)} className="max-w-[220px]" />
-          <Button variant="primary" onClick={onCreate} disabled={create.isPending || !name.trim()}>
-            Create
+      {selecting && selected.size > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-control border border-border bg-surface-subtle px-3 py-2 text-[13px]">
+          <span className="font-semibold">{selected.size} selected</span>
+          <Button variant="secondary" size="sm" onClick={duplicateSelected} disabled={busy}>
+            Duplicate
+          </Button>
+          <Button variant="danger" size="sm" onClick={deleteSelected} disabled={busy}>
+            Delete
           </Button>
         </div>
-      </Card>
+      )}
+
+      {!selecting && (
+        <Card className="mb-4 gap-2">
+          <CardKicker>New program</CardKicker>
+          <div className="flex flex-wrap gap-2">
+            <Input placeholder="Program name (e.g. PPL)" value={name} onChange={(e) => setName(e.target.value)} className="max-w-[220px]" />
+            <Input placeholder="Split label (optional)" value={splitLabel} onChange={(e) => setSplitLabel(e.target.value)} className="max-w-[220px]" />
+            <Button variant="primary" onClick={onCreate} disabled={create.isPending || !name.trim()}>
+              Create
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {isLoading ? (
         <p className="text-sm text-foreground-muted">Loading…</p>
       ) : programs && programs.length > 0 ? (
         <div className="flex flex-col gap-2">
           {programs.map((p) => (
-            <button
+            <div
               key={p.id}
-              onClick={() => onOpen(p.id)}
-              className="flex items-center justify-between rounded-card border border-border bg-surface px-4 py-3 text-left hover:border-border-strong"
-            >
-              <span>
-                <span className="font-bold">{p.name}</span>
-                {p.splitLabel ? <span className="ml-2 text-xs text-foreground-muted">{p.splitLabel}</span> : null}
-                <span className="ml-2 text-xs text-foreground-muted">
-                  {p.dayCount} days · {p.exerciseCount} exercises
-                </span>
-              </span>
-              {p.isActive ? (
-                <span className="rounded-full bg-success-soft px-2 py-0.5 text-xs font-semibold text-success">Active</span>
-              ) : (
-                <span className="text-xs text-foreground-muted">Draft</span>
+              className={cn(
+                "flex items-center gap-3 rounded-card border bg-surface px-4 py-3",
+                selecting && selected.has(p.id) ? "border-primary bg-primary-soft" : "border-border",
               )}
-            </button>
+            >
+              {selecting && (
+                <Checkbox
+                  label=""
+                  checked={selected.has(p.id)}
+                  onChange={() => toggle(p.id)}
+                  aria-label={`Select ${p.name}`}
+                />
+              )}
+              <button
+                onClick={() => (selecting ? toggle(p.id) : onOpen(p.id))}
+                className="flex flex-1 items-center justify-between text-left"
+              >
+                <span>
+                  <span className="font-bold">{p.name}</span>
+                  {p.splitLabel ? <span className="ml-2 text-xs text-foreground-muted">{p.splitLabel}</span> : null}
+                  <span className="ml-2 text-xs text-foreground-muted">
+                    {p.dayCount} days · {p.exerciseCount} exercises
+                  </span>
+                </span>
+                {p.isActive ? (
+                  <span className="rounded-full bg-success-soft px-2 py-0.5 text-xs font-semibold text-success">Active</span>
+                ) : (
+                  <span className="text-xs text-foreground-muted">Draft</span>
+                )}
+              </button>
+              {!selecting && (
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="sm" onClick={() => m.clone.mutate(p.id)} disabled={busy}>
+                    Duplicate
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    onClick={async () => {
+                      if (
+                        await confirm({
+                          title: `Delete "${p.name}"?`,
+                          message: "This can't be undone. Workouts you already logged from it are kept.",
+                          confirmLabel: "Delete",
+                        })
+                      ) {
+                        m.remove.mutate(p.id);
+                      }
+                    }}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              )}
+            </div>
           ))}
         </div>
       ) : (
