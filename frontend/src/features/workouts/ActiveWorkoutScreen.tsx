@@ -8,10 +8,14 @@ import {
   useDiscardSession,
   useExerciseHistory,
   useLogSet,
+  useSessionExercises,
   useSkipSet,
 } from "./api";
 import type { ExerciseLogDetail, LogSetBody, SetLogDetail, WorkoutSessionDetail } from "./api";
+import { ExercisePicker } from "./ExercisePicker";
 import { useConfirm } from "./useConfirm";
+
+type SessionOps = ReturnType<typeof useSessionExercises>;
 
 function targetLabel(set: SetLogDetail) {
   const reps =
@@ -148,10 +152,22 @@ function SetRow({
   );
 }
 
-function ExerciseCard({ sessionId, exercise }: { sessionId: string; exercise: ExerciseLogDetail }) {
+function ExerciseCard({
+  sessionId,
+  exercise,
+  ops,
+}: {
+  sessionId: string;
+  exercise: ExerciseLogDetail;
+  ops: SessionOps;
+}) {
   const doneCount = exercise.sets.filter((s) => s.completedAt || s.skippedAt).length;
   const { data: history } = useExerciseHistory(exercise.exerciseId);
   const prev = history?.sessions.find((s) => s.sessionId !== sessionId && s.topSetWeightKg != null);
+  const [replacing, setReplacing] = useState<{ exerciseId: string; name: string } | null>(null);
+  const [picking, setPicking] = useState(false);
+  const canRemove = exercise.sets.every((s) => s.completedAt == null);
+  const busy = ops.replace.isPending || ops.addSet.isPending || ops.remove.isPending;
 
   return (
     <div className="mb-4">
@@ -181,6 +197,65 @@ function ExerciseCard({ sessionId, exercise }: { sessionId: string; exercise: Ex
             />
           ))}
         </div>
+
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          <Button variant="ghost" size="sm" onClick={() => ops.addSet.mutate(exercise.id)} disabled={busy}>
+            + Add set
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setPicking((p) => !p)} disabled={busy}>
+            Replace
+          </Button>
+          {canRemove && (
+            <Button variant="ghost" size="sm" onClick={() => ops.remove.mutate(exercise.id)} disabled={busy}>
+              Remove
+            </Button>
+          )}
+        </div>
+
+        {picking && !replacing && (
+          <ExercisePicker
+            existingIds={new Set()}
+            onClose={() => setPicking(false)}
+            onPick={(ex) => setReplacing({ exerciseId: ex.id, name: ex.name })}
+          />
+        )}
+
+        {replacing && (
+          <div className="rounded-control border border-border p-3 text-[13px]">
+            <p className="m-0 mb-2">
+              Replace <strong>{exercise.exerciseName}</strong> with <strong>{replacing.name}</strong>?
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  ops.replace.mutate(
+                    { exerciseLogId: exercise.id, exerciseId: replacing.exerciseId, scope: "TodayOnly" },
+                    { onSettled: () => { setReplacing(null); setPicking(false); } },
+                  );
+                }}
+              >
+                This workout only
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  ops.replace.mutate(
+                    { exerciseLogId: exercise.id, exerciseId: replacing.exerciseId, scope: "TodayAndFuture" },
+                    { onSettled: () => { setReplacing(null); setPicking(false); } },
+                  );
+                }}
+              >
+                Also update the day
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setReplacing(null)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   );
@@ -231,7 +306,9 @@ function RunningSession({
   const navigate = useNavigate();
   const complete = useCompleteSession(session.id);
   const discard = useDiscardSession(session.id);
+  const ops = useSessionExercises(session.id);
   const [finished, setFinished] = useState<WorkoutSessionDetail | null>(null);
+  const [addingExercise, setAddingExercise] = useState(false);
 
   const finish = () => complete.mutate(undefined, { onSuccess: (data) => setFinished(data) });
 
@@ -287,17 +364,30 @@ function RunningSession({
         </p>
       )}
 
-      {session.exercises.length === 0 ? (
-        <Card>
-          <p className="text-sm text-foreground-muted">
-            No exercises in this ad-hoc session. Adding exercises mid-workout is a later slice — you can
-            still finish it to put it on record.
+      {session.exercises.length === 0 && (
+        <Card className="mb-4">
+          <p className="m-0 text-sm text-foreground-muted">
+            No exercises yet — add one below, or finish to put the session on record.
           </p>
         </Card>
+      )}
+
+      {session.exercises.map((exercise) => (
+        <ExerciseCard key={exercise.id} sessionId={session.id} exercise={exercise} ops={ops} />
+      ))}
+
+      {addingExercise ? (
+        <Card>
+          <ExercisePicker
+            existingIds={new Set(session.exercises.map((e) => e.exerciseId))}
+            onClose={() => setAddingExercise(false)}
+            onPick={(ex) => ops.add.mutate(ex.id, { onSettled: () => setAddingExercise(false) })}
+          />
+        </Card>
       ) : (
-        session.exercises.map((exercise) => (
-          <ExerciseCard key={exercise.id} sessionId={session.id} exercise={exercise} />
-        ))
+        <Button variant="secondary" onClick={() => setAddingExercise(true)}>
+          + Add exercise
+        </Button>
       )}
     </>
   );

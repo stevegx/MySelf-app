@@ -26,6 +26,10 @@ public static class WorkoutSessionEndpoints
         sessions.MapGet("/{id:guid}", GetByIdAsync).WithName("GetWorkoutSession");
         sessions.MapPost("/{id:guid}/set-logs", LogSetAsync).WithName("LogWorkoutSet");
         sessions.MapPost("/{id:guid}/skip-set", SkipSetAsync).WithName("SkipWorkoutSet");
+        sessions.MapPost("/{id:guid}/exercises", AddExerciseAsync).WithName("AddSessionExercise");
+        sessions.MapPost("/{id:guid}/exercises/{exerciseLogId:guid}/replace", ReplaceExerciseAsync).WithName("ReplaceSessionExercise");
+        sessions.MapPost("/{id:guid}/exercises/{exerciseLogId:guid}/add-set", AddSetAsync).WithName("AddSessionSet");
+        sessions.MapDelete("/{id:guid}/exercises/{exerciseLogId:guid}", RemoveExerciseAsync).WithName("RemoveSessionExercise");
         sessions.MapPost("/{id:guid}/complete", CompleteAsync).WithName("CompleteWorkoutSession");
         sessions.MapPost("/{id:guid}/discard", DiscardAsync).WithName("DiscardWorkoutSession");
 
@@ -263,6 +267,197 @@ public static class WorkoutSessionEndpoints
 
         await db.SaveChangesAsync(ct);
         return Results.Ok(ToSetDetail(set));
+    }
+
+    private static async Task<IResult> AddExerciseAsync(
+        Guid id,
+        AddSessionExerciseRequest request,
+        HttpContext http,
+        MySelfDbContext db,
+        CancellationToken ct)
+    {
+        if (!http.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var session = await LoadInProgressForEditAsync(db, userId, id, ct);
+        if (session is null)
+        {
+            return await NotFoundOrConflict(db, userId, id, ct);
+        }
+
+        var exercise = await db.Exercises
+            .Where(e => e.Id == request.ExerciseId)
+            .Select(e => new { e.Name, e.DefaultTrackingMode })
+            .FirstOrDefaultAsync(ct);
+        if (exercise is null)
+        {
+            return Validation("exerciseId", "That exercise is not in the catalogue.");
+        }
+
+        var setCount = Math.Clamp(request.Sets ?? 3, 1, 20);
+        var log = new ExerciseLog
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            ExerciseId = request.ExerciseId,
+            ExerciseName = exercise.Name,
+            TrackingMode = exercise.DefaultTrackingMode,
+            SortOrder = session.ExerciseLogs.Count == 0 ? 0 : session.ExerciseLogs.Max(e => e.SortOrder) + 1,
+            Sets = Enumerable.Range(0, setCount)
+                .Select(i => new SetLog { Id = Guid.NewGuid(), SortOrder = i, Kind = SetKind.Standard })
+                .ToList(),
+        };
+        // Add through the DbSet (not the nav collection) so EF marks the graph Added even
+        // though session is already tracked and the keys are client-set. EF's relationship
+        // fixup then adds `log` to session.ExerciseLogs itself — doing both would duplicate it.
+        db.ExerciseLogs.Add(log);
+
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(ToDetail(session));
+    }
+
+    private static async Task<IResult> ReplaceExerciseAsync(
+        Guid id,
+        Guid exerciseLogId,
+        ReplaceSessionExerciseRequest request,
+        HttpContext http,
+        MySelfDbContext db,
+        CancellationToken ct)
+    {
+        if (!http.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var session = await LoadInProgressForEditAsync(db, userId, id, ct);
+        if (session is null)
+        {
+            return await NotFoundOrConflict(db, userId, id, ct);
+        }
+
+        var log = session.ExerciseLogs.FirstOrDefault(e => e.Id == exerciseLogId);
+        if (log is null)
+        {
+            return Results.NotFound();
+        }
+
+        var replacement = await db.Exercises
+            .Where(e => e.Id == request.ExerciseId)
+            .Select(e => new { e.Name, e.DefaultTrackingMode })
+            .FirstOrDefaultAsync(ct);
+        if (replacement is null)
+        {
+            return Validation("exerciseId", "That exercise is not in the catalogue.");
+        }
+
+        var futureToo = string.Equals(request.Scope, "TodayAndFuture", StringComparison.OrdinalIgnoreCase);
+
+        var originalExerciseId = log.ExerciseId;
+        log.ExerciseId = request.ExerciseId;
+        log.ExerciseName = replacement.Name;
+        log.TrackingMode = replacement.DefaultTrackingMode;
+
+        // Keep the set slots but wipe anything performed on the ones not yet completed.
+        foreach (var s in log.Sets.Where(s => s.CompletedAt is null && s.SkippedAt is null))
+        {
+            s.WeightKg = s.AddedWeightKg = s.AssistanceKg = s.DistanceMeters = null;
+            s.Reps = s.DurationSeconds = s.Rir = null;
+        }
+
+        if (futureToo && session.SourceDayId is { } dayId)
+        {
+            // Best-effort: update the first matching exercise on the source day.
+            var dayExercise = await db.DayExercises
+                .FirstOrDefaultAsync(de => de.DayId == dayId && de.ExerciseId == originalExerciseId, ct);
+            if (dayExercise is not null)
+            {
+                dayExercise.ExerciseId = request.ExerciseId;
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(ToDetail(session));
+    }
+
+    private static async Task<IResult> AddSetAsync(
+        Guid id,
+        Guid exerciseLogId,
+        HttpContext http,
+        MySelfDbContext db,
+        CancellationToken ct)
+    {
+        if (!http.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var session = await LoadInProgressForEditAsync(db, userId, id, ct);
+        if (session is null)
+        {
+            return await NotFoundOrConflict(db, userId, id, ct);
+        }
+
+        var log = session.ExerciseLogs.FirstOrDefault(e => e.Id == exerciseLogId);
+        if (log is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (log.Sets.Count >= 20)
+        {
+            return Validation("sets", "An exercise can hold at most 20 sets.");
+        }
+
+        var setLog = new SetLog
+        {
+            Id = Guid.NewGuid(),
+            ExerciseLogId = log.Id,
+            SortOrder = log.Sets.Count == 0 ? 0 : log.Sets.Max(s => s.SortOrder) + 1,
+            Kind = SetKind.Standard,
+        };
+        db.SetLogs.Add(setLog); // fixup adds it to log.Sets
+
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(ToDetail(session));
+    }
+
+    private static async Task<IResult> RemoveExerciseAsync(
+        Guid id,
+        Guid exerciseLogId,
+        HttpContext http,
+        MySelfDbContext db,
+        CancellationToken ct)
+    {
+        if (!http.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var session = await LoadInProgressForEditAsync(db, userId, id, ct);
+        if (session is null)
+        {
+            return await NotFoundOrConflict(db, userId, id, ct);
+        }
+
+        var log = session.ExerciseLogs.FirstOrDefault(e => e.Id == exerciseLogId);
+        if (log is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (log.Sets.Any(s => s.CompletedAt is not null))
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "Exercise has logged sets",
+                detail: "Skip its remaining sets instead of removing it.");
+        }
+
+        db.ExerciseLogs.Remove(log);
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(ToDetail(session));
     }
 
     private static async Task<IResult> CompleteAsync(

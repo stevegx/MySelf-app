@@ -491,6 +491,95 @@ public class WorkoutSessionEndpointTests(WebApplicationFactory<Program> factory,
     }
 
     [Fact]
+    public async Task Add_replace_and_remove_exercises_during_a_session()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var ex = await TwoExerciseIdsAsync();
+            var start = await client.PostAsJsonAsync("/api/v1/workout-sessions", new { dayId = (Guid?)null });
+            var sessionId = (await start.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+            var added = await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/exercises", new { exerciseId = ex[0], sets = 2 });
+            Assert.Equal(HttpStatusCode.OK, added.StatusCode);
+            var detail = await added.Content.ReadFromJsonAsync<JsonElement>();
+            var exLog = detail.GetProperty("exercises").EnumerateArray().Single();
+            var exLogId = exLog.GetProperty("id").GetGuid();
+            Assert.Equal(2, exLog.GetProperty("sets").GetArrayLength());
+
+            var withSet = await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/exercises/{exLogId}/add-set", new { });
+            var d2 = await withSet.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(3, d2.GetProperty("exercises")[0].GetProperty("sets").GetArrayLength());
+
+            var replaced = await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/exercises/{exLogId}/replace",
+                new { exerciseId = ex[1], scope = "TodayOnly" });
+            var d3 = await replaced.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(ex[1], d3.GetProperty("exercises")[0].GetProperty("exerciseId").GetGuid());
+
+            var removed = await client.DeleteAsync($"/api/v1/workout-sessions/{sessionId}/exercises/{exLogId}");
+            var d4 = await removed.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(0, d4.GetProperty("exercises").GetArrayLength());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Replace_with_today_and_future_updates_the_source_day()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (dayId, exerciseId) = await CreateWeightRepsDayAsync(client);
+            var otherExercise = (await TwoExerciseIdsAsync()).First(e => e != exerciseId);
+
+            var start = await client.PostAsJsonAsync("/api/v1/workout-sessions", new { dayId });
+            var detail = await start.Content.ReadFromJsonAsync<JsonElement>();
+            var sessionId = detail.GetProperty("id").GetGuid();
+            var exLogId = detail.GetProperty("exercises")[0].GetProperty("id").GetGuid();
+
+            await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/exercises/{exLogId}/replace",
+                new { exerciseId = otherExercise, scope = "TodayAndFuture" });
+
+            var day = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-days/{dayId}");
+            Assert.Equal(otherExercise, day.GetProperty("exercises")[0].GetProperty("exerciseId").GetGuid());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Cannot_remove_an_exercise_that_has_a_logged_set()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (dayId, _) = await CreateWeightRepsDayAsync(client);
+            var (sessionId, setId) = await StartAndGetFirstSetAsync(client, dayId);
+            var exLogId = (await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-sessions/{sessionId}"))
+                .GetProperty("exercises")[0].GetProperty("id").GetGuid();
+
+            await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/set-logs",
+                new { setLogId = setId, weightKg = 100.0, reps = 5, reachedFailure = false });
+
+            var removed = await client.DeleteAsync($"/api/v1/workout-sessions/{sessionId}/exercises/{exLogId}");
+            Assert.Equal(HttpStatusCode.Conflict, removed.StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
     public async Task History_only_lists_your_own_sessions()
     {
         var (owner, ownerEmail) = await factory.RegisterAndAuthenticateAsync();

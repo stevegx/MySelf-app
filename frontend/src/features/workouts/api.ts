@@ -520,3 +520,38 @@ export function useDiscardSession(sessionId: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["workout-session"] }),
   });
 }
+
+/** Mid-session structure edits: add / replace / add-set / remove an exercise (docs/02 §7). */
+export function useSessionExercises(sessionId: string) {
+  const accessToken = useToken();
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["workout-session"] });
+  const base = `/api/v1/workout-sessions/${sessionId}`;
+
+  return {
+    add: useMutation({
+      mutationFn: (exerciseId: string) =>
+        apiFetch<WorkoutSessionDetail>(`${base}/exercises`, { method: "POST", body: { exerciseId, sets: 3 }, accessToken }),
+      onSuccess: invalidate,
+    }),
+    replace: useMutation({
+      mutationFn: ({ exerciseLogId, exerciseId, scope }: { exerciseLogId: string; exerciseId: string; scope: "TodayOnly" | "TodayAndFuture" }) =>
+        apiFetch<WorkoutSessionDetail>(`${base}/exercises/${exerciseLogId}/replace`, {
+          method: "POST",
+          body: { exerciseId, scope },
+          accessToken,
+        }),
+      onSuccess: invalidate,
+    }),
+    addSet: useMutation({
+      mutationFn: (exerciseLogId: string) =>
+        apiFetch<WorkoutSessionDetail>(`${base}/exercises/${exerciseLogId}/add-set`, { method: "POST", body: {}, accessToken }),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (exerciseLogId: string) =>
+        apiFetch<WorkoutSessionDetail>(`${base}/exercises/${exerciseLogId}`, { method: "DELETE", accessToken }),
+      onSuccess: invalidate,
+    }),
+  };
+}

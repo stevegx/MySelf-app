@@ -143,6 +143,15 @@ public sealed record LogSetRequest(
 /// <summary>Explicitly skip a set (docs/07). Reason is free text; the UI offers pain/equipment/time/other.</summary>
 public sealed record SkipSetRequest(Guid SetLogId, string? Reason);
 
+/// <summary>Add a catalogue exercise to the running session (docs/02: "Add exercise" adds to today's session).</summary>
+public sealed record AddSessionExerciseRequest(Guid ExerciseId, int? Sets);
+
+/// <summary>
+/// Swap the movement for one logged exercise (docs/02: "Replace exercise" → Today only / Today
+/// and future workouts). <see cref="Scope"/> is "TodayOnly" or "TodayAndFuture".
+/// </summary>
+public sealed record ReplaceSessionExerciseRequest(Guid ExerciseId, string? Scope);
+
 /// <summary>
 /// Finish the session. <see cref="LocalDate"/> is the user's local calendar date the session
 /// counts against (locked decision #8) — the client sends it; the server falls back to the

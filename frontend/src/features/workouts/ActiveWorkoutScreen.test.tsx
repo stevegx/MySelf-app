@@ -108,6 +108,17 @@ function installFetch(opts: { active?: unknown } = {}) {
     if (url.includes("/history")) {
       return json({ exerciseId: "x1", exerciseName: "Back Squat", personalRecords: [], sessions: [] });
     }
+    if (url.includes("/api/v1/exercises?")) {
+      return json({
+        items: [{ id: "x2", name: "Leg Press", category: "Legs", defaultTrackingMode: "WeightAndReps" }],
+        page: 1,
+        pageSize: 25,
+        total: 1,
+      });
+    }
+    if (url.endsWith("/exercises") && method === "POST") {
+      return json({ ...sessionWithOneSet(), exercises: [] });
+    }
     if (url.endsWith("/set-logs") && method === "POST") {
       return json({ id: "set1", completedAt: "2026-09-04T09:05:00Z", skippedAt: null });
     }
@@ -187,6 +198,20 @@ describe("ActiveWorkoutScreen", () => {
     expect(screen.getByText(/Heaviest weight/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "View history" }));
     expect(await screen.findByText("History screen")).toBeInTheDocument();
+  });
+
+  it("adds an exercise to the running session", async () => {
+    const fetchSpy = installFetch({ active: sessionWithOneSet() });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: "+ Add exercise" }));
+    await user.type(await screen.findByPlaceholderText(/Search the exercise catalogue/i), "leg");
+    await user.click(await screen.findByRole("button", { name: /Leg Press/ }));
+
+    const addCall = fetchSpy.mock.calls.find(([u, i]) => String(u).endsWith("/exercises") && i?.method === "POST");
+    expect(addCall).toBeTruthy();
+    expect(JSON.parse((addCall![1] as RequestInit).body as string)).toMatchObject({ exerciseId: "x2" });
   });
 
   it("copies the previous completed set's values into a pending set", async () => {

@@ -476,3 +476,38 @@ GET {{MySelf.Api_HostAddress}}/api/v1/analytics/strength?exerciseId=EXERCISE_ID&
 Authorization: Bearer {{accessToken}}
 
 ###
+
+# --- mid-session structure edits (Phase 3) ---
+
+# Add an exercise to the running session (3 empty sets by default)
+POST {{MySelf.Api_HostAddress}}/api/v1/workout-sessions/SESSION_ID/exercises
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{ "exerciseId": "EXERCISE_ID", "sets": 3 }
+
+###
+
+# Replace the movement for one logged exercise (scope: TodayOnly | TodayAndFuture)
+POST {{MySelf.Api_HostAddress}}/api/v1/workout-sessions/SESSION_ID/exercises/EXERCISE_LOG_ID/replace
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{ "exerciseId": "NEW_EXERCISE_ID", "scope": "TodayOnly" }
+
+###
+
+# Add one more set to an exercise
+POST {{MySelf.Api_HostAddress}}/api/v1/workout-sessions/SESSION_ID/exercises/EXERCISE_LOG_ID/add-set
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{}
+
+###
+
+# Remove an added exercise (409 if it has a completed set)
+DELETE {{MySelf.Api_HostAddress}}/api/v1/workout-sessions/SESSION_ID/exercises/EXERCISE_LOG_ID
+Authorization: Bearer {{accessToken}}
+
+###
