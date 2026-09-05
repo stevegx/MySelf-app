@@ -1,6 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiFetch } from "../../lib/api";
 import { useAuth } from "../auth/auth";
+import { enqueue } from "./offlineQueue";
+
+/**
+ * Run a set mutation; if it fails with a network (non-ApiError) error, queue it for retry
+ * and resolve so the workout isn't blocked (docs/02 offline autosave). A real rejection
+ * (validation / 404 / 409) still throws.
+ */
+async function postOrQueue<T>(url: string, body: unknown, accessToken: string | undefined): Promise<T | null> {
+  try {
+    return await apiFetch<T>(url, { method: "POST", body, accessToken });
+  } catch (e) {
+    if (e instanceof ApiError) throw e;
+    enqueue(url, body);
+    return null;
+  }
+}
 
 // --- types (hand-written until the OpenAPI client lands) ---
 
@@ -134,8 +150,10 @@ export type ExerciseLogDetail = {
   exerciseName: string;
   trackingMode: string;
   sortOrder: number;
+  restSeconds: number | null;
   supersetGroupSnapshotId: string | null;
   supersetMemberOrder: number;
+  supersetRestAfterRoundSeconds: number | null;
   sets: SetLogDetail[];
 };
 
@@ -402,19 +420,46 @@ export function useBulkExercises(programId: string | null) {
   };
 }
 
-/** The caller's InProgress session, or null when nothing is running — a 404 isn't an error here. */
+const ACTIVE_CACHE_KEY = "myself.activeSession";
+
+function readActiveCache(): WorkoutSessionDetail | null | undefined {
+  try {
+    const raw = localStorage.getItem(ACTIVE_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as WorkoutSessionDetail) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The caller's InProgress session, or null when nothing is running (a 404 isn't an error).
+ * The last result is mirrored to localStorage so a mid-workout reload paints instantly
+ * before the network responds (docs/02 "browser refresh/crash restores the draft").
+ */
 export function useActiveSession() {
   const accessToken = useToken();
   return useQuery({
     queryKey: ["workout-session", "active"],
     queryFn: async () => {
+      let result: WorkoutSessionDetail | null;
       try {
-        return await apiFetch<WorkoutSessionDetail>("/api/v1/workout-sessions/active", { accessToken });
+        result = await apiFetch<WorkoutSessionDetail>("/api/v1/workout-sessions/active", { accessToken });
       } catch (e) {
-        if (e instanceof ApiError && e.status === 404) return null;
-        throw e;
+        if (e instanceof ApiError && e.status === 404) {
+          result = null;
+        } else {
+          throw e;
+        }
       }
+      try {
+        if (result) localStorage.setItem(ACTIVE_CACHE_KEY, JSON.stringify(result));
+        else localStorage.removeItem(ACTIVE_CACHE_KEY);
+      } catch {
+        /* ignore storage failures */
+      }
+      return result;
     },
+    initialData: readActiveCache,
     enabled: accessToken != null,
   });
 }
@@ -504,7 +549,7 @@ export function useLogSet(sessionId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: LogSetBody) =>
-      apiFetch<SetLogDetail>(`/api/v1/workout-sessions/${sessionId}/set-logs`, { method: "POST", body, accessToken }),
+      postOrQueue<SetLogDetail>(`/api/v1/workout-sessions/${sessionId}/set-logs`, body, accessToken),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["workout-session"] }),
   });
 }
@@ -515,11 +560,11 @@ export function useSkipSet(sessionId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ setLogId, reason }: { setLogId: string; reason?: string }) =>
-      apiFetch<SetLogDetail>(`/api/v1/workout-sessions/${sessionId}/skip-set`, {
-        method: "POST",
-        body: { setLogId, reason: reason ?? null },
+      postOrQueue<SetLogDetail>(
+        `/api/v1/workout-sessions/${sessionId}/skip-set`,
+        { setLogId, reason: reason ?? null },
         accessToken,
-      }),
+      ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["workout-session"] }),
   });
 }

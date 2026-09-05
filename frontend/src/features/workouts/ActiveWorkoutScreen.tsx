@@ -13,6 +13,7 @@ import {
 } from "./api";
 import type { ExerciseLogDetail, LogSetBody, SetLogDetail, WorkoutSessionDetail } from "./api";
 import { ExercisePicker } from "./ExercisePicker";
+import { SyncStatus } from "./SyncStatus";
 import { useConfirm } from "./useConfirm";
 import { useRestTimer } from "./useRestTimer";
 
@@ -358,6 +359,7 @@ function RunningSession({
         subtitle={session.programName ?? "No source program"}
         actions={
           <>
+            <SyncStatus />
             <Button
               variant="ghost"
               onClick={async () => {

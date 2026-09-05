@@ -13,4 +13,9 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  try {
+    localStorage.clear();
+  } catch {
+    /* jsdom without storage */
+  }
 });
