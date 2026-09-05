@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { ChevronLeft, Plus, Play } from "lucide-react";
 import { ApiError } from "../../lib/api";
@@ -6,6 +6,7 @@ import { cn } from "../../lib/cn";
 import { Button, Card, CardKicker, Checkbox, Input, PageHeader } from "../../components/ui";
 import { SortableList } from "./SortableList";
 import { DayEditor } from "./DayEditor";
+import { ProgramOverview } from "./ProgramOverview";
 import { useConfirm } from "./useConfirm";
 import {
   useArchivedPrograms,
@@ -78,6 +79,23 @@ function BackButton({ onClick, label }: { onClick: () => void; label: string }) 
       <ChevronLeft size={15} aria-hidden />
       {label}
     </Button>
+  );
+}
+
+function Tab({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={cn(
+        "-mb-px border-b-2 px-3 py-2 text-sm font-semibold",
+        active ? "border-primary text-foreground" : "border-transparent text-foreground-muted hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -343,6 +361,7 @@ function ProgramDetail({
   const startWorkout = useStartWorkout();
   const { confirm, dialog } = useConfirm();
   const [dayName, setDayName] = useState("");
+  const [tab, setTab] = useState<"overview" | "days">("overview");
 
   if (isLoading || !program) {
     return (
@@ -409,7 +428,18 @@ function ProgramDetail({
 
       <InlineError error={m.remove.error ?? m.archive.error ?? m.activate.error ?? m.clone.error} />
 
-      <div className="flex flex-col gap-3">
+      <div role="tablist" className="mb-4 flex gap-1 border-b border-border">
+        <Tab active={tab === "overview"} onClick={() => setTab("overview")}>
+          Overview
+        </Tab>
+        <Tab active={tab === "days"} onClick={() => setTab("days")}>
+          Days
+        </Tab>
+      </div>
+
+      {tab === "overview" && <ProgramOverview programId={program.id} />}
+
+      <div className={cn("flex flex-col gap-3", tab === "days" ? "" : "hidden")}>
         <SortableList
           items={program.days}
           getId={(d) => d.id}

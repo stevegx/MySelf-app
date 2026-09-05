@@ -83,6 +83,7 @@ describe("WorkoutBuilderScreen", () => {
     const user = userEvent.setup();
     renderScreen();
     await user.click(await screen.findByText("PPL"));
+    await user.click(await screen.findByRole("tab", { name: "Days" }));
 
     // One handle per day.
     expect(await screen.findAllByRole("button", { name: "Drag to reorder" })).toHaveLength(2);
@@ -213,6 +214,7 @@ describe("WorkoutBuilderScreen", () => {
     const user = userEvent.setup();
     renderScreen();
     await user.click(await screen.findByText("PPL"));
+    await user.click(await screen.findByRole("tab", { name: "Days" }));
     await user.click(await screen.findByRole("button", { name: "Delete" }));
 
     // The app's own dialog, and window.confirm was never used.
@@ -224,6 +226,65 @@ describe("WorkoutBuilderScreen", () => {
     await vi.waitFor(() =>
       expect(spy.mock.calls.some(([u, i]) => String(u).includes("/workout-days/d1") && i?.method === "DELETE")).toBe(true),
     );
+  });
+
+  it("opens a program on the Overview tab and shows its stats", async () => {
+    const populated = {
+      id: "p1",
+      name: "PPL",
+      splitLabel: null,
+      isActive: false,
+      createdAt: "2026-09-02T00:00:00Z",
+      rowVersion: 1,
+      days: [{ id: "d1", name: "Push", sortOrder: 0, exerciseCount: 4 }],
+    };
+    const stats = {
+      totalSessions: 7,
+      firstPerformedOn: "2026-08-01",
+      lastPerformedOn: "2026-09-04",
+      sessionsThisWeek: 2,
+      sessionsThisMonth: 3,
+      weeklyAverage: 2.5,
+      totalVolumeKg: 12450,
+      avgDurationSeconds: 3300,
+      completedSets: 84,
+      skippedSets: 6,
+      skippedSetRate: 0.067,
+      perDay: [{ dayId: "d1", dayName: "Push", sessions: 4, lastPerformedOn: "2026-09-04" }],
+      personalRecords: [
+        { exerciseName: "Back Squat", type: "HeaviestWeight", value: 140, achievedOn: "2026-09-04" },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>((input) => {
+        const url = typeof input === "string" ? input : input.toString();
+        const json = (d: unknown, s = 200) =>
+          Promise.resolve(new Response(JSON.stringify(d), { status: s, headers: { "content-type": "application/json" } }));
+        if (url.includes("/auth/refresh"))
+          return json({ accessToken: "t", user: { id: "u1", username: "demo", email: "d@e.com" } });
+        if (url.includes("/api/v1/programs/p1/stats")) return json(stats);
+        if (url.includes("/api/v1/workout-calendar")) return json({ from: "x", to: "y", days: [] });
+        if (url.endsWith("/api/v1/programs")) return json([populated]);
+        if (url.includes("/api/v1/programs/p1")) return json(populated);
+        return Promise.resolve(new Response(null, { status: 404 }));
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderScreen();
+    await user.click(await screen.findByText("PPL"));
+
+    // Overview is the default tab.
+    const timesCard = (await screen.findByText("Times performed")).closest("div")!.parentElement!;
+    expect(timesCard).toHaveTextContent("7");
+    expect(screen.getByText("2.5/wk average")).toBeInTheDocument();
+    expect(screen.getByText(/Back Squat/)).toBeInTheDocument();
+    expect(screen.getByText(/When you trained this program/)).toBeInTheDocument();
+
+    // The editable day list lives behind the Days tab.
+    await user.click(screen.getByRole("tab", { name: "Days" }));
+    expect(await screen.findByText("New day")).toBeInTheDocument();
   });
 
   it("creates a program and opens its detail view", async () => {

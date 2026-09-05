@@ -56,6 +56,37 @@ export type ProgramDetail = {
   days: DayListItem[];
 };
 
+export type ProgramDayStat = {
+  dayId: string;
+  dayName: string;
+  sessions: number;
+  lastPerformedOn: string | null;
+};
+
+export type ProgramPrStat = {
+  exerciseName: string;
+  type: string;
+  value: number;
+  achievedOn: string;
+};
+
+/** Aggregates for a program's Overview tab (GET /api/v1/programs/{id}/stats). */
+export type ProgramStats = {
+  totalSessions: number;
+  firstPerformedOn: string | null;
+  lastPerformedOn: string | null;
+  sessionsThisWeek: number;
+  sessionsThisMonth: number;
+  weeklyAverage: number;
+  totalVolumeKg: number;
+  avgDurationSeconds: number | null;
+  completedSets: number;
+  skippedSets: number;
+  skippedSetRate: number;
+  perDay: ProgramDayStat[];
+  personalRecords: ProgramPrStat[];
+};
+
 export type SetPrescriptionDetail = {
   id: string;
   sortOrder: number;
@@ -508,14 +539,28 @@ export function useStrengthAnalytics(exerciseId: string | null, range: string) {
   });
 }
 
-/** Completed sessions between two ISO dates, grouped by local performed-date. */
-export function useWorkoutCalendar(from: string, to: string) {
+/** Completed sessions between two ISO dates, grouped by local performed-date.
+ *  Pass a programId to limit it to sessions started from that program. */
+export function useWorkoutCalendar(from: string, to: string, programId?: string) {
   const accessToken = useToken();
   return useQuery({
-    queryKey: ["workout-calendar", from, to],
+    queryKey: ["workout-calendar", from, to, programId ?? null],
     queryFn: () =>
-      apiFetch<WorkoutCalendarResult>(`/api/v1/workout-calendar?from=${from}&to=${to}`, { accessToken }),
+      apiFetch<WorkoutCalendarResult>(
+        `/api/v1/workout-calendar?from=${from}&to=${to}${programId ? `&programId=${programId}` : ""}`,
+        { accessToken },
+      ),
     enabled: accessToken != null,
+  });
+}
+
+/** Aggregate numbers for a program's Overview tab. */
+export function useProgramStats(programId: string | null) {
+  const accessToken = useToken();
+  return useQuery({
+    queryKey: ["program-stats", programId],
+    queryFn: () => apiFetch<ProgramStats>(`/api/v1/programs/${programId}/stats`, { accessToken }),
+    enabled: accessToken != null && programId != null,
   });
 }
 
@@ -533,6 +578,7 @@ export function useRescheduleSession() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["workout-calendar"] });
       qc.invalidateQueries({ queryKey: ["workout-session"] });
+      qc.invalidateQueries({ queryKey: ["program-stats"] });
     },
   });
 }
@@ -588,7 +634,11 @@ export function useCompleteSession(sessionId: string) {
         accessToken,
       });
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["workout-session"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["workout-session"] });
+      qc.invalidateQueries({ queryKey: ["program-stats"] });
+      qc.invalidateQueries({ queryKey: ["workout-calendar"] });
+    },
   });
 }
 
