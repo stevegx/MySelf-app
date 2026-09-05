@@ -10,53 +10,49 @@
 Η κύρια ροή δεν ξεκινά από έτοιμο split. Ξεκινά από ένα κενό πρόγραμμα:
 
 1. `Create program` και όνομα.
-2. `Add workout group`, π.χ. Push, Pull ή Legs.
-3. `Add workout variant`, π.χ. Legs #1 ή Legs #2.
-4. Όνομα και σειρά εμφάνισης του variant μέσα στο πρόγραμμα.
-5. Αναζήτηση ή δημιουργία exercise.
-6. Sets, rep range, target weight, optional RIR και rest time.
-7. Reorder με drag-and-drop ή accessible move buttons.
-8. Review και `Activate program`.
+2. `Add workout day`, π.χ. `Push A`, `Pull A`, `Legs A` ή `Legs B`.
+3. Όνομα και σειρά εμφάνισης του day μέσα στο πρόγραμμα.
+4. Αναζήτηση ή δημιουργία exercise.
+5. Sets, rep range, target weight, optional RIR και rest time.
+6. Reorder με drag-and-drop ή accessible move buttons.
+7. Review και `Activate program`.
 
 Ο χρήστης έχει μόνο **ένα active program**. Μπορεί να το αλλάζει πλήρως ή να ενεργοποιήσει άλλο draft/archived program, οπότε το προηγούμενο παύει να είναι active χωρίς να χάνει history.
 
 PPL, Upper/Lower, Full Body και Bro Split μπορούν να προστεθούν αργότερα ως **optional starter templates**. Ποτέ δεν περιορίζουν τον χρήστη ούτε αλλάζουν το custom πρόγραμμα χωρίς επιβεβαίωση.
 
-### Program, workout type and workout variant
+### Program and workout day
 
-Το πρόγραμμα χωρίζεται σε τρία επίπεδα:
+> _Amended 2026-09-04: the earlier two-level `Workout Group → Workout Variant` structure was
+> collapsed to a single flat `Workout Day`. See `docs/08` locked decision #4._
+
+Το πρόγραμμα είναι μια **επίπεδη, ταξινομημένη λίστα από workout days**:
 
 ```text
-Workout Program: PPL — 6 days
-├── Push
-│   ├── Push #1
-│   └── Push #2
-├── Pull
-│   ├── Pull #1
-│   └── Pull #2
-└── Legs
-    ├── Legs #1
-    └── Legs #2
+Workout Program: PPL
+├── Push A
+├── Pull A
+├── Legs A
+└── Legs B
 ```
 
-- **Workout Program**: το συνολικό πρόγραμμα που σχεδιάζει ο χρήστης, π.χ. `PPL — 6 days`.
-- **Workout Type/Group**: λογική κατηγορία μέσα στο πρόγραμμα, π.χ. `Legs`.
-- **Workout Variant**: συγκεκριμένη λίστα ασκήσεων και set targets, π.χ. `Legs #1` ή `Legs #2`.
+- **Workout Program**: το συνολικό πρόγραμμα που σχεδιάζει ο χρήστης, π.χ. `PPL`, με optional split label.
+- **Workout Day**: ένα user-named bucket από exercises και set targets, π.χ. `Legs A` ή `Legs B`. Δύο παρόμοιες μέρες (π.χ. εναλλασσόμενες leg days) είναι απλώς δύο ξεχωριστά days που ονομάζει ο χρήστης, όχι variants ενός τύπου.
 
-Δεν υπάρχει `ScheduleSlot` στο MVP. Η σειρά των groups/variants χρησιμοποιείται μόνο για οργάνωση του builder και του manual picker, ποτέ ως αυτόματη πρόταση. Το `#1/#2` είναι απλώς καθαρό default naming όταν υπάρχουν πολλαπλές εκδοχές του ίδιου workout type.
+Δεν υπάρχει `Workout Group` / `Workout Variant` level ούτε `ScheduleSlot` στο MVP. Η σειρά των days χρησιμοποιείται μόνο για οργάνωση του builder και του manual picker, ποτέ ως αυτόματη πρόταση. Το `A/B` (ή `#1/#2`) είναι απλώς naming convention.
 
 ### Starting a workout
 
 Η ροή είναι:
 
 1. Ο χρήστης πατά `Start workout`.
-2. Το app ανοίγει manual picker με groups και variants του active program, μαζί με επιλογή `Ad-hoc workout`.
-3. Ο χρήστης επιλέγει ο ίδιος το variant· δεν υπάρχει preselected ή suggested next workout.
-4. Εμφανίζονται οι ακριβείς ασκήσεις, prescriptions και previous values του επιλεγμένου variant.
+2. Το app ανοίγει manual picker με τα workout days του active program, μαζί με επιλογή `Ad-hoc workout`.
+3. Ο χρήστης επιλέγει ο ίδιος το day· δεν υπάρχει preselected ή suggested next workout.
+4. Εμφανίζονται οι ακριβείς ασκήσεις, prescriptions και previous values του επιλεγμένου day.
 5. Αν υπάρχει ήδη active session, εμφανίζονται `Resume current`, `Finish current` και `Discard and start new` αντί να δημιουργηθεί δεύτερο active session.
 6. Με το start δημιουργείται session snapshot ώστε μελλοντικές αλλαγές στο πρόγραμμα να μην επηρεάζουν το ιστορικό.
 
-Έτσι, αν επιλέξει `Legs #1`, βλέπει μόνο το exercise list του `Legs #1`. Την επόμενη φορά μπορεί να επιλέξει χειροκίνητα `Legs #2` ή οποιοδήποτε άλλο variant.
+Έτσι, αν επιλέξει `Legs A`, βλέπει μόνο το exercise list του `Legs A`. Την επόμενη φορά μπορεί να επιλέξει χειροκίνητα `Legs B` ή οποιοδήποτε άλλο day.
 
 ### Program builder
 
@@ -129,7 +125,7 @@ Workout Program: PPL — 6 days
 - Το workout autosaves σε κάθε αλλαγή και μπορεί να γίνει resume.
 - Στο finish εμφανίζεται summary: duration, volume, completed sets, PRs, notes.
 - `Skip set` αφήνει το set εκτός analytics και δέχεται optional reason: pain, equipment, time ή other.
-- `Add exercise` προσθέτει exercise μόνο στο σημερινό session και μετά το finish μπορεί να προτείνει `Also add to this workout variant`.
+- `Add exercise` προσθέτει exercise μόνο στο σημερινό session και μετά το finish μπορεί να προτείνει `Also add to this workout day`.
 - `Replace exercise` προσφέρει `Today only` ή `Today and future workouts`.
 - Σε superset, τα μέλη εμφανίζονται μαζί ανά round και το rest timer ξεκινά μετά το τελευταίο completed/skipped μέλος του round.
 - Completed workout logs παραμένουν editable. Κάθε edit επανυπολογίζει volume, e1RM, PRs και dashboard/progress charts και σημειώνει το session ως `Edited`.
@@ -185,7 +181,7 @@ Workout Program: PPL — 6 days
 
 ### Full editability, multi-select and clipboard
 
-Programs, groups, workout variants, exercises, sets, meals, meal items και nutrition days υποστηρίζουν edit, delete και multi-select όπου βγάζει νόημα.
+Programs, workout days, exercises, sets, meals, meal items και nutrition days υποστηρίζουν edit, delete και multi-select όπου βγάζει νόημα.
 
 Bulk actions:
 
@@ -200,7 +196,7 @@ Bulk actions:
 Παραδείγματα:
 
 - Αντιγραφή πολλών exercises από `Legs #1` σε `Legs #2`.
-- Μετακίνηση ολόκληρου workout variant σε άλλο program/group.
+- Μετακίνηση ολόκληρου workout day σε άλλο program.
 - Duplicate ενός πλήρους PPL program.
 - Copy μιας nutrition day σε άλλη ημερομηνία.
 - Move επιλεγμένων meals από Monday σε Tuesday.
@@ -243,7 +239,7 @@ weeklyWorkoutFrequency = completedSessionsInRange / numberOfWeeksInRange
 
 ### Performance comparison rules
 
-Η πρόοδος συνδέεται κυρίως με το **exercise**, όχι μόνο με το workout variant. Αν το Back Squat υπάρχει και στο `Legs #1` και στο `Legs #2`, το app μπορεί να δείχνει συνολικό exercise history, με φίλτρο ανά variant.
+Η πρόοδος συνδέεται κυρίως με το **exercise**, όχι μόνο με το workout day. Αν το Back Squat υπάρχει και στο `Legs A` και στο `Legs B`, το app μπορεί να δείχνει συνολικό exercise history, με φίλτρο ανά day.
 
 Στην active workout ο χρήστης βλέπει για κάθε set:
 

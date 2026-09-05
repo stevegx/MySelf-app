@@ -31,8 +31,8 @@
 
 - Register, login, logout, refresh session και reset password.
 - Essential onboarding: units, age/date of birth, height, weight, calculation sex when using the estimator, activity level και goal (`Lose`, `Maintain`, `Gain`, `Track only`).
-- Custom-first workout builder: ο χρήστης δημιουργεί groups/variants, ονομάζει κάθε workout και προσθέτει μόνος του exercises, sets, reps και load, χωρίς fixed weekdays.
-- Κάθε workout variant έχει ασκήσεις, σειρά, optional supersets, Working/AMRAP/Drop/To-failure options, sets, reps, βάρος, optional RIR και rest timer.
+- Custom-first workout builder: ο χρήστης δημιουργεί named workout days, ονομάζει κάθε day και προσθέτει μόνος του exercises, sets, reps και load, χωρίς fixed weekdays.
+- Κάθε workout day έχει ασκήσεις, σειρά, optional supersets, Working/AMRAP/Drop/To-failure options, sets, reps, βάρος, optional RIR και rest timer.
 - Start workout, logging ανά set, copy previous set, ολοκλήρωση session, notes.
 - Add/replace exercise κατά τη διάρκεια active workout, με επιλογή today-only ή future template update.
 - Offline local autosave για active workout και unfinished meal draft, με automatic sync.
@@ -68,7 +68,7 @@
 flowchart TD
     A[Register / Login] --> B[Onboarding]
     B --> C[Goal + available days]
-    C --> D[Create workout variants]
+    C --> D[Create workout days]
     D --> E[Add exercises, sets and targets]
     E --> F[Dashboard]
     F --> G[Start workout]
@@ -140,7 +140,7 @@ Actions:
 Μετά την αποδοχή ή το skip, ο χρήστης μπαίνει στο dashboard. Εκεί εμφανίζονται ξεχωριστά guided actions:
 
 - `Create your first workout program`.
-- `Create your workout variants`.
+- `Create your workout days`.
 - `Log your first meal`.
 - `Log your weight`.
 
@@ -170,12 +170,12 @@ Stronger warning when the automatic flow is not appropriate:
 
 ### Flexible manual workout logging
 
-Το app δεν προγραμματίζει και δεν προτείνει workout για συγκεκριμένη ημέρα. Το active program είναι βιβλιοθήκη από groups και variants που έχει φτιάξει ο χρήστης.
+Το app δεν προγραμματίζει και δεν προτείνει workout για συγκεκριμένη ημέρα. Το active program είναι μια επίπεδη λίστα από named workout days που έχει φτιάξει ο χρήστης.
 
-- Ο χρήστης πατά `Start workout` και επιλέγει χειροκίνητα οποιοδήποτε variant, π.χ. `Legs #2`.
+- Ο χρήστης πατά `Start workout` και επιλέγει χειροκίνητα οποιοδήποτε day, π.χ. `Legs B`.
 - Δεν υπάρχει fixed weekday, automatic rotation ή `Suggested next workout`.
 - Η ημερομηνία στο calendar προκύπτει από το πραγματικό session που ξεκίνησε/ολοκληρώθηκε, όχι από planned occurrence.
-- Ο χρήστης μπορεί να αλλάξει την ημερομηνία ενός completed session και να διορθώσει ποιο variant/exercises πραγματικά εκτέλεσε.
+- Ο χρήστης μπορεί να αλλάξει την ημερομηνία ενός completed session και να διορθώσει ποιο day/exercises πραγματικά εκτέλεσε.
 - Μπορεί να εκτελέσει ad-hoc workout χωρίς active program.
 - Δεν υπάρχει έννοια «missed planned workout» στο MVP, επειδή δεν υπάρχουν δεσμευτικά planned occurrences.
 
@@ -229,7 +229,7 @@ Mobile bottom navigation: **Home · Workout · Log · Nutrition · Progress**. �
 2. **Nutrition today**: calories consumed/target και protein/carbs/fat progress.
 3. **Workout frequency**: completed sessions αυτή την εβδομάδα/μήνα και current consistency.
 4. **Body weight**: latest value και 7-day rolling trend.
-5. **Start workout**: compact action που ανοίγει manual variant picker από το active program, χωρίς suggested variant.
+5. **Start workout**: compact action που ανοίγει manual day picker από το active program, χωρίς suggested day.
 6. Σε δεύτερη προτεραιότητα: recent exercise improvements και personal records.
 
 Δεν εμφανίζουμε δέκα κάρτες ταυτόχρονα ούτε ένα ασαφές συνολικό fitness score. Στο mobile η σειρά είναι: nutrition today → start workout → workout frequency → body-weight trend.

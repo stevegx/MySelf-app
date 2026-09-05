@@ -85,7 +85,7 @@ Templates — after the custom flow stabilises. `ILIKE '%…%'` catalogue search
 
 - Seed/curate the catalogue data needed by the builder.
 - Blank custom program builder.
-- User-defined groups/variants, item order and activation, without weekdays or schedule slots.
+- User-defined workout days, item order and activation, without weekdays or schedule slots.
 - Create, edit, reorder and ungroup optional supersets with group-level rest-after-round.
 - Relational modelling, ownership checks, transactions and snapshot rules needed by the builder.
 - Optional templates μόνο μετά τη σταθεροποίηση του custom flow.
@@ -95,7 +95,7 @@ Each backend capability is implemented as a small runnable vertical slice with m
 ### Phase 3 — workout execution
 
 - Active session, set logging, autosave, rest timer.
-- Manual variant picker, single-active-session guard and workout calendar based on actual sessions.
+- Manual day picker, single-active-session guard and workout calendar based on actual sessions.
 - Completion, history, volume/e1RM and PR detection.
 - Tracking-mode-aware inputs, strict required-field validation and `Copy previous set`.
 - Multi-select item/set editing, copy/move/delete and undo.
@@ -147,7 +147,7 @@ Each backend capability is implemented as a small runnable vertical slice with m
 - The result separates BMR, activity/TDEE, goal adjustment and suggested target.
 - Calculated target is clearly labeled as an estimate and remains editable.
 - Manual target, calculation opt-out and complete nutrition skip are available.
-- Fixed workout days are not collected; program setup creates reusable groups/variants instead.
+- Fixed weekly workout days are not collected; program setup creates reusable named workout days instead.
 - Logged workout calories never silently increase the nutrition budget.
 - Under-18 flow does not generate nutrition targets.
 - Accepting a new target creates an effective-dated snapshot without changing past logs.
@@ -157,9 +157,9 @@ Each backend capability is implemented as a small runnable vertical slice with m
 
 **As a user**, I can build a workout program exactly as I want it.
 
-- I can create any number of named workout groups and variants without assigning weekdays.
+- I can create any number of named workout days without assigning weekdays.
 - I can add custom or catalogue exercises with my own set targets.
-- I can reorder groups, variants, exercises and sets.
+- I can reorder days, exercises and sets.
 - I can group two or more exercises as a superset, reorder its members or ungroup them without changing their prescriptions.
 - The app does not force a split or overwrite my choices.
 
@@ -167,8 +167,8 @@ Each backend capability is implemented as a small runnable vertical slice with m
 
 **As a user**, I manually choose what I trained and see the actual session on my calendar.
 
-- `Start workout` opens the variant picker with no preselected or suggested workout.
-- I can choose any variant or start an ad-hoc workout.
+- `Start workout` opens the day picker with no preselected or suggested workout.
+- I can choose any day or start an ad-hoc workout.
 - Only one session can be active, but I can complete multiple sessions on the same day.
 - Completing a session places it on the calendar using my local date.
 - I can correct the completed session date and its calendar position updates.
@@ -230,7 +230,7 @@ Each backend capability is implemented as a small runnable vertical slice with m
 1. Product name: **MySelf App**.
 2. Launch UI language: **English**.
 3. Product tone: **clean, accessible and neutral for a broad audience**.
-4. Workout planning: **user-designed program with split label, workout groups and variants**; e.g. PPL → Legs → Legs #1 / Legs #2.
+4. Workout planning: **user-designed program with an optional split label and a flat, ordered list of named workout days**; e.g. `PPL` → `Push A`, `Pull A`, `Legs A`, `Legs B`. _(Amended 2026-09-04: the original two-level Workout Group → Workout Variant structure was collapsed to a single `WorkoutDay` level. Two similar days — alternating leg days, say — are just two separate days the user names, not variants of one type. Grouping added ceremony without a concrete MVP need; the `#1/#2` naming it existed for is now just a naming convention.)_
 5. Initial platform: **responsive web/PWA**; native is a later decision.
 6. Nutrition MVP: **barcode scan or manual food creation**, with arbitrary quantity, `My Foods` and Saved Meals; full Recipes follow in V1.
 7. Editing model: **fully editable with multi-select, copy, cut/move, paste, duplicate, bulk edit, delete and undo**.
@@ -252,7 +252,7 @@ Each backend capability is implemented as a small runnable vertical slice with m
 23. Onboarding: **minimum calculator inputs with Lose/Maintain/Gain/Track-only branching**, transparent BMR → TDEE → adjustment breakdown, manual/skip paths and a clear non-medical disclaimer.
 24. Calorie-budget behavior: workout calories are not automatically eaten back; recalculated goals require explicit confirmation and preserve effective-dated history.
 25. Initial release context: **personal learning project**; architecture remains clean enough for a later public release without implementing unnecessary production services now.
-26. Workout selection: **fully manual**; no fixed weekdays, automatic rotation, suggested-next logic or preselected variant.
+26. Workout selection: **fully manual**; no fixed weekdays, automatic rotation, suggested-next logic or preselected day.
 27. Active sessions: **one InProgress workout per user**, while multiple completed workouts per day are allowed.
 28. Nutrition targets: **same calorie and macro targets every day** in the MVP.
 29. Target weight: **optional** for Lose and Gain goals.
@@ -307,10 +307,10 @@ TECHNOLOGY CONSTRAINTS
 
 PRODUCT CONSTRAINTS
 
-- Workout planning uses Program → Workout Group → Workout Variant. Example: PPL → Legs → Legs #1 / Legs #2. There is no Schedule Slot in the MVP.
-- Workout selection is always manual. Never assign weekdays, suggest the next workout, rotate automatically or preselect a variant.
+- Workout planning uses Program → Workout Day (flat, ordered list). Example: PPL → Push A / Pull A / Legs A / Legs B. There is no Workout Group / Variant level and no Schedule Slot in the MVP.
+- Workout selection is always manual. Never assign weekdays, suggest the next workout, rotate automatically or preselect a day.
 - Completed/in-progress sessions create calendar entries from actual activity. Only one session may be active, while multiple completed sessions per day are allowed.
-- Exercise performance history works across variants, with an optional variant filter.
+- Exercise performance history works across days, with an optional day filter.
 - Weight × Reps sets require both values; incomplete sets never enter analytics and `Copy previous set` only prefills.
 - Exercise tracking mode controls required fields for bodyweight, assisted, timed and distance exercises.
 - MVP tracking modes are Weight × Reps, Bodyweight Reps, Bodyweight + Extra Weight, Assistance × Reps, Reps only and Duration. Distance + Duration is V1.
