@@ -94,6 +94,19 @@ Each backend capability is implemented as a small runnable vertical slice with m
 
 ### Phase 3 — workout execution
 
+_Shipped 2026-09-04/05 in 8 slices (see `docs/learning-log/2026-09-04-*` and `2026-09-05-*`).
+Model restructure first: `Workout Group → Variant` collapsed to a flat `Workout Day` (amends
+locked decision #4). Then: start/resume a session (snapshot at start, one InProgress per user
+via a filtered unique index), tracking-mode-aware set logging + explicit skip, `Copy previous
+set`, finish with a summary + one-time PR detection (Epley e1RM, 4 PR types), history list,
+`/workout-calendar` + reschedule, `/exercises/{id}/history` + `/analytics/strength`,
+add/replace/remove exercises mid-session, in-app rest timer (standalone + superset round;
+sound/vibration only), and an offline retry queue + sync-status indicator for set logging.
+**Deferred:** real strength charts (needs a chart lib — inline sparkline for now), the
+`Distance + Duration` tracking mode (V1), full offline browsing + server↔local conflict
+recovery, undo for destructive edits, and the archive-vs-delete guard for a day with session
+history. 45 unit + 95 integration + 57 frontend tests._
+
 - Active session, set logging, autosave, rest timer.
 - Manual day picker, single-active-session guard and workout calendar based on actual sessions.
 - Completion, history, volume/e1RM and PR detection.
