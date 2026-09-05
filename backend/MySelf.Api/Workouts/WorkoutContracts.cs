@@ -242,8 +242,10 @@ public sealed record ExerciseLogDetail(
     string ExerciseName,
     string TrackingMode,
     int SortOrder,
+    int? RestSeconds,
     Guid? SupersetGroupSnapshotId,
     int SupersetMemberOrder,
+    int? SupersetRestAfterRoundSeconds,
     IReadOnlyList<SetLogDetail> Sets);
 
 public sealed record SetLogDetail(

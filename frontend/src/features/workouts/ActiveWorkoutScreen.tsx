@@ -14,6 +14,7 @@ import {
 import type { ExerciseLogDetail, LogSetBody, SetLogDetail, WorkoutSessionDetail } from "./api";
 import { ExercisePicker } from "./ExercisePicker";
 import { useConfirm } from "./useConfirm";
+import { useRestTimer } from "./useRestTimer";
 
 type SessionOps = ReturnType<typeof useSessionExercises>;
 
@@ -52,12 +53,14 @@ function SetRow({
   index,
   mode,
   prevCompleted,
+  onActed,
 }: {
   sessionId: string;
   set: SetLogDetail;
   index: number;
   mode: string;
   prevCompleted: SetLogDetail | undefined;
+  onActed: () => void;
 }) {
   const fields = fieldsFor(mode);
   const [values, setValues] = useState<Record<string, string>>(() => ({
@@ -85,6 +88,7 @@ function SetRow({
     }
     try {
       await logSet.mutateAsync(body);
+      onActed();
     } catch (e) {
       setError(e instanceof ApiError ? (Object.values(e.errors ?? {})[0]?.[0] ?? e.detail ?? e.title) : "Could not save.");
     }
@@ -138,7 +142,7 @@ function SetRow({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => skipSet.mutate({ setLogId: set.id })}
+              onClick={() => skipSet.mutate({ setLogId: set.id }, { onSuccess: onActed })}
               disabled={busy}
             >
               Skip
@@ -156,10 +160,12 @@ function ExerciseCard({
   sessionId,
   exercise,
   ops,
+  onSetActed,
 }: {
   sessionId: string;
   exercise: ExerciseLogDetail;
   ops: SessionOps;
+  onSetActed: (exercise: ExerciseLogDetail, set: SetLogDetail) => void;
 }) {
   const doneCount = exercise.sets.filter((s) => s.completedAt || s.skippedAt).length;
   const { data: history } = useExerciseHistory(exercise.exerciseId);
@@ -194,6 +200,7 @@ function ExerciseCard({
               index={i}
               mode={exercise.trackingMode}
               prevCompleted={[...exercise.sets.slice(0, i)].reverse().find((s) => s.completedAt != null)}
+              onActed={() => onSetActed(exercise, set)}
             />
           ))}
         </div>
@@ -307,8 +314,29 @@ function RunningSession({
   const complete = useCompleteSession(session.id);
   const discard = useDiscardSession(session.id);
   const ops = useSessionExercises(session.id);
+  const rest = useRestTimer();
   const [finished, setFinished] = useState<WorkoutSessionDetail | null>(null);
   const [addingExercise, setAddingExercise] = useState(false);
+
+  // Start the rest countdown when a set is logged/skipped: after each set for a standalone
+  // exercise, or after the whole round for a superset (docs/02 §7).
+  const onSetActed = (exercise: ExerciseLogDetail, set: SetLogDetail) => {
+    if (!exercise.supersetGroupSnapshotId) {
+      if (exercise.restSeconds) rest.start(exercise.restSeconds);
+      return;
+    }
+    const members = session.exercises.filter(
+      (e) => e.supersetGroupSnapshotId === exercise.supersetGroupSnapshotId,
+    );
+    const roundComplete = members.every((m) => {
+      const s = m.sets.find((x) => x.sortOrder === set.sortOrder);
+      if (!s || s.id === set.id) return true; // no set this round, or the one just acted on
+      return s.completedAt != null || s.skippedAt != null;
+    });
+    if (roundComplete && exercise.supersetRestAfterRoundSeconds) {
+      rest.start(exercise.supersetRestAfterRoundSeconds);
+    }
+  };
 
   const finish = () => complete.mutate(undefined, { onSuccess: (data) => setFinished(data) });
 
@@ -373,8 +401,16 @@ function RunningSession({
       )}
 
       {session.exercises.map((exercise) => (
-        <ExerciseCard key={exercise.id} sessionId={session.id} exercise={exercise} ops={ops} />
+        <ExerciseCard
+          key={exercise.id}
+          sessionId={session.id}
+          exercise={exercise}
+          ops={ops}
+          onSetActed={onSetActed}
+        />
       ))}
+
+      {rest.bar}
 
       {addingExercise ? (
         <Card>

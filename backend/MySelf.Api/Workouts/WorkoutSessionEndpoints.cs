@@ -143,6 +143,7 @@ public static class WorkoutSessionEndpoints
         {
             day = await db.OwnedDays(userId)
                 .Include(d => d.Program)
+                .Include(d => d.Supersets)
                 .Include(d => d.Exercises).ThenInclude(e => e.Exercise)
                 .Include(d => d.Exercises).ThenInclude(e => e.Sets)
                 .FirstOrDefaultAsync(d => d.Id == dayId, ct);
@@ -151,6 +152,9 @@ public static class WorkoutSessionEndpoints
                 return Results.NotFound();
             }
         }
+
+        var supersetRest = day?.Supersets.ToDictionary(s => s.Id, s => s.RestAfterRoundSeconds)
+            ?? new Dictionary<Guid, int>();
 
         var session = new WorkoutSession
         {
@@ -163,7 +167,7 @@ public static class WorkoutSessionEndpoints
             StartedAt = clock.GetUtcNow(),
             ExerciseLogs = day is null
                 ? []
-                : day.Exercises.OrderBy(e => e.SortOrder).Select(SnapshotExercise).ToList(),
+                : day.Exercises.OrderBy(e => e.SortOrder).Select(e => SnapshotExercise(e, supersetRest)).ToList(),
         };
 
         db.WorkoutSessions.Add(session);
@@ -677,15 +681,17 @@ public static class WorkoutSessionEndpoints
         return (null, null);
     }
 
-    private static ExerciseLog SnapshotExercise(DayExercise e) => new()
+    private static ExerciseLog SnapshotExercise(DayExercise e, IReadOnlyDictionary<Guid, int> supersetRest) => new()
     {
         Id = Guid.NewGuid(),
         ExerciseId = e.ExerciseId,
         ExerciseName = e.Exercise.Name,
         TrackingMode = e.Exercise.DefaultTrackingMode,
         SortOrder = e.SortOrder,
+        RestSeconds = e.RestSeconds,
         SupersetGroupSnapshotId = e.SupersetGroupId,
         SupersetMemberOrder = e.SupersetMemberOrder,
+        SupersetRestAfterRoundSeconds = e.SupersetGroupId is { } gid && supersetRest.TryGetValue(gid, out var r) ? r : null,
         Sets = e.Sets.OrderBy(s => s.SortOrder).Select(SnapshotSet).ToList(),
     };
 
@@ -722,8 +728,10 @@ public static class WorkoutSessionEndpoints
                 e.ExerciseName,
                 e.TrackingMode.ToString(),
                 e.SortOrder,
+                e.RestSeconds,
                 e.SupersetGroupSnapshotId,
                 e.SupersetMemberOrder,
+                e.SupersetRestAfterRoundSeconds,
                 e.Sets.OrderBy(set => set.SortOrder).Select(ToSetDetail).ToList()))
             .ToList());
 

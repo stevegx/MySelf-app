@@ -84,6 +84,7 @@ public class WorkoutSessionEndpointTests(WebApplicationFactory<Program> factory,
             Assert.Equal("PPL", detail.GetProperty("programName").GetString());
 
             var exercises = detail.GetProperty("exercises").EnumerateArray().ToList();
+            Assert.Equal(90, exercises.Single().GetProperty("restSeconds").GetInt32()); // snapshotted from the day
             var sets = exercises.Single().GetProperty("sets").EnumerateArray().ToList();
             Assert.Equal(2, sets.Count);
             Assert.Equal(8, sets[0].GetProperty("targetRepsMin").GetInt32());

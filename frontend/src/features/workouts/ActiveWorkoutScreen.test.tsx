@@ -200,6 +200,25 @@ describe("ActiveWorkoutScreen", () => {
     expect(await screen.findByText("History screen")).toBeInTheDocument();
   });
 
+  it("starts a rest countdown after logging a set", async () => {
+    const base = sessionWithOneSet();
+    const withRest = {
+      ...base,
+      exercises: [{ ...base.exercises[0], restSeconds: 45 }],
+    };
+    installFetch({ active: withRest });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.type(await screen.findByLabelText("Set 1 Weight (kg)"), "100");
+    await user.type(screen.getByLabelText("Set 1 Reps"), "8");
+    await user.click(screen.getByRole("button", { name: "Log set" }));
+
+    expect(await screen.findByText(/^Rest 0:4[0-9]$/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Skip rest" }));
+    expect(screen.queryByText(/^Rest /)).not.toBeInTheDocument();
+  });
+
   it("adds an exercise to the running session", async () => {
     const fetchSpy = installFetch({ active: sessionWithOneSet() });
     const user = userEvent.setup();
