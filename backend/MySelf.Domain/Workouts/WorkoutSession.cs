@@ -19,6 +19,11 @@ public class WorkoutSession
     /// <summary>Null for an ad-hoc session with no source day.</summary>
     public Guid? SourceDayId { get; set; }
 
+    /// <summary>The program the source day belonged to at start time. A soft pointer like
+    /// <see cref="SourceDayId"/> (no FK) — kept so a program's Overview can gather its own
+    /// sessions even after the day or program is edited. Null for an ad-hoc session.</summary>
+    public Guid? SourceProgramId { get; set; }
+
     public string? DayName { get; set; }
     public string? ProgramName { get; set; }
 

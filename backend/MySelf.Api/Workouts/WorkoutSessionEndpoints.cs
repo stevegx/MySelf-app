@@ -46,7 +46,8 @@ public static class WorkoutSessionEndpoints
         MySelfDbContext db,
         CancellationToken ct,
         DateOnly? from = null,
-        DateOnly? to = null)
+        DateOnly? to = null,
+        Guid? programId = null)
     {
         if (!http.TryGetUserId(out var userId))
         {
@@ -66,7 +67,8 @@ public static class WorkoutSessionEndpoints
             .Include(s => s.ExerciseLogs).ThenInclude(e => e.Sets)
             .Where(s => s.Status == SessionStatus.Completed
                 && s.PerformedOnLocalDate >= start
-                && s.PerformedOnLocalDate <= end)
+                && s.PerformedOnLocalDate <= end
+                && (programId == null || s.SourceProgramId == programId))
             .ToListAsync(ct);
 
         var days = rows
@@ -161,6 +163,7 @@ public static class WorkoutSessionEndpoints
             Id = Guid.NewGuid(),
             UserId = userId,
             SourceDayId = day?.Id,
+            SourceProgramId = day?.Program.Id,
             DayName = day?.Name,
             ProgramName = day?.Program.Name,
             Status = SessionStatus.InProgress,

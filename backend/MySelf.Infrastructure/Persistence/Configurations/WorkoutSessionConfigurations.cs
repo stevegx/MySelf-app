@@ -19,6 +19,10 @@ public class WorkoutSessionConfiguration : IEntityTypeConfiguration<WorkoutSessi
 
         builder.HasIndex(s => s.UserId);
 
+        // A program's Overview reads "completed sessions for this program" (soft pointer,
+        // no FK — the day/program may have changed since).
+        builder.HasIndex(s => s.SourceProgramId);
+
         // Only one InProgress session per user — a filtered unique index enforces it in the
         // DB, not just in the start handler (same pattern as the one-active-program index).
         builder.HasIndex(s => s.UserId)

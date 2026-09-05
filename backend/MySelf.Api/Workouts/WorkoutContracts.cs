@@ -44,6 +44,27 @@ public sealed record DayListItem(Guid Id, string Name, int SortOrder, int Exerci
 
 public sealed record CreateDayRequest(string? Name);
 
+// --- program stats (Overview tab; docs/02 §7 metrics — no adherence %) ---
+
+public sealed record ProgramStats(
+    int TotalSessions,
+    DateOnly? FirstPerformedOn,
+    DateOnly? LastPerformedOn,
+    int SessionsThisWeek,
+    int SessionsThisMonth,
+    double WeeklyAverage,
+    decimal TotalVolumeKg,
+    int? AvgDurationSeconds,
+    int CompletedSets,
+    int SkippedSets,
+    double SkippedSetRate,
+    IReadOnlyList<ProgramDayStat> PerDay,
+    IReadOnlyList<ProgramPrStat> PersonalRecords);
+
+public sealed record ProgramDayStat(Guid DayId, string DayName, int Sessions, DateOnly? LastPerformedOn);
+
+public sealed record ProgramPrStat(string ExerciseName, string Type, double Value, DateOnly AchievedOn);
+
 // --- day detail ---
 
 public sealed record DayDetail(
