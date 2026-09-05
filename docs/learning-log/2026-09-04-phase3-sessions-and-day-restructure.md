@@ -143,11 +143,82 @@ Ownership uses the centralised `db.OwnedSessions(userId)` / `db.OwnedDays(userId
 from the Phase 2 gap closure (`OwnedWorkouts.cs`) — a query that filters by user id up the
 tree, so a handler can't forget it.
 
-### Not built yet (rest of Phase 3)
+---
 
-Set logging (`POST /workout-sessions/{id}/set-logs`), explicit skip, `Copy previous set`,
-finish + PR/volume/e1RM calculation, add/replace exercise mid-session, history list, the
-workout calendar, the rest timer, and the offline draft. Those are the next slices.
+## Part 3 — Logging sets, skipping, and finishing (added same day)
+
+The read-only "start a session" from Part 2 became a workout you can actually run.
+
+### New endpoints
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/workout-sessions/{id}` | one session, any status (the completed one you just finished) |
+| `POST` | `/workout-sessions/{id}/set-logs` | log/re-log a performed set — marks it complete |
+| `POST` | `/workout-sessions/{id}/skip-set` | skip a set with an optional reason |
+| `POST` | `/workout-sessions/{id}/complete` | finish: status → `Completed`, stamp `PerformedOnLocalDate` |
+| `POST` | `/workout-sessions/{id}/discard` | throw the in-progress session away |
+
+### Tracking-mode-aware validation (`Domain/Workouts/SetLogValidation.cs`)
+
+A pure function — same style as `CalorieEstimator` — that says which performed fields a set
+needs before it can complete, keyed on the exercise's `TrackingMode`:
+
+```csharp
+public static string? MissingRequiredField(TrackingMode mode, SetPerformance p) => mode switch
+{
+    TrackingMode.WeightAndReps        => p is { WeightKg: not null, Reps: not null } ? null : "Enter both weight and reps.",
+    TrackingMode.BodyweightReps       => p.Reps is not null ? null : "Enter reps.",
+    TrackingMode.BodyweightPlusWeight => p is { AddedWeightKg: not null, Reps: not null } ? null : "Enter both added weight and reps.",
+    TrackingMode.AssistanceReps       => p is { AssistanceKg: not null, Reps: not null } ? null : "Enter both assistance weight and reps.",
+    TrackingMode.RepsOnly             => p.Reps is not null ? null : "Enter reps.",
+    TrackingMode.Duration             => p.DurationSeconds is not null and > 0 ? null : "Enter a duration in seconds.",
+    _ => null,
+};
+```
+
+This is locked decision #10 ("both values required for Weight × Reps, no inheritance"). The
+front end shows only the relevant inputs per mode, but the *server* is the gate — the
+endpoint returns `400 { errors: { set: ["Enter both weight and reps."] } }` if a field is
+missing, so a hand-crafted request can't slip an incomplete set through.
+
+**C# note — property patterns:** `p is { WeightKg: not null, Reps: not null }` checks two
+properties on one object in a single expression. `p.DurationSeconds is not null and > 0`
+combines a null check and a relational check with `and`. Both are cleaner than the `&&`
+chains they replace and read close to English.
+
+### "Log" vs "skip" are mirror operations
+
+Logging a set writes the performed values, sets `CompletedAt = now`, and **clears**
+`SkippedAt` / `SkippedReason`. Skipping does the opposite: sets `SkippedAt`, clears
+`CompletedAt` and *every* performed value. So a set is always in exactly one of three
+states — pending, completed, skipped — and toggling between logged and skipped never leaves
+stale data behind. An uncompleted set (pending) simply doesn't enter analytics later
+(docs/06).
+
+### Finishing
+
+`complete` takes `{ localDate, notes }`. The **client** sends `localDate` — its own
+calendar date — because "which day did this workout happen on" is a local-time question and
+the server only knows UTC (locked decision #8). The server falls back to the UTC date if
+the client doesn't send one. After completion, `GET /workout-sessions/active` returns 404
+(nothing in progress) and the session is readable at `GET /workout-sessions/{id}`.
+Completing an already-finished session is a `409`.
+
+### Front end
+
+`ActiveWorkoutScreen` went from a static preview to a working logger: per-set inputs that
+switch by tracking mode (`fieldsFor(mode)`), a "Log set" / "Skip" pair per set, a running
+"N of M sets logged or skipped" count, and "Finish workout" / "Discard" (the latter behind
+the styled `useConfirm` dialog). Each action is its own request; the query invalidates and
+re-renders from the server's response. `useCompleteSession` builds the local `YYYY-MM-DD`
+from `new Date()` before posting.
+
+### Still not built (rest of Phase 3)
+
+`Copy previous set`, PR / volume / e1RM calculation and the finish summary, add / replace
+exercise mid-session, the history list, the workout calendar, the in-app rest timer, and
+the offline draft + sync.
 
 ---
 

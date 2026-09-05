@@ -128,6 +128,28 @@ public sealed record BulkExerciseRequest(
 /// <summary>Null <paramref name="DayId"/> starts an ad-hoc session with no exercises yet.</summary>
 public sealed record StartSessionRequest(Guid? DayId);
 
+/// <summary>Log or update the performed values for one set (docs/02 autosave). Marks it complete.</summary>
+public sealed record LogSetRequest(
+    Guid SetLogId,
+    decimal? WeightKg,
+    decimal? AddedWeightKg,
+    decimal? AssistanceKg,
+    int? Reps,
+    int? DurationSeconds,
+    decimal? DistanceMeters,
+    int? Rir,
+    bool ReachedFailure);
+
+/// <summary>Explicitly skip a set (docs/07). Reason is free text; the UI offers pain/equipment/time/other.</summary>
+public sealed record SkipSetRequest(Guid SetLogId, string? Reason);
+
+/// <summary>
+/// Finish the session. <see cref="LocalDate"/> is the user's local calendar date the session
+/// counts against (locked decision #8) — the client sends it; the server falls back to the
+/// UTC date.
+/// </summary>
+public sealed record CompleteSessionRequest(DateOnly? LocalDate, string? Notes);
+
 public sealed record WorkoutSessionDetail(
     Guid Id,
     Guid? SourceDayId,
@@ -135,6 +157,9 @@ public sealed record WorkoutSessionDetail(
     string? ProgramName,
     string Status,
     DateTimeOffset StartedAt,
+    DateTimeOffset? CompletedAt,
+    DateOnly? PerformedOnLocalDate,
+    string? Notes,
     IReadOnlyList<ExerciseLogDetail> Exercises);
 
 public sealed record ExerciseLogDetail(
@@ -158,6 +183,13 @@ public sealed record SetLogDetail(
     decimal? TargetWeightKg,
     int? TargetRir,
     decimal? WeightKg,
+    decimal? AddedWeightKg,
+    decimal? AssistanceKg,
     int? Reps,
+    int? DurationSeconds,
+    decimal? DistanceMeters,
+    int? Rir,
+    bool ReachedFailure,
     DateTimeOffset? CompletedAt,
-    DateTimeOffset? SkippedAt);
+    DateTimeOffset? SkippedAt,
+    string? SkippedReason);

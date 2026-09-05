@@ -192,4 +192,171 @@ public class WorkoutSessionEndpointTests(WebApplicationFactory<Program> factory,
             await factory.DeleteUsersAsync(ownerEmail, otherEmail);
         }
     }
+
+    /// <summary>Starts a session from a fresh day and returns (sessionId, first set id, its tracking mode).</summary>
+    private async Task<(Guid SessionId, Guid SetId, string Mode)> StartWithASetAsync(HttpClient client)
+    {
+        var dayId = await CreateDayWithExercisesAsync(client);
+        var start = await client.PostAsJsonAsync("/api/v1/workout-sessions", new { dayId });
+        start.EnsureSuccessStatusCode();
+        var detail = await start.Content.ReadFromJsonAsync<JsonElement>();
+        var exercise = detail.GetProperty("exercises").EnumerateArray().First();
+        return (
+            detail.GetProperty("id").GetGuid(),
+            exercise.GetProperty("sets").EnumerateArray().First().GetProperty("id").GetGuid(),
+            exercise.GetProperty("trackingMode").GetString()!);
+    }
+
+    private static object LogBodyFor(Guid setLogId, string mode) => mode switch
+    {
+        "WeightAndReps" => new { setLogId, weightKg = 100.0, reps = 8, reachedFailure = false },
+        "BodyweightPlusWeight" => new { setLogId, addedWeightKg = 20.0, reps = 8, reachedFailure = false },
+        "AssistanceReps" => new { setLogId, assistanceKg = 15.0, reps = 8, reachedFailure = false },
+        "Duration" => new { setLogId, durationSeconds = 60, reachedFailure = false },
+        _ => new { setLogId, reps = 12, reachedFailure = false }, // BodyweightReps / RepsOnly
+    };
+
+    [Fact]
+    public async Task Logging_a_set_with_valid_values_marks_it_complete()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (sessionId, setId, mode) = await StartWithASetAsync(client);
+
+            var res = await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/set-logs", LogBodyFor(setId, mode));
+            Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+
+            var set = await res.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.NotEqual(JsonValueKind.Null, set.GetProperty("completedAt").ValueKind);
+            Assert.Equal(JsonValueKind.Null, set.GetProperty("skippedAt").ValueKind);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Logging_a_set_with_no_values_is_rejected()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (sessionId, setId, _) = await StartWithASetAsync(client);
+
+            var res = await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/set-logs", new { setLogId = setId, reachedFailure = false });
+            Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
+            var body = await res.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.True(body.GetProperty("errors").TryGetProperty("set", out _));
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Skipping_a_set_then_logging_it_clears_the_skip()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (sessionId, setId, mode) = await StartWithASetAsync(client);
+
+            var skip = await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/skip-set", new { setLogId = setId, reason = "equipment" });
+            Assert.Equal(HttpStatusCode.OK, skip.StatusCode);
+            var skipped = await skip.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.NotEqual(JsonValueKind.Null, skipped.GetProperty("skippedAt").ValueKind);
+            Assert.Equal("equipment", skipped.GetProperty("skippedReason").GetString());
+            Assert.Equal(JsonValueKind.Null, skipped.GetProperty("completedAt").ValueKind);
+
+            var log = await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/set-logs", LogBodyFor(setId, mode));
+            log.EnsureSuccessStatusCode();
+            var relogged = await log.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(JsonValueKind.Null, relogged.GetProperty("skippedAt").ValueKind);
+            Assert.NotEqual(JsonValueKind.Null, relogged.GetProperty("completedAt").ValueKind);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Completing_a_session_stamps_the_local_date_and_ends_the_active_session()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (sessionId, setId, mode) = await StartWithASetAsync(client);
+            await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/set-logs", LogBodyFor(setId, mode));
+
+            var complete = await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/complete", new { localDate = "2026-09-04", notes = "solid" });
+            Assert.Equal(HttpStatusCode.OK, complete.StatusCode);
+            var done = await complete.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal("Completed", done.GetProperty("status").GetString());
+            Assert.Equal("2026-09-04", done.GetProperty("performedOnLocalDate").GetString());
+            Assert.Equal("solid", done.GetProperty("notes").GetString());
+
+            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/v1/workout-sessions/active")).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/v1/workout-sessions/{sessionId}")).StatusCode);
+
+            var again = await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/complete", new { localDate = (string?)null, notes = (string?)null });
+            Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Discarding_a_session_frees_the_slot_for_a_new_one()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var first = await client.PostAsJsonAsync("/api/v1/workout-sessions", new { dayId = (Guid?)null });
+            var firstId = (await first.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+            var discard = await client.PostAsJsonAsync($"/api/v1/workout-sessions/{firstId}/discard", new { });
+            Assert.Equal(HttpStatusCode.NoContent, discard.StatusCode);
+
+            var second = await client.PostAsJsonAsync("/api/v1/workout-sessions", new { dayId = (Guid?)null });
+            Assert.Equal(HttpStatusCode.Created, second.StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Another_user_cannot_log_into_or_complete_your_session()
+    {
+        var (owner, ownerEmail) = await factory.RegisterAndAuthenticateAsync();
+        var (other, otherEmail) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (sessionId, setId, mode) = await StartWithASetAsync(owner);
+
+            Assert.Equal(HttpStatusCode.NotFound,
+                (await other.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/set-logs", LogBodyFor(setId, mode))).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound,
+                (await other.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/complete", new { localDate = (string?)null, notes = (string?)null })).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound,
+                (await other.GetAsync($"/api/v1/workout-sessions/{sessionId}")).StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(ownerEmail, otherEmail);
+        }
+    }
 }

@@ -406,3 +406,47 @@ DELETE {{MySelf.Api_HostAddress}}/api/v1/programs/PROGRAM_ID
 Authorization: Bearer {{accessToken}}
 
 ###
+
+# --- session logging (Phase 3) ---
+
+# Log a performed set (validated by the exercise's tracking mode) -> 200 SetLogDetail
+POST {{MySelf.Api_HostAddress}}/api/v1/workout-sessions/SESSION_ID/set-logs
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{ "setLogId": "SET_LOG_ID", "weightKg": 102.5, "reps": 8, "reachedFailure": false }
+
+###
+
+# Skip a set -> 200, skippedAt + reason set, performed values cleared
+POST {{MySelf.Api_HostAddress}}/api/v1/workout-sessions/SESSION_ID/skip-set
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{ "setLogId": "SET_LOG_ID", "reason": "equipment" }
+
+###
+
+# Finish the session -> 200, status Completed, performedOnLocalDate stamped
+POST {{MySelf.Api_HostAddress}}/api/v1/workout-sessions/SESSION_ID/complete
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{ "localDate": "2026-09-04", "notes": "felt strong" }
+
+###
+
+# Discard the in-progress session -> 204
+POST {{MySelf.Api_HostAddress}}/api/v1/workout-sessions/SESSION_ID/discard
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{}
+
+###
+
+# Read one session by id (any status) -> 200
+GET {{MySelf.Api_HostAddress}}/api/v1/workout-sessions/SESSION_ID
+Authorization: Bearer {{accessToken}}
+
+###

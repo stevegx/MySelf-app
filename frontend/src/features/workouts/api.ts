@@ -116,9 +116,16 @@ export type SetLogDetail = {
   targetWeightKg: number | null;
   targetRir: number | null;
   weightKg: number | null;
+  addedWeightKg: number | null;
+  assistanceKg: number | null;
   reps: number | null;
+  durationSeconds: number | null;
+  distanceMeters: number | null;
+  rir: number | null;
+  reachedFailure: boolean;
   completedAt: string | null;
   skippedAt: string | null;
+  skippedReason: string | null;
 };
 
 export type ExerciseLogDetail = {
@@ -139,7 +146,22 @@ export type WorkoutSessionDetail = {
   programName: string | null;
   status: "InProgress" | "Completed" | "Discarded";
   startedAt: string;
+  completedAt: string | null;
+  performedOnLocalDate: string | null;
+  notes: string | null;
   exercises: ExerciseLogDetail[];
+};
+
+export type LogSetBody = {
+  setLogId: string;
+  weightKg?: number | null;
+  addedWeightKg?: number | null;
+  assistanceKg?: number | null;
+  reps?: number | null;
+  durationSeconds?: number | null;
+  distanceMeters?: number | null;
+  rir?: number | null;
+  reachedFailure: boolean;
 };
 
 // --- hooks ---
@@ -338,6 +360,61 @@ export function useStartSession() {
   return useMutation({
     mutationFn: (dayId: string | null) =>
       apiFetch<WorkoutSessionDetail>("/api/v1/workout-sessions", { method: "POST", body: { dayId }, accessToken }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["workout-session"] }),
+  });
+}
+
+/** Log (or re-log) a performed set — validated server-side by the exercise's tracking mode. */
+export function useLogSet(sessionId: string) {
+  const accessToken = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: LogSetBody) =>
+      apiFetch<SetLogDetail>(`/api/v1/workout-sessions/${sessionId}/set-logs`, { method: "POST", body, accessToken }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["workout-session"] }),
+  });
+}
+
+/** Explicitly skip a set (docs/07). Reason is optional. */
+export function useSkipSet(sessionId: string) {
+  const accessToken = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ setLogId, reason }: { setLogId: string; reason?: string }) =>
+      apiFetch<SetLogDetail>(`/api/v1/workout-sessions/${sessionId}/skip-set`, {
+        method: "POST",
+        body: { setLogId, reason: reason ?? null },
+        accessToken,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["workout-session"] }),
+  });
+}
+
+/** Finish the session. The client sends its own local calendar date (locked decision #8). */
+export function useCompleteSession(sessionId: string) {
+  const accessToken = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (notes?: string) => {
+      const now = new Date();
+      const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      return apiFetch<WorkoutSessionDetail>(`/api/v1/workout-sessions/${sessionId}/complete`, {
+        method: "POST",
+        body: { localDate, notes: notes ?? null },
+        accessToken,
+      });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["workout-session"] }),
+  });
+}
+
+/** Throw the in-progress session away without recording it. */
+export function useDiscardSession(sessionId: string) {
+  const accessToken = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<void>(`/api/v1/workout-sessions/${sessionId}/discard`, { method: "POST", body: {}, accessToken }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["workout-session"] }),
   });
 }
