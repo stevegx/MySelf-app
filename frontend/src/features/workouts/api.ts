@@ -327,9 +327,14 @@ export function useMutateProgram(programId: string | null) {
         apiFetch<void>(`/api/v1/programs/${id}/activate`, { method: "POST", accessToken }),
       onSuccess: invalidate,
     }),
-    archive: useMutation({
+    remove: useMutation({
       mutationFn: (id: string) =>
         apiFetch<void>(`/api/v1/programs/${id}`, { method: "DELETE", accessToken }),
+      onSuccess: invalidate,
+    }),
+    archive: useMutation({
+      mutationFn: (id: string) =>
+        apiFetch<void>(`/api/v1/programs/${id}/archive`, { method: "POST", accessToken }),
       onSuccess: invalidate,
     }),
     clone: useMutation({

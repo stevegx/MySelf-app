@@ -23,7 +23,8 @@ public static class ProgramEndpoints
         programs.MapPost("/{id:guid}/restore", RestoreAsync).WithName("RestoreProgram");
         programs.MapGet("/{id:guid}", GetAsync).WithName("GetProgram");
         programs.MapPut("/{id:guid}", UpdateAsync).WithName("UpdateProgram");
-        programs.MapDelete("/{id:guid}", ArchiveAsync).WithName("ArchiveProgram");
+        programs.MapDelete("/{id:guid}", DeleteAsync).WithName("DeleteProgram");
+        programs.MapPost("/{id:guid}/archive", ArchiveAsync).WithName("ArchiveProgram");
         programs.MapPost("/{id:guid}/activate", ActivateAsync).WithName("ActivateProgram");
         programs.MapPost("/{id:guid}/clone", CloneAsync).WithName("CloneProgram");
         programs.MapPost("/{id:guid}/days", AddDayAsync).WithName("AddWorkoutDay");
@@ -191,6 +192,31 @@ public static class ProgramEndpoints
             return StaleWrite();
         }
 
+        return Results.NoContent();
+    }
+
+    /// <summary>
+    /// Hard delete (docs/07: recoverable removal where there is history — there is none here,
+    /// a program only holds builder content). Cascades to its days, exercises, set
+    /// prescriptions and superset groups. Completed <see cref="WorkoutSession"/>s are
+    /// independent snapshots (their <c>SourceDayId</c> is a soft pointer, no FK), so they are
+    /// untouched. Use <c>POST /{id}/archive</c> to keep it around instead.
+    /// </summary>
+    private static async Task<IResult> DeleteAsync(Guid id, HttpContext http, MySelfDbContext db, CancellationToken ct)
+    {
+        if (!http.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var program = await db.OwnedPrograms(userId).FirstOrDefaultAsync(p => p.Id == id, ct);
+        if (program is null)
+        {
+            return Results.NotFound();
+        }
+
+        db.WorkoutPrograms.Remove(program);
+        await db.SaveChangesAsync(ct);
         return Results.NoContent();
     }
 

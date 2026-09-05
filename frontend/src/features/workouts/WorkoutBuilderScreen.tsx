@@ -63,7 +63,6 @@ function BackButton({ onClick, label }: { onClick: () => void; label: string }) 
 }
 
 function ProgramList({ onOpen }: { onOpen: (id: string) => void }) {
-  const navigate = useNavigate();
   const { data: programs, isLoading } = usePrograms();
   const create = useCreateProgram();
   const startWorkout = useStartWorkout();
@@ -84,15 +83,10 @@ function ProgramList({ onOpen }: { onOpen: (id: string) => void }) {
         title="Workout programs"
         subtitle="Build the workouts you train from. No fixed days."
         actions={
-          <>
-            <Button variant="ghost" onClick={() => navigate("/workouts/history")}>
-              History
-            </Button>
-            <Button variant="secondary" onClick={() => startWorkout(null)}>
-              <Play size={14} aria-hidden />
-              Start ad-hoc workout
-            </Button>
-          </>
+          <Button variant="secondary" onClick={() => startWorkout(null)}>
+            <Play size={14} aria-hidden />
+            Start ad-hoc workout
+          </Button>
         }
       />
 
@@ -145,9 +139,11 @@ function ArchivedPrograms() {
   const [open, setOpen] = useState(false);
   const { data: archived, isLoading } = useArchivedPrograms(open);
   const m = useMutateProgram(null);
+  const { confirm, dialog } = useConfirm();
 
   return (
     <div className="mt-6">
+      {dialog}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -171,14 +167,34 @@ function ArchivedPrograms() {
                     {p.dayCount} days · {p.exerciseCount} exercises
                   </span>
                 </span>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={m.restore.isPending}
-                  onClick={() => m.restore.mutate(p.id)}
-                >
-                  Restore
-                </Button>
+                <div className="flex gap-1.5">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={m.restore.isPending}
+                    onClick={() => m.restore.mutate(p.id)}
+                  >
+                    Restore
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={m.remove.isPending}
+                    onClick={async () => {
+                      if (
+                        await confirm({
+                          title: `Permanently delete "${p.name}"?`,
+                          message: "This can't be undone. Workouts you already logged from it are kept.",
+                          confirmLabel: "Delete",
+                        })
+                      ) {
+                        m.remove.mutate(p.id);
+                      }
+                    }}
+                  >
+                    Delete
+                  </Button>
+                </div>
               </div>
             ))
           ) : (
@@ -232,7 +248,7 @@ function ProgramDetail({
               {m.clone.isPending ? "Duplicating…" : "Duplicate"}
             </Button>
             <Button
-              variant="danger"
+              variant="ghost"
               onClick={async () => {
                 if (
                   await confirm({
@@ -246,6 +262,23 @@ function ProgramDetail({
               }}
             >
               Archive
+            </Button>
+            <Button
+              variant="danger"
+              onClick={async () => {
+                if (
+                  await confirm({
+                    title: `Delete "${program.name}"?`,
+                    message:
+                      "This permanently removes the program and its days. Workouts you already logged from it are kept.",
+                    confirmLabel: "Delete",
+                  })
+                ) {
+                  m.remove.mutate(program.id, { onSuccess: onBack });
+                }
+              }}
+            >
+              Delete program
             </Button>
           </>
         }

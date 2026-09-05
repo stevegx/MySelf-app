@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useNavigate } from "react-router";
 import { Button, Card, PageHeader, Tag } from "../../components/ui";
 import { cn } from "../../lib/cn";
 import { useRescheduleSession, useWorkoutCalendar } from "./api";
@@ -16,7 +15,6 @@ function mondayIndex(d: Date) {
 }
 
 export function WorkoutCalendarScreen() {
-  const navigate = useNavigate();
   const [month, setMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -47,15 +45,7 @@ export function WorkoutCalendarScreen() {
 
   return (
     <>
-      <PageHeader
-        title="Workout calendar"
-        subtitle="Completed sessions, by the day they happened."
-        actions={
-          <Button variant="ghost" onClick={() => navigate("/workouts/history")}>
-            List view
-          </Button>
-        }
-      />
+      <PageHeader title="Workout calendar" subtitle="Completed sessions, by the day they happened." />
 
       <Card className="mb-4 gap-3">
         <div className="flex items-center justify-between">

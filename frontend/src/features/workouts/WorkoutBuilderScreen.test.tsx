@@ -88,6 +88,41 @@ describe("WorkoutBuilderScreen", () => {
     expect(await screen.findAllByRole("button", { name: "Drag to reorder" })).toHaveLength(2);
   });
 
+  it("hard-deletes a program via DELETE after confirming", async () => {
+    const populated = {
+      id: "p1",
+      name: "Throwaway",
+      splitLabel: null,
+      isActive: false,
+      createdAt: "2026-09-02T00:00:00Z",
+      rowVersion: 1,
+      days: [],
+    };
+    const spy = vi.fn<typeof fetch>((input, init) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const json = (d: unknown, s = 200) =>
+        Promise.resolve(new Response(JSON.stringify(d), { status: s, headers: { "content-type": "application/json" } }));
+      if (url.includes("/auth/refresh"))
+        return json({ accessToken: "t", user: { id: "u1", username: "demo", email: "d@e.com" } });
+      if (url.match(/\/api\/v1\/programs\/p1$/) && init?.method === "DELETE")
+        return Promise.resolve(new Response(null, { status: 204 }));
+      if (url.endsWith("/api/v1/programs")) return json([populated]);
+      if (url.includes("/api/v1/programs/p1")) return json(populated);
+      return Promise.resolve(new Response(null, { status: 404 }));
+    });
+    vi.stubGlobal("fetch", spy);
+    const user = userEvent.setup();
+
+    renderScreen();
+    await user.click(await screen.findByText("Throwaway"));
+    await user.click(await screen.findByRole("button", { name: "Delete program" }));
+    await user.click(await screen.findByRole("button", { name: "Delete" })); // dialog confirm
+
+    await vi.waitFor(() =>
+      expect(spy.mock.calls.some(([u, i]) => /\/programs\/p1$/.test(String(u)) && i?.method === "DELETE")).toBe(true),
+    );
+  });
+
   it("confirms destructive deletes with a styled dialog, not window.confirm", async () => {
     const populated = {
       id: "p1",

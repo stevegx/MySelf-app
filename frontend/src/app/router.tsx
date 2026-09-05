@@ -10,6 +10,7 @@ import { RegisterScreen } from "../features/auth/RegisterScreen";
 import { ResetPasswordScreen } from "../features/auth/ResetPasswordScreen";
 import { OnboardingWizard } from "../features/onboarding/OnboardingWizard";
 import { DashboardScreen } from "../features/dashboard/DashboardScreen";
+import { WorkoutLayout } from "../features/workouts/WorkoutLayout";
 import { WorkoutBuilderScreen } from "../features/workouts/WorkoutBuilderScreen";
 import { ActiveWorkoutScreen } from "../features/workouts/ActiveWorkoutScreen";
 import { WorkoutHistoryScreen } from "../features/workouts/WorkoutHistoryScreen";
@@ -55,10 +56,15 @@ export const router = createBrowserRouter([
               { index: true, element: <Navigate to="/dashboard" replace /> },
               { path: "dashboard", element: <DashboardScreen /> },
               { path: "workouts", element: <Navigate to="/workouts/builder" replace /> },
-              { path: "workouts/builder", element: <WorkoutBuilderScreen /> },
               { path: "workouts/active", element: <ActiveWorkoutScreen /> },
-              { path: "workouts/history", element: <WorkoutHistoryScreen /> },
-              { path: "workouts/calendar", element: <WorkoutCalendarScreen /> },
+              {
+                element: <WorkoutLayout />,
+                children: [
+                  { path: "workouts/builder", element: <WorkoutBuilderScreen /> },
+                  { path: "workouts/history", element: <WorkoutHistoryScreen /> },
+                  { path: "workouts/calendar", element: <WorkoutCalendarScreen /> },
+                ],
+              },
               { path: "nutrition", element: <NutritionScreen /> },
               { path: "nutrition/add", element: <AddFoodScreen /> },
               { path: "progress", element: <ProgressScreen /> },

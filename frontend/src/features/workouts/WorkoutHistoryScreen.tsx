@@ -1,6 +1,5 @@
-import { ChevronLeft } from "lucide-react";
-import { Link, useNavigate } from "react-router";
-import { Button, Card, PageHeader, Tag } from "../../components/ui";
+import { Link } from "react-router";
+import { Card, PageHeader, Tag } from "../../components/ui";
 import { useSessionHistory } from "./api";
 import type { WorkoutSessionListItem } from "./api";
 
@@ -43,24 +42,12 @@ function Row({ s }: { s: WorkoutSessionListItem }) {
 
 export function WorkoutHistoryScreen() {
   const { data, isLoading } = useSessionHistory();
-  const navigate = useNavigate();
 
   return (
     <>
       <PageHeader
         title="Workout history"
         subtitle="Sessions you've completed, most recent first."
-        actions={
-          <>
-            <Button variant="ghost" onClick={() => navigate("/workouts/calendar")}>
-              Calendar
-            </Button>
-            <Button variant="ghost" onClick={() => navigate("/workouts/builder")}>
-              <ChevronLeft size={15} aria-hidden />
-              Programs
-            </Button>
-          </>
-        }
       />
 
       {isLoading ? (
