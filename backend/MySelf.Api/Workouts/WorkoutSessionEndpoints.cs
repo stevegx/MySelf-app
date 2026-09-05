@@ -571,6 +571,16 @@ public static class WorkoutSessionEndpoints
             return SessionNotInProgress();
         }
 
+        // Docs/06 edge cases: a session with nothing logged or skipped is an empty workout —
+        // it must not land in history, the calendar or analytics. The client hides "Finish"
+        // in this state; this guards the API directly.
+        var actedAnySet = session.ExerciseLogs
+            .Any(e => e.Sets.Any(s => s.CompletedAt is not null || s.SkippedAt is not null));
+        if (!actedAnySet)
+        {
+            return Validation("session", "Log or skip at least one set before finishing this workout.");
+        }
+
         var now = clock.GetUtcNow();
         session.Status = SessionStatus.Completed;
         session.CompletedAt = now;

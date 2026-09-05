@@ -319,6 +319,57 @@ public class WorkoutSessionEndpointTests(WebApplicationFactory<Program> factory,
     }
 
     [Fact]
+    public async Task Completing_an_empty_session_is_rejected_until_a_set_is_logged_or_skipped()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (sessionId, setId, mode) = await StartWithASetAsync(client);
+
+            // Nothing logged or skipped yet — the empty-workout guard blocks completion.
+            var empty = await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/complete", new { localDate = "2026-09-04", notes = (string?)null });
+            Assert.Equal(HttpStatusCode.BadRequest, empty.StatusCode);
+            var body = await empty.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.True(body.GetProperty("errors").TryGetProperty("session", out _));
+
+            // The session is still in progress and can still be completed once something is logged.
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/v1/workout-sessions/active")).StatusCode);
+            await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/set-logs", LogBodyFor(setId, mode));
+
+            var ok = await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/complete", new { localDate = "2026-09-04", notes = (string?)null });
+            Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Completing_a_session_where_a_set_was_only_skipped_is_allowed()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (sessionId, setId, _) = await StartWithASetAsync(client);
+
+            var skip = await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/skip-set", new { setLogId = setId, reason = "tweaked knee" });
+            Assert.Equal(HttpStatusCode.OK, skip.StatusCode);
+
+            var ok = await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/complete", new { localDate = "2026-09-04", notes = (string?)null });
+            Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
     public async Task Discarding_a_session_frees_the_slot_for_a_new_one()
     {
         var (client, email) = await factory.RegisterAndAuthenticateAsync();

@@ -380,7 +380,8 @@ function RunningSession({
             <Button
               variant="primary"
               onClick={finish}
-              disabled={complete.isPending || discard.isPending}
+              disabled={complete.isPending || discard.isPending || actedSets === 0}
+              title={actedSets === 0 ? "Log or skip at least one set first" : undefined}
             >
               {complete.isPending ? "Finishing…" : "Finish workout"}
             </Button>
@@ -391,13 +392,15 @@ function RunningSession({
       {totalSets > 0 && (
         <p className="mb-3 text-[13px] text-foreground-muted">
           {actedSets} of {totalSets} sets logged or skipped
+          {actedSets === 0 && " — log or skip at least one to finish"}
         </p>
       )}
 
       {session.exercises.length === 0 && (
         <Card className="mb-4">
           <p className="m-0 text-sm text-foreground-muted">
-            No exercises yet — add one below, or finish to put the session on record.
+            No exercises yet — add one below. An empty workout can't be finished; discard it if
+            you're not training now.
           </p>
         </Card>
       )}

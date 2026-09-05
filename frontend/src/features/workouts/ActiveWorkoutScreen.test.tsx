@@ -182,8 +182,27 @@ describe("ActiveWorkoutScreen", () => {
     });
   });
 
+  it("keeps Finish disabled until at least one set is logged or skipped", async () => {
+    installFetch({ active: sessionWithOneSet() });
+    renderScreen();
+
+    // Nothing acted on yet — the empty-workout guard blocks finishing.
+    expect(await screen.findByRole("button", { name: "Finish workout" })).toBeDisabled();
+    expect(screen.getByText(/log or skip at least one to finish/i)).toBeInTheDocument();
+  });
+
   it("finishes the workout", async () => {
-    const fetchSpy = installFetch({ active: sessionWithOneSet() });
+    const base = sessionWithOneSet();
+    const done = {
+      ...base,
+      exercises: [
+        {
+          ...base.exercises[0],
+          sets: [makeSet("set1", { sortOrder: 0, weightKg: 100, reps: 8, completedAt: "2026-09-04T09:05:00Z" })],
+        },
+      ],
+    };
+    const fetchSpy = installFetch({ active: done });
     const user = userEvent.setup();
     renderScreen();
 
