@@ -356,3 +356,23 @@ dotnet ef migrations add AddSessionSourceProgram --project MySelf.Infrastructure
 dotnet test MySelf.sln
 dotnet run --project MySelf.Api
 ```
+
+### Update — Phase 4a finished the same day
+
+The dev API was stopped and everything above is now live:
+
+| Piece | Status |
+| --- | --- |
+| `4dec9b2` migration `AddSessionSourceProgram` (+ backfill `Sql()`) | applied to dev DB; **49 unit + 99 integration** green |
+| `4dec9b2` fix broken `Archive_hides_the_program_from_the_default_list` assertion | done (it archived a program then expected the archived list empty) |
+| `4dec9b2` new tests `Program_stats_count_…`, `An_archived_program_can_still_be_hard_deleted` | green |
+| `af92e6e` `<Skeleton>` / `<SkeletonText>` + Overview skeleton + Overview error card | shipped, 62 frontend tests |
+| `af92e6e` one test stabilised: `findByText` → `waitFor(getByText)` | the repo's known fast-reject flake, tipped by the extra render work |
+| `a77a4f5` `docs/api/workout-responses.md` | example JSON for every workout endpoint + how to inspect live |
+| API restarted by me | new PID; serves `DELETE /programs/{id}`, `/programs/{id}/stats`, `?programId=` — verified via `/openapi/v1.json` |
+
+**Archived-delete bug**: root cause was the running binary predating the `DELETE` route
+(`4ac03a4`). Rebuilding + restarting fixed it; `68e08d1` also stops the UI swallowing the
+error. Both covered by `An_archived_program_can_still_be_hard_deleted`.
+
+**Still open:** Slice B (edit a finished workout) — unblocked, not started.
