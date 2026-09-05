@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { Providers } from "../../app/providers";
@@ -119,6 +119,34 @@ describe("WorkoutBuilderScreen", () => {
       const deletes = spy.mock.calls.filter(([u, i]) => /\/programs\/p[12]$/.test(String(u)) && i?.method === "DELETE");
       expect(deletes).toHaveLength(2);
     });
+  });
+
+  it("shows an inline error when deleting an archived program fails", async () => {
+    const archived = [
+      { id: "a1", name: "Old PPL", splitLabel: null, isActive: false, dayCount: 3, exerciseCount: 12, createdAt: "2026-07-01T00:00:00Z" },
+    ];
+    const spy = vi.fn<typeof fetch>((input, init) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const json = (d: unknown, s = 200) =>
+        Promise.resolve(new Response(JSON.stringify(d), { status: s, headers: { "content-type": "application/json" } }));
+      if (url.includes("/auth/refresh"))
+        return json({ accessToken: "t", user: { id: "u1", username: "demo", email: "d@e.com" } });
+      if (url.endsWith("/api/v1/programs/archived")) return json(archived);
+      if (url.match(/\/api\/v1\/programs\/a1$/) && init?.method === "DELETE")
+        return json({ title: "Not Found", detail: "That program no longer exists." }, 404);
+      if (url.endsWith("/api/v1/programs")) return json([]);
+      return Promise.resolve(new Response(null, { status: 404 }));
+    });
+    vi.stubGlobal("fetch", spy);
+    const user = userEvent.setup();
+
+    renderScreen();
+    await user.click(await screen.findByRole("button", { name: /Archived programs/ }));
+    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    const dlg = await screen.findByRole("dialog", { name: /Permanently delete/i });
+    await user.click(within(dlg).getByRole("button", { name: "Delete" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no longer exists/i);
   });
 
   it("hard-deletes a program via DELETE after confirming", async () => {

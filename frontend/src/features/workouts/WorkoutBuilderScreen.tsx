@@ -54,6 +54,24 @@ export function WorkoutBuilderScreen() {
   return <ProgramList onOpen={setProgramId} />;
 }
 
+/** One-line message from a failed mutation, for inline display. */
+function errMsg(error: unknown): string | null {
+  if (!error) return null;
+  if (error instanceof ApiError) {
+    return Object.values(error.errors ?? {})[0]?.[0] ?? error.detail ?? error.title;
+  }
+  return "Something went wrong. Please try again.";
+}
+
+function InlineError({ error }: { error: unknown }) {
+  const message = errMsg(error);
+  return message ? (
+    <p role="alert" className="m-0 text-[13px] text-danger">
+      {message}
+    </p>
+  ) : null;
+}
+
 function BackButton({ onClick, label }: { onClick: () => void; label: string }) {
   return (
     <Button variant="ghost" onClick={onClick}>
@@ -163,6 +181,8 @@ function ProgramList({ onOpen }: { onOpen: (id: string) => void }) {
         </Card>
       )}
 
+      <InlineError error={m.remove.error ?? m.clone.error} />
+
       {isLoading ? (
         <p className="text-sm text-foreground-muted">Loading…</p>
       ) : programs && programs.length > 0 ? (
@@ -255,6 +275,7 @@ function ArchivedPrograms() {
       </button>
       {open && (
         <div className="mt-2 flex flex-col gap-2">
+          <InlineError error={m.remove.error ?? m.restore.error} />
           {isLoading ? (
             <p className="text-sm text-foreground-muted">Loading…</p>
           ) : archived && archived.length > 0 ? (
@@ -385,6 +406,8 @@ function ProgramDetail({
           </>
         }
       />
+
+      <InlineError error={m.remove.error ?? m.archive.error ?? m.activate.error ?? m.clone.error} />
 
       <div className="flex flex-col gap-3">
         <SortableList
