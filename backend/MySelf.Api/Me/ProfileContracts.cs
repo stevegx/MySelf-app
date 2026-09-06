@@ -15,7 +15,11 @@ public sealed record ProfileSummary(
     string UnitSystem,
     string? Timezone,
     string? Locale,
-    DateTimeOffset? OnboardingCompletedAt);
+    DateTimeOffset? OnboardingCompletedAt,
+    bool WarnOffFocusExercises);
+
+/// <summary>Body of PUT /api/v1/me/preferences — small UI toggles, no onboarding fields.</summary>
+public sealed record UpdatePreferencesRequest(bool WarnOffFocusExercises);
 
 /// <summary>
 /// GET /api/v1/me — account summary, onboarding profile, and the current nutrition goal

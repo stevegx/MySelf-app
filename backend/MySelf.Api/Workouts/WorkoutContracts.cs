@@ -13,6 +13,9 @@ public sealed record ExerciseListItem(
 
 public sealed record ExerciseSearchResult(IReadOnlyList<ExerciseListItem> Items, int Page, int PageSize, int Total);
 
+/// <summary>A muscle group from the catalogue (GET /api/v1/muscles) — for the day-focus picker.</summary>
+public sealed record MuscleGroup(int Id, string Name, bool IsFront);
+
 // --- programs ---
 
 public sealed record CreateProgramRequest(string? Name, string? SplitLabel);
@@ -82,7 +85,9 @@ public sealed record DayDetail(
     // The owning program's xmin token — send it back on PUT to guard the edit.
     uint ProgramRowVersion,
     IReadOnlyList<DayExerciseDetail> Exercises,
-    IReadOnlyList<SupersetDetail> Supersets);
+    IReadOnlyList<SupersetDetail> Supersets,
+    // Muscle-group ids this day trains (empty = no focus). Drives the picker's suggestions.
+    IReadOnlyList<int> FocusMuscleIds);
 
 public sealed record DayExerciseDetail(
     Guid Id,
@@ -116,7 +121,9 @@ public sealed record UpdateDayRequest(
     IReadOnlyList<UpdateDayExercise>? Exercises,
     IReadOnlyList<UpdateSuperset>? Supersets,
     // The owning program's xmin token from the last read; 409 if it moved on. Optional.
-    uint? RowVersion);
+    uint? RowVersion,
+    // Muscle-group ids the day focuses on. Null = leave as-is; [] = clear. Unknown ids are dropped.
+    IReadOnlyList<int>? FocusMuscleIds);
 
 public sealed record UpdateDayExercise(
     Guid ExerciseId,

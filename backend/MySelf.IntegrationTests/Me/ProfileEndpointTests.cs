@@ -30,6 +30,46 @@ public class ProfileEndpointTests(WebApplicationFactory<Program> factory, Databa
     };
 
     [Fact]
+    public async Task Preferences_toggle_off_focus_warning_and_it_round_trips_via_get_me()
+    {
+        var (client, email) = await RegisterAsync();
+        try
+        {
+            await client.PutAsJsonAsync("/api/v1/me/profile", ValidProfile);
+
+            // Default is true.
+            var before = await client.GetFromJsonAsync<JsonElement>("/api/v1/me");
+            Assert.True(before.GetProperty("profile").GetProperty("warnOffFocusExercises").GetBoolean());
+
+            var put = await client.PutAsJsonAsync("/api/v1/me/preferences", new { warnOffFocusExercises = false });
+            Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+            Assert.False((await put.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("warnOffFocusExercises").GetBoolean());
+
+            var after = await client.GetFromJsonAsync<JsonElement>("/api/v1/me");
+            Assert.False(after.GetProperty("profile").GetProperty("warnOffFocusExercises").GetBoolean());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Preferences_without_a_profile_is_a_conflict()
+    {
+        var (client, email) = await RegisterAsync();
+        try
+        {
+            var put = await client.PutAsJsonAsync("/api/v1/me/preferences", new { warnOffFocusExercises = false });
+            Assert.Equal(HttpStatusCode.Conflict, put.StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
     public async Task Put_profile_then_get_me_returns_the_saved_profile()
     {
         var (client, email) = await RegisterAsync();

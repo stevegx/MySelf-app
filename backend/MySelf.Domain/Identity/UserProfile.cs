@@ -42,6 +42,13 @@ public class UserProfile
     /// </summary>
     public DateTimeOffset? OnboardingCompletedAt { get; set; }
 
+    /// <summary>
+    /// UI preference: when adding an exercise whose primary muscle is outside a day's focus,
+    /// show the "off-focus" nudge. Defaults to true; the user can turn it off from Settings
+    /// (or via "don't warn me again" on the nudge itself).
+    /// </summary>
+    public bool WarnOffFocusExercises { get; set; } = true;
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }

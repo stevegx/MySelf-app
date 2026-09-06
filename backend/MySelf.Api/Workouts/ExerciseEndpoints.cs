@@ -30,7 +30,21 @@ public static class ExerciseEndpoints
         group.MapGet("", SearchAsync).WithName("SearchExercises");
         group.MapGet("/{id:guid}", GetAsync).WithName("GetExercise");
 
+        app.MapGet("/api/v1/muscles", MusclesAsync).WithName("ListMuscleGroups").RequireAuthorization();
+
         return app;
+    }
+
+    /// <summary>The catalogue's muscle groups (~15 rows), for the day-focus picker.</summary>
+    private static async Task<IResult> MusclesAsync(MySelfDbContext db, CancellationToken ct)
+    {
+        var muscles = await db.Muscles
+            .AsNoTracking()
+            .OrderBy(m => m.Name)
+            .Select(m => new MuscleGroup(m.Id, m.Name, m.IsFront))
+            .ToListAsync(ct);
+
+        return Results.Ok(muscles);
     }
 
     private static async Task<IResult> SearchAsync(

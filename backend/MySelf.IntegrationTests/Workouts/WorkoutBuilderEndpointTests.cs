@@ -40,6 +40,60 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
     }
 
     [Fact]
+    public async Task Muscles_list_and_day_focus_round_trips_dropping_unknown_ids()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var muscles = (await client.GetFromJsonAsync<JsonElement>("/api/v1/muscles")).EnumerateArray().ToList();
+            Assert.True(muscles.Count >= 10);
+            Assert.All(muscles, m =>
+            {
+                Assert.True(m.GetProperty("id").GetInt32() > 0);
+                Assert.False(string.IsNullOrWhiteSpace(m.GetProperty("name").GetString()));
+            });
+            var id0 = muscles[0].GetProperty("id").GetInt32();
+            var id1 = muscles[1].GetProperty("id").GetInt32();
+
+            var programId = await CreateProgramAsync(client);
+            var dayId = await AddDayAsync(client, programId, "Upper");
+
+            // A fresh day has no focus.
+            var fresh = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-days/{dayId}");
+            Assert.Empty(fresh.GetProperty("focusMuscleIds").EnumerateArray());
+
+            // PUT two real ids + one bogus one — the bogus one is dropped.
+            var put = await client.PutAsJsonAsync($"/api/v1/workout-days/{dayId}", new
+            {
+                name = "Upper",
+                estimatedDurationMinutes = (int?)null,
+                exercises = Array.Empty<object>(),
+                supersets = Array.Empty<object>(),
+                focusMuscleIds = new[] { id0, id1, 999999 },
+            });
+            put.EnsureSuccessStatusCode();
+
+            var saved = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-days/{dayId}");
+            var focus = saved.GetProperty("focusMuscleIds").EnumerateArray().Select(x => x.GetInt32()).OrderBy(x => x).ToList();
+            Assert.Equal(new[] { id0, id1 }.OrderBy(x => x).ToList(), focus);
+
+            // Omitting focusMuscleIds leaves it untouched; sending [] clears it.
+            await client.PutAsJsonAsync($"/api/v1/workout-days/{dayId}", new
+            {
+                name = "Upper", estimatedDurationMinutes = (int?)null,
+                exercises = Array.Empty<object>(), supersets = Array.Empty<object>(),
+                focusMuscleIds = Array.Empty<int>(),
+            });
+            var cleared = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-days/{dayId}");
+            Assert.Empty(cleared.GetProperty("focusMuscleIds").EnumerateArray());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
     public async Task Exercise_search_returns_target_muscles_and_equipment()
     {
         var (client, email) = await factory.RegisterAndAuthenticateAsync();

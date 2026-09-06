@@ -73,7 +73,8 @@ public static class WorkoutDayEndpoints
                 d.Supersets
                     .OrderBy(s => s.SortOrder)
                     .Select(s => new SupersetDetail(s.Id, s.SortOrder, s.RestAfterRoundSeconds))
-                    .ToList()))
+                    .ToList(),
+                d.FocusMuscleIds))
             .FirstOrDefaultAsync(ct);
 
         return day is null ? Results.NotFound() : Results.Ok(day);
@@ -283,6 +284,15 @@ public static class WorkoutDayEndpoints
         }
 
         day.EstimatedDurationMinutes = request.EstimatedDurationMinutes;
+
+        // Null = leave the focus as-is; otherwise replace it, dropping any unknown muscle ids.
+        if (request.FocusMuscleIds is not null)
+        {
+            var wanted = request.FocusMuscleIds.Distinct().ToList();
+            day.FocusMuscleIds = wanted.Count == 0
+                ? []
+                : await db.Muscles.Where(m => wanted.Contains(m.Id)).Select(m => m.Id).ToListAsync(ct);
+        }
 
         if (!await TrySaveWithRowVersionAsync(db, program, request.RowVersion, ct))
         {

@@ -37,6 +37,8 @@ public class UserProfileConfiguration : IEntityTypeConfiguration<UserProfile>
         builder.Property(p => p.Timezone).HasMaxLength(64);
         builder.Property(p => p.Locale).HasMaxLength(16);
 
+        builder.Property(p => p.WarnOffFocusExercises).HasDefaultValue(true);
+
         // One-to-one with the Identity user, no navigation property on either side. Deleting
         // the account deletes its profile.
         builder.HasOne<ApplicationUser>()
