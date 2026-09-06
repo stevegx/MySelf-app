@@ -22,8 +22,10 @@ public static class ProgramEndpoints
         programs.MapPost("", CreateAsync).WithName("CreateProgram");
         programs.MapPost("/{id:guid}/restore", RestoreAsync).WithName("RestoreProgram");
         programs.MapGet("/{id:guid}", GetAsync).WithName("GetProgram");
+        programs.MapGet("/{id:guid}/stats", StatsAsync).WithName("GetProgramStats");
         programs.MapPut("/{id:guid}", UpdateAsync).WithName("UpdateProgram");
-        programs.MapDelete("/{id:guid}", ArchiveAsync).WithName("ArchiveProgram");
+        programs.MapDelete("/{id:guid}", DeleteAsync).WithName("DeleteProgram");
+        programs.MapPost("/{id:guid}/archive", ArchiveAsync).WithName("ArchiveProgram");
         programs.MapPost("/{id:guid}/activate", ActivateAsync).WithName("ActivateProgram");
         programs.MapPost("/{id:guid}/clone", CloneAsync).WithName("CloneProgram");
         programs.MapPost("/{id:guid}/days", AddDayAsync).WithName("AddWorkoutDay");
@@ -147,6 +149,85 @@ public static class ProgramEndpoints
         return program is null ? Results.NotFound() : Results.Ok(program);
     }
 
+    /// <summary>
+    /// The program Overview tab (docs/02 §7): aggregate numbers over every completed session
+    /// that was started from this program. Sessions are matched on the soft
+    /// <see cref="WorkoutSession.SourceProgramId"/> snapshot, so later edits to the program or
+    /// its days don't move history. <paramref name="today"/> is the caller's local date
+    /// (locked decision #8); it defaults to the server's UTC date.
+    /// </summary>
+    private static async Task<IResult> StatsAsync(
+        Guid id,
+        HttpContext http,
+        MySelfDbContext db,
+        TimeProvider clock,
+        CancellationToken ct,
+        DateOnly? today = null)
+    {
+        if (!http.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var program = await db.OwnedPrograms(userId)
+            .AsNoTracking()
+            .Where(p => p.Id == id)
+            .Select(p => new
+            {
+                Days = p.Days.OrderBy(d => d.SortOrder).Select(d => new { d.Id, d.Name }).ToList(),
+            })
+            .FirstOrDefaultAsync(ct);
+        if (program is null)
+        {
+            return Results.NotFound();
+        }
+
+        var sessions = await db.OwnedSessions(userId)
+            .AsNoTracking()
+            .Include(s => s.ExerciseLogs).ThenInclude(e => e.Sets)
+            .Where(s => s.SourceProgramId == id && s.Status == SessionStatus.Completed)
+            .ToListAsync(ct);
+
+        var localToday = today ?? DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        var stats = ProgramStatsCalculator.Of(
+            sessions,
+            program.Days.Select(d => (d.Id, d.Name)).ToList(),
+            localToday);
+
+        // PRs achieved in those sessions (docs/02 §7 PR types), newest first.
+        var sessionIds = sessions.Select(s => s.Id).ToList();
+        var prs = await db.PersonalRecords
+            .AsNoTracking()
+            .Where(p => p.UserId == userId && sessionIds.Contains(p.SessionId))
+            .Join(
+                db.Exercises,
+                p => p.ExerciseId,
+                e => e.Id,
+                (p, e) => new { p.Type, p.Value, p.AchievedOn, ExerciseName = e.Name })
+            .OrderByDescending(x => x.AchievedOn)
+            .Take(50)
+            .ToListAsync(ct);
+
+        return Results.Ok(new ProgramStats(
+            stats.TotalSessions,
+            stats.FirstPerformedOn,
+            stats.LastPerformedOn,
+            stats.SessionsThisWeek,
+            stats.SessionsThisMonth,
+            stats.WeeklyAverage,
+            stats.TotalVolumeKg,
+            stats.AvgDurationSeconds,
+            stats.CompletedSets,
+            stats.SkippedSets,
+            stats.SkippedSetRate,
+            stats.PerDay
+                .Select(d => new ProgramDayStat(d.DayId, d.DayName, d.Sessions, d.LastPerformedOn))
+                .ToList(),
+            prs
+                .Select(x => new ProgramPrStat(x.ExerciseName, x.Type.ToString(), (double)x.Value, x.AchievedOn))
+                .ToList()));
+    }
+
     private static async Task<IResult> UpdateAsync(
         Guid id,
         UpdateProgramRequest request,
@@ -191,6 +272,31 @@ public static class ProgramEndpoints
             return StaleWrite();
         }
 
+        return Results.NoContent();
+    }
+
+    /// <summary>
+    /// Hard delete (docs/07: recoverable removal where there is history — there is none here,
+    /// a program only holds builder content). Cascades to its days, exercises, set
+    /// prescriptions and superset groups. Completed <see cref="WorkoutSession"/>s are
+    /// independent snapshots (their <c>SourceDayId</c> is a soft pointer, no FK), so they are
+    /// untouched. Use <c>POST /{id}/archive</c> to keep it around instead.
+    /// </summary>
+    private static async Task<IResult> DeleteAsync(Guid id, HttpContext http, MySelfDbContext db, CancellationToken ct)
+    {
+        if (!http.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var program = await db.OwnedPrograms(userId).FirstOrDefaultAsync(p => p.Id == id, ct);
+        if (program is null)
+        {
+            return Results.NotFound();
+        }
+
+        db.WorkoutPrograms.Remove(program);
+        await db.SaveChangesAsync(ct);
         return Results.NoContent();
     }
 

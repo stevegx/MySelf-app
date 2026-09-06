@@ -42,6 +42,7 @@ public class MySelfDbContext(DbContextOptions<MySelfDbContext> options)
     public DbSet<WorkoutSession> WorkoutSessions => Set<WorkoutSession>();
     public DbSet<ExerciseLog> ExerciseLogs => Set<ExerciseLog>();
     public DbSet<SetLog> SetLogs => Set<SetLog>();
+    public DbSet<PersonalRecord> PersonalRecords => Set<PersonalRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

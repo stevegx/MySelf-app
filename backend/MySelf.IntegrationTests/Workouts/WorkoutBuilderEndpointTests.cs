@@ -410,10 +410,22 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
         try
         {
             var programId = await CreateProgramAsync(client);
-            Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"/api/v1/programs/{programId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsync($"/api/v1/programs/{programId}/archive", null)).StatusCode);
 
             Assert.Equal(0, (await client.GetFromJsonAsync<JsonElement>("/api/v1/programs")).GetArrayLength());
             Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v1/programs/{programId}")).StatusCode);
+
+            // The archived program shows up in the archived list.
+            var archived = await client.GetFromJsonAsync<JsonElement>("/api/v1/programs/archived");
+            Assert.Equal(1, archived.GetArrayLength());
+            Assert.Equal(programId, archived[0].GetProperty("id").GetGuid());
+
+            // A hard DELETE removes it entirely — it never reaches the archived list.
+            var second = await CreateProgramAsync(client, "Throwaway");
+            Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"/api/v1/programs/{second}")).StatusCode);
+            var afterDelete = await client.GetFromJsonAsync<JsonElement>("/api/v1/programs/archived");
+            Assert.Equal(1, afterDelete.GetArrayLength());
+            Assert.Equal(programId, afterDelete[0].GetProperty("id").GetGuid());
         }
         finally
         {
@@ -428,7 +440,7 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
         try
         {
             var programId = await CreateProgramAsync(client, "Old plan");
-            Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"/api/v1/programs/{programId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsync($"/api/v1/programs/{programId}/archive", null)).StatusCode);
 
             var archived = await client.GetFromJsonAsync<JsonElement>("/api/v1/programs/archived");
             Assert.Equal(1, archived.GetArrayLength());

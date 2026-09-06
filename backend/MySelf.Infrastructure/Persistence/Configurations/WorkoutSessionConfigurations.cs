@@ -19,6 +19,10 @@ public class WorkoutSessionConfiguration : IEntityTypeConfiguration<WorkoutSessi
 
         builder.HasIndex(s => s.UserId);
 
+        // A program's Overview reads "completed sessions for this program" (soft pointer,
+        // no FK — the day/program may have changed since).
+        builder.HasIndex(s => s.SourceProgramId);
+
         // Only one InProgress session per user — a filtered unique index enforces it in the
         // DB, not just in the start handler (same pattern as the one-active-program index).
         builder.HasIndex(s => s.UserId)
@@ -76,5 +80,31 @@ public class SetLogConfiguration : IEntityTypeConfiguration<SetLog>
         builder.Property(s => s.DistanceMeters).HasPrecision(8, 2);
         builder.Property(s => s.SkippedReason).HasMaxLength(200);
         builder.HasIndex(s => new { s.ExerciseLogId, s.SortOrder });
+    }
+}
+
+public class PersonalRecordConfiguration : IEntityTypeConfiguration<PersonalRecord>
+{
+    public void Configure(EntityTypeBuilder<PersonalRecord> builder)
+    {
+        builder.ToTable("personal_records");
+        builder.HasKey(p => p.Id);
+
+        builder.Property(p => p.Type).HasConversion<string>().HasMaxLength(30).IsRequired();
+        builder.Property(p => p.Value).HasPrecision(10, 2);
+        builder.Property(p => p.WeightKg).HasPrecision(6, 2);
+
+        // Every read is "this user's PRs for this exercise" (detection + Progress).
+        builder.HasIndex(p => new { p.UserId, p.ExerciseId });
+
+        builder.HasOne<ApplicationUser>()
+            .WithMany()
+            .HasForeignKey(p => p.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne<MySelf.Domain.Exercises.Exercise>()
+            .WithMany()
+            .HasForeignKey(p => p.ExerciseId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

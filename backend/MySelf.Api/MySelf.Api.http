@@ -450,3 +450,81 @@ GET {{MySelf.Api_HostAddress}}/api/v1/workout-sessions/SESSION_ID
 Authorization: Bearer {{accessToken}}
 
 ###
+
+# Workout history (default status=Completed, newest first) -> paginated list with per-session summary
+GET {{MySelf.Api_HostAddress}}/api/v1/workout-sessions?status=Completed&page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+
+###
+
+# In-progress sessions only
+GET {{MySelf.Api_HostAddress}}/api/v1/workout-sessions?status=InProgress
+Authorization: Bearer {{accessToken}}
+
+###
+
+# --- strength (Phase 3) ---
+
+# Per-exercise history: current PRs + one entry per completed session
+GET {{MySelf.Api_HostAddress}}/api/v1/exercises/EXERCISE_ID/history
+Authorization: Bearer {{accessToken}}
+
+###
+
+# e1RM + volume trend for charting  (range: 30d | 90d | 1y | all)
+GET {{MySelf.Api_HostAddress}}/api/v1/analytics/strength?exerciseId=EXERCISE_ID&range=90d
+Authorization: Bearer {{accessToken}}
+
+###
+
+# --- mid-session structure edits (Phase 3) ---
+
+# Add an exercise to the running session (3 empty sets by default)
+POST {{MySelf.Api_HostAddress}}/api/v1/workout-sessions/SESSION_ID/exercises
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{ "exerciseId": "EXERCISE_ID", "sets": 3 }
+
+###
+
+# Replace the movement for one logged exercise (scope: TodayOnly | TodayAndFuture)
+POST {{MySelf.Api_HostAddress}}/api/v1/workout-sessions/SESSION_ID/exercises/EXERCISE_LOG_ID/replace
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{ "exerciseId": "NEW_EXERCISE_ID", "scope": "TodayOnly" }
+
+###
+
+# Add one more set to an exercise
+POST {{MySelf.Api_HostAddress}}/api/v1/workout-sessions/SESSION_ID/exercises/EXERCISE_LOG_ID/add-set
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{}
+
+###
+
+# Remove an added exercise (409 if it has a completed set)
+DELETE {{MySelf.Api_HostAddress}}/api/v1/workout-sessions/SESSION_ID/exercises/EXERCISE_LOG_ID
+Authorization: Bearer {{accessToken}}
+
+###
+
+# --- calendar (Phase 3) ---
+
+# Completed sessions in a date range, grouped by local performed-date
+GET {{MySelf.Api_HostAddress}}/api/v1/workout-calendar?from=2026-09-01&to=2026-09-30
+Authorization: Bearer {{accessToken}}
+
+###
+
+# Correct which local date a completed session counts against (409 if not completed)
+POST {{MySelf.Api_HostAddress}}/api/v1/workout-sessions/SESSION_ID/reschedule
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{ "localDate": "2026-09-12" }
+
+###

@@ -19,6 +19,11 @@ public class WorkoutSession
     /// <summary>Null for an ad-hoc session with no source day.</summary>
     public Guid? SourceDayId { get; set; }
 
+    /// <summary>The program the source day belonged to at start time. A soft pointer like
+    /// <see cref="SourceDayId"/> (no FK) — kept so a program's Overview can gather its own
+    /// sessions even after the day or program is edited. Null for an ad-hoc session.</summary>
+    public Guid? SourceProgramId { get; set; }
+
     public string? DayName { get; set; }
     public string? ProgramName { get; set; }
 
@@ -32,6 +37,11 @@ public class WorkoutSession
     public DateOnly? PerformedOnLocalDate { get; set; }
 
     public string? Notes { get; set; }
+
+    /// <summary>Set true the first time a set is changed after the session was completed
+    /// (docs/02 §7: "Completed workout logs stay editable… marks the session as Edited").
+    /// Surfaced as an "Edited" badge; the summary and PRs are recomputed on each edit.</summary>
+    public bool WasEdited { get; set; }
 
     public List<ExerciseLog> ExerciseLogs { get; set; } = [];
 }

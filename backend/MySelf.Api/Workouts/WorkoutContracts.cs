@@ -44,6 +44,27 @@ public sealed record DayListItem(Guid Id, string Name, int SortOrder, int Exerci
 
 public sealed record CreateDayRequest(string? Name);
 
+// --- program stats (Overview tab; docs/02 §7 metrics — no adherence %) ---
+
+public sealed record ProgramStats(
+    int TotalSessions,
+    DateOnly? FirstPerformedOn,
+    DateOnly? LastPerformedOn,
+    int SessionsThisWeek,
+    int SessionsThisMonth,
+    double WeeklyAverage,
+    decimal TotalVolumeKg,
+    int? AvgDurationSeconds,
+    int CompletedSets,
+    int SkippedSets,
+    double SkippedSetRate,
+    IReadOnlyList<ProgramDayStat> PerDay,
+    IReadOnlyList<ProgramPrStat> PersonalRecords);
+
+public sealed record ProgramDayStat(Guid DayId, string DayName, int Sessions, DateOnly? LastPerformedOn);
+
+public sealed record ProgramPrStat(string ExerciseName, string Type, double Value, DateOnly AchievedOn);
+
 // --- day detail ---
 
 public sealed record DayDetail(
@@ -143,6 +164,15 @@ public sealed record LogSetRequest(
 /// <summary>Explicitly skip a set (docs/07). Reason is free text; the UI offers pain/equipment/time/other.</summary>
 public sealed record SkipSetRequest(Guid SetLogId, string? Reason);
 
+/// <summary>Add a catalogue exercise to the running session (docs/02: "Add exercise" adds to today's session).</summary>
+public sealed record AddSessionExerciseRequest(Guid ExerciseId, int? Sets);
+
+/// <summary>
+/// Swap the movement for one logged exercise (docs/02: "Replace exercise" → Today only / Today
+/// and future workouts). <see cref="Scope"/> is "TodayOnly" or "TodayAndFuture".
+/// </summary>
+public sealed record ReplaceSessionExerciseRequest(Guid ExerciseId, string? Scope);
+
 /// <summary>
 /// Finish the session. <see cref="LocalDate"/> is the user's local calendar date the session
 /// counts against (locked decision #8) — the client sends it; the server falls back to the
@@ -160,7 +190,74 @@ public sealed record WorkoutSessionDetail(
     DateTimeOffset? CompletedAt,
     DateOnly? PerformedOnLocalDate,
     string? Notes,
+    bool WasEdited,
+    SessionSummary Summary,
+    IReadOnlyList<PersonalRecordDetail> NewPersonalRecords,
     IReadOnlyList<ExerciseLogDetail> Exercises);
+
+/// <summary>A personal best (docs/02 §7). Emitted by <c>complete</c> for records set this session, and by exercise history.</summary>
+public sealed record PersonalRecordDetail(
+    string Type,
+    decimal Value,
+    decimal? WeightKg,
+    int? Reps,
+    DateOnly AchievedOn);
+
+// --- exercise history / strength analytics ---
+
+public sealed record ExerciseHistoryResult(
+    Guid ExerciseId,
+    string ExerciseName,
+    IReadOnlyList<PersonalRecordDetail> PersonalRecords,
+    IReadOnlyList<ExerciseHistoryEntry> Sessions);
+
+public sealed record ExerciseHistoryEntry(
+    Guid SessionId,
+    DateOnly PerformedOn,
+    string? DayName,
+    decimal? TopSetWeightKg,
+    int? TopSetReps,
+    decimal? EstimatedOneRepMax,
+    decimal Volume,
+    int CompletedSets);
+
+public sealed record StrengthPoint(DateOnly Date, decimal? EstimatedOneRepMax, decimal Volume);
+
+public sealed record StrengthAnalyticsResult(Guid ExerciseId, string Range, IReadOnlyList<StrengthPoint> Points);
+
+/// <summary>Roll-up shown on the finish screen and in history (docs/02). PRs/e1RM come later.</summary>
+public sealed record SessionSummary(
+    int? DurationSeconds,
+    int CompletedSetCount,
+    int SkippedSetCount,
+    int TotalReps,
+    decimal TotalVolumeKg);
+
+/// <summary>One row of the workout history list (GET /api/v1/workout-sessions).</summary>
+public sealed record WorkoutSessionListItem(
+    Guid Id,
+    string? DayName,
+    string? ProgramName,
+    string Status,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? CompletedAt,
+    DateOnly? PerformedOnLocalDate,
+    bool WasEdited,
+    SessionSummary Summary);
+
+public sealed record WorkoutSessionListResult(
+    IReadOnlyList<WorkoutSessionListItem> Items,
+    int Page,
+    int PageSize,
+    int Total);
+
+/// <summary>Completed sessions on one local calendar date (docs/04 §12 /workout-calendar).</summary>
+public sealed record CalendarDay(DateOnly Date, IReadOnlyList<WorkoutSessionListItem> Sessions);
+
+public sealed record WorkoutCalendarResult(DateOnly From, DateOnly To, IReadOnlyList<CalendarDay> Days);
+
+/// <summary>Correct which local date a completed session counts against (docs/01 §3 Story 3A).</summary>
+public sealed record RescheduleSessionRequest(DateOnly LocalDate);
 
 public sealed record ExerciseLogDetail(
     Guid Id,
@@ -168,8 +265,10 @@ public sealed record ExerciseLogDetail(
     string ExerciseName,
     string TrackingMode,
     int SortOrder,
+    int? RestSeconds,
     Guid? SupersetGroupSnapshotId,
     int SupersetMemberOrder,
+    int? SupersetRestAfterRoundSeconds,
     IReadOnlyList<SetLogDetail> Sets);
 
 public sealed record SetLogDetail(

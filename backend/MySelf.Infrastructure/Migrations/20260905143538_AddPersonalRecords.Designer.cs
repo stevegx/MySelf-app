@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using MySelf.Infrastructure.Persistence;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MySelf.Infrastructure.Migrations
 {
     [DbContext(typeof(MySelfDbContext))]
-    partial class MySelfDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260905143538_AddPersonalRecords")]
+    partial class AddPersonalRecords
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -580,9 +583,6 @@ namespace MySelf.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<int?>("RestSeconds")
-                        .HasColumnType("integer");
-
                     b.Property<Guid>("SessionId")
                         .HasColumnType("uuid");
 
@@ -593,9 +593,6 @@ namespace MySelf.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<int>("SupersetMemberOrder")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("SupersetRestAfterRoundSeconds")
                         .HasColumnType("integer");
 
                     b.Property<string>("TrackingMode")
@@ -904,9 +901,6 @@ namespace MySelf.Infrastructure.Migrations
                     b.Property<Guid?>("SourceDayId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("SourceProgramId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTimeOffset>("StartedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -918,12 +912,7 @@ namespace MySelf.Infrastructure.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
-                    b.Property<bool>("WasEdited")
-                        .HasColumnType("boolean");
-
                     b.HasKey("Id");
-
-                    b.HasIndex("SourceProgramId");
 
                     b.HasIndex("UserId")
                         .IsUnique()

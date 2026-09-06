@@ -1,24 +1,69 @@
 import { ChevronRight, Circle, Dumbbell, Scale, Utensils } from "lucide-react";
-import { Button, Card, CardKicker, PageHeader, Ring } from "../../components/ui";
+import { useNavigate } from "react-router";
+import { Button, Card, CardKicker, PageHeader, Ring, Skeleton } from "../../components/ui";
+import { cn } from "../../lib/cn";
 import { useAuth } from "../auth/auth";
 import { useMe } from "../auth/useMe";
 import { formatTarget, useNutritionTargets } from "../nutrition/useNutritionTargets";
+import { useActiveSession, useSessionHistory } from "../workouts/api";
 
 const WEEK_DAYS = ["M", "T", "W", "T", "F", "S", "S"];
 
-const SETUP_ITEMS = [
-  "Create your first workout program",
-  "Create your workout variants",
-  "Log your first meal",
-  "Log your weight",
+/** Monday-based index (0 = Mon … 6 = Sun). */
+function mondayIndex(d: Date) {
+  return (d.getDay() + 6) % 7;
+}
+
+function startOfWeek(d: Date) {
+  const s = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  s.setDate(s.getDate() - mondayIndex(s));
+  return s;
+}
+
+const SETUP_ITEMS: { label: string; to: string }[] = [
+  { label: "Create your first workout program", to: "/workouts/builder" },
+  { label: "Set up your workout days", to: "/workouts/builder" },
+  { label: "Log your first meal", to: "/nutrition" },
+  { label: "Log your weight", to: "/progress" },
 ];
 
+function useWorkoutFrequency() {
+  const { data, isLoading } = useSessionHistory();
+  const items = data?.items ?? [];
+  const today = new Date();
+  const weekStart = startOfWeek(today);
+  const monthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+
+  // How many sessions fell on each day of the current week.
+  const perDay = [0, 0, 0, 0, 0, 0, 0];
+  let thisWeek = 0;
+  let thisMonth = 0;
+  for (const s of items) {
+    if (!s.performedOnLocalDate) continue;
+    if (s.performedOnLocalDate.startsWith(monthKey)) thisMonth += 1;
+    const d = new Date(`${s.performedOnLocalDate}T00:00:00`);
+    const diffDays = Math.floor((d.getTime() - weekStart.getTime()) / 86_400_000);
+    if (diffDays >= 0 && diffDays < 7) {
+      perDay[diffDays] += 1;
+      thisWeek += 1;
+    }
+  }
+  const max = Math.max(1, ...perDay);
+  return { perDay, max, thisWeek, thisMonth, todayIndex: mondayIndex(today), isLoading };
+}
+
 export function DashboardScreen() {
+  const navigate = useNavigate();
   const { session } = useAuth();
   const { data: me } = useMe();
   const username = (me?.user ?? session?.user)?.username;
 
   const targets = useNutritionTargets();
+  const { data: active } = useActiveSession();
+  const freq = useWorkoutFrequency();
+
+  const startWorkout = () => navigate(active ? "/workouts/active" : "/workouts/builder");
+
   const macros = [
     { label: "Protein", target: targets.proteinGrams },
     { label: "Carbs", target: targets.carbGrams },
@@ -28,22 +73,28 @@ export function DashboardScreen() {
     ? `Calories: 0 of ${formatTarget(targets.calorieTarget)} kcal`
     : "Calories logged today: 0 kcal";
 
+  const todayLabel = new Date().toLocaleDateString(undefined, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+
   return (
     <>
       <PageHeader
-        title={username ? `Good morning, ${username}` : "Good morning"}
-        subtitle="Friday, August 30"
+        title={username ? `Hello, ${username}` : "Hello"}
+        subtitle={todayLabel}
         actions={
           <>
-            <Button variant="secondary">
+            <Button variant="secondary" onClick={() => navigate("/nutrition")}>
               <Utensils size={15} aria-hidden />
               Log meal
             </Button>
-            <Button variant="secondary">
+            <Button variant="secondary" onClick={startWorkout}>
               <Dumbbell size={15} aria-hidden />
-              Start workout
+              {active ? "Resume workout" : "Start workout"}
             </Button>
-            <Button variant="primary">
+            <Button variant="primary" onClick={() => navigate("/progress")}>
               <Scale size={15} aria-hidden />
               Log weight
             </Button>
@@ -85,26 +136,47 @@ export function DashboardScreen() {
               ))}
             </div>
           </div>
-          <Button variant="primary" className="self-start">
+          <Button variant="primary" className="self-start" onClick={() => navigate("/nutrition")}>
             Log your first meal
           </Button>
         </Card>
 
         <Card>
           <CardKicker>Workout frequency</CardKicker>
+          {freq.isLoading ? (
+            <>
+              <Skeleton className="h-16" />
+              <Skeleton className="mb-2 h-3 w-40" />
+            </>
+          ) : (
+          <>
           <div className="flex h-16 items-end gap-1.5 py-1.5">
             {WEEK_DAYS.map((day, i) => (
               <div key={i} className="flex flex-1 flex-col items-center gap-1">
-                <div className="h-1 w-full rounded-full bg-viz-track" />
-                <div className="text-[10px] text-foreground-muted">{day}</div>
+                <div className="flex h-10 w-full items-end">
+                  <div
+                    className={cn(
+                      "w-full rounded-full",
+                      freq.perDay[i] > 0 ? "bg-primary" : "bg-viz-track",
+                    )}
+                    style={{ height: freq.perDay[i] > 0 ? `${(freq.perDay[i] / freq.max) * 100}%` : "4px" }}
+                  />
+                </div>
+                <div className={cn("text-[10px]", i === freq.todayIndex ? "font-bold text-primary" : "text-foreground-muted")}>
+                  {day}
+                </div>
               </div>
             ))}
           </div>
           <p className="m-0 mb-2 flex-1 text-[13px] text-foreground-muted">
-            No completed workouts this week yet.
+            {freq.thisWeek === 0
+              ? "No completed workouts this week yet."
+              : `${freq.thisWeek} this week · ${freq.thisMonth} this month`}
           </p>
-          <Button variant="secondary" block>
-            Start a workout
+          </>
+          )}
+          <Button variant="secondary" block onClick={startWorkout}>
+            {active ? "Resume workout" : "Start a workout"}
           </Button>
         </Card>
 
@@ -113,7 +185,7 @@ export function DashboardScreen() {
           <p className="m-0 mb-2 flex-1 text-[13px] text-foreground-muted">
             No weight logs yet — log your weight to start a trend line.
           </p>
-          <Button variant="secondary" block>
+          <Button variant="secondary" block onClick={() => navigate("/progress")}>
             Log your weight
           </Button>
         </Card>
@@ -122,14 +194,15 @@ export function DashboardScreen() {
           <CardKicker>Get set up</CardKicker>
           <div className="flex flex-col gap-0.5">
             {SETUP_ITEMS.map((item) => (
-              <div
-                key={item}
-                className="flex items-center gap-2.5 border-b border-border px-1 py-2.5"
+              <button
+                key={item.label}
+                onClick={() => navigate(item.to)}
+                className="flex items-center gap-2.5 border-b border-border px-1 py-2.5 text-left hover:bg-surface-subtle"
               >
                 <Circle size={16} className="text-primary" aria-hidden />
-                <span className="flex-1 text-sm">{item}</span>
+                <span className="flex-1 text-sm">{item.label}</span>
                 <ChevronRight size={16} className="text-foreground-muted" aria-hidden />
-              </div>
+              </button>
             ))}
           </div>
         </Card>

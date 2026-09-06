@@ -84,6 +84,7 @@ public class WorkoutSessionEndpointTests(WebApplicationFactory<Program> factory,
             Assert.Equal("PPL", detail.GetProperty("programName").GetString());
 
             var exercises = detail.GetProperty("exercises").EnumerateArray().ToList();
+            Assert.Equal(90, exercises.Single().GetProperty("restSeconds").GetInt32()); // snapshotted from the day
             var sets = exercises.Single().GetProperty("sets").EnumerateArray().ToList();
             Assert.Equal(2, sets.Count);
             Assert.Equal(8, sets[0].GetProperty("targetRepsMin").GetInt32());
@@ -318,6 +319,211 @@ public class WorkoutSessionEndpointTests(WebApplicationFactory<Program> factory,
     }
 
     [Fact]
+    public async Task Completing_an_empty_session_is_rejected_until_a_set_is_logged_or_skipped()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (sessionId, setId, mode) = await StartWithASetAsync(client);
+
+            // Nothing logged or skipped yet — the empty-workout guard blocks completion.
+            var empty = await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/complete", new { localDate = "2026-09-04", notes = (string?)null });
+            Assert.Equal(HttpStatusCode.BadRequest, empty.StatusCode);
+            var body = await empty.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.True(body.GetProperty("errors").TryGetProperty("session", out _));
+
+            // The session is still in progress and can still be completed once something is logged.
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/v1/workout-sessions/active")).StatusCode);
+            await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/set-logs", LogBodyFor(setId, mode));
+
+            var ok = await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/complete", new { localDate = "2026-09-04", notes = (string?)null });
+            Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Completing_a_session_where_a_set_was_only_skipped_is_allowed()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (sessionId, setId, _) = await StartWithASetAsync(client);
+
+            var skip = await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/skip-set", new { setLogId = setId, reason = "tweaked knee" });
+            Assert.Equal(HttpStatusCode.OK, skip.StatusCode);
+
+            var ok = await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/complete", new { localDate = "2026-09-04", notes = (string?)null });
+            Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Editing_a_set_on_a_completed_session_flags_it_edited_and_recomputes_the_summary()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (sessionId, setId, _) = await StartWithASetAsync(client);
+            await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/set-logs",
+                new { setLogId = setId, weightKg = 100.0, reps = 8, reachedFailure = false });
+            await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/complete",
+                new { localDate = "2026-09-04", notes = (string?)null });
+
+            var before = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-sessions/{sessionId}");
+            Assert.False(before.GetProperty("wasEdited").GetBoolean());
+            Assert.Equal(800m, before.GetProperty("summary").GetProperty("totalVolumeKg").GetDecimal());
+
+            // Correct the weight after the fact.
+            var edit = await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/set-logs",
+                new { setLogId = setId, weightKg = 110.0, reps = 8, reachedFailure = false });
+            Assert.Equal(HttpStatusCode.OK, edit.StatusCode);
+
+            var after = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-sessions/{sessionId}");
+            Assert.True(after.GetProperty("wasEdited").GetBoolean());
+            Assert.Equal("Completed", after.GetProperty("status").GetString());
+            Assert.Equal(880m, after.GetProperty("summary").GetProperty("totalVolumeKg").GetDecimal());
+
+            // The session still shows in history, now flagged.
+            var history = await client.GetFromJsonAsync<JsonElement>("/api/v1/workout-sessions?status=Completed");
+            Assert.True(history.GetProperty("items")[0].GetProperty("wasEdited").GetBoolean());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Editing_a_completed_session_rebuilds_its_personal_records()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (sessionId, setId, _) = await StartWithASetAsync(client);
+            var exerciseId = (await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-sessions/{sessionId}"))
+                .GetProperty("exercises")[0].GetProperty("exerciseId").GetGuid();
+
+            await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/set-logs",
+                new { setLogId = setId, weightKg = 100.0, reps = 5, reachedFailure = false });
+            await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/complete",
+                new { localDate = "2026-09-04", notes = (string?)null });
+
+            var pr1 = await client.GetFromJsonAsync<JsonElement>($"/api/v1/exercises/{exerciseId}/history");
+            var heaviest1 = pr1.GetProperty("personalRecords").EnumerateArray()
+                .First(p => p.GetProperty("type").GetString() == "HeaviestWeight");
+            Assert.Equal(100m, heaviest1.GetProperty("value").GetDecimal());
+
+            // Edit up — the PR must follow.
+            await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/set-logs",
+                new { setLogId = setId, weightKg = 130.0, reps = 5, reachedFailure = false });
+
+            var pr2 = await client.GetFromJsonAsync<JsonElement>($"/api/v1/exercises/{exerciseId}/history");
+            var heaviest2 = pr2.GetProperty("personalRecords").EnumerateArray()
+                .First(p => p.GetProperty("type").GetString() == "HeaviestWeight");
+            Assert.Equal(130m, heaviest2.GetProperty("value").GetDecimal());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task A_discarded_session_cannot_be_edited()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (sessionId, setId, mode) = await StartWithASetAsync(client);
+            await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/discard", new { });
+
+            var edit = await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/set-logs", LogBodyFor(setId, mode));
+            Assert.Equal(HttpStatusCode.Conflict, edit.StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Program_stats_count_completed_sessions_started_from_the_program()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var dayId = await CreateDayWithExercisesAsync(client);
+            var programId = (await client.GetFromJsonAsync<JsonElement>("/api/v1/programs"))
+                .EnumerateArray().First().GetProperty("id").GetGuid();
+
+            // Empty program: zeros, and the day listed at zero.
+            var before = await client.GetFromJsonAsync<JsonElement>($"/api/v1/programs/{programId}/stats");
+            Assert.Equal(0, before.GetProperty("totalSessions").GetInt32());
+            Assert.Equal(1, before.GetProperty("perDay").GetArrayLength());
+            Assert.Equal(0, before.GetProperty("perDay")[0].GetProperty("sessions").GetInt32());
+
+            // Run one session from that day.
+            var start = await client.PostAsJsonAsync("/api/v1/workout-sessions", new { dayId });
+            var startBody = await start.Content.ReadFromJsonAsync<JsonElement>();
+            var sessionId = startBody.GetProperty("id").GetGuid();
+            var ex = startBody.GetProperty("exercises").EnumerateArray().First();
+            var setId = ex.GetProperty("sets").EnumerateArray().First().GetProperty("id").GetGuid();
+            await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/set-logs", LogBodyFor(setId, ex.GetProperty("trackingMode").GetString()!));
+            await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/complete", new { localDate = "2026-09-05", notes = (string?)null });
+
+            var after = await client.GetFromJsonAsync<JsonElement>($"/api/v1/programs/{programId}/stats?today=2026-09-05");
+            Assert.Equal(1, after.GetProperty("totalSessions").GetInt32());
+            Assert.Equal(1, after.GetProperty("sessionsThisWeek").GetInt32());
+            Assert.Equal("2026-09-05", after.GetProperty("lastPerformedOn").GetString());
+            Assert.Equal(1, after.GetProperty("completedSets").GetInt32());
+            Assert.Equal(1, after.GetProperty("perDay")[0].GetProperty("sessions").GetInt32());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task An_archived_program_can_still_be_hard_deleted()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            await CreateDayWithExercisesAsync(client);
+            var programId = (await client.GetFromJsonAsync<JsonElement>("/api/v1/programs"))
+                .EnumerateArray().First().GetProperty("id").GetGuid();
+
+            Assert.Equal(HttpStatusCode.NoContent,
+                (await client.PostAsync($"/api/v1/programs/{programId}/archive", null)).StatusCode);
+            Assert.Equal(1, (await client.GetFromJsonAsync<JsonElement>("/api/v1/programs/archived")).GetArrayLength());
+
+            Assert.Equal(HttpStatusCode.NoContent,
+                (await client.DeleteAsync($"/api/v1/programs/{programId}")).StatusCode);
+            Assert.Equal(0, (await client.GetFromJsonAsync<JsonElement>("/api/v1/programs/archived")).GetArrayLength());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
     public async Task Discarding_a_session_frees_the_slot_for_a_new_one()
     {
         var (client, email) = await factory.RegisterAndAuthenticateAsync();
@@ -353,6 +559,297 @@ public class WorkoutSessionEndpointTests(WebApplicationFactory<Program> factory,
                 (await other.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/complete", new { localDate = (string?)null, notes = (string?)null })).StatusCode);
             Assert.Equal(HttpStatusCode.NotFound,
                 (await other.GetAsync($"/api/v1/workout-sessions/{sessionId}")).StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(ownerEmail, otherEmail);
+        }
+    }
+
+    [Fact]
+    public async Task Completed_session_carries_a_summary_and_shows_up_in_history()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (sessionId, setId, mode) = await StartWithASetAsync(client);
+            await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/set-logs", LogBodyFor(setId, mode));
+            await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/complete", new { localDate = "2026-09-04", notes = (string?)null });
+
+            var detail = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-sessions/{sessionId}");
+            var summary = detail.GetProperty("summary");
+            Assert.Equal(1, summary.GetProperty("completedSetCount").GetInt32());
+            Assert.True(summary.GetProperty("durationSeconds").GetInt32() >= 0);
+
+            var history = await client.GetFromJsonAsync<JsonElement>("/api/v1/workout-sessions?status=Completed");
+            Assert.True(history.GetProperty("total").GetInt32() >= 1);
+            var first = history.GetProperty("items").EnumerateArray().First();
+            Assert.Equal(sessionId, first.GetProperty("id").GetGuid());
+            Assert.Equal("2026-09-04", first.GetProperty("performedOnLocalDate").GetString());
+            Assert.Equal(1, first.GetProperty("summary").GetProperty("completedSetCount").GetInt32());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task History_defaults_to_completed_and_can_filter_by_status()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            await client.PostAsJsonAsync("/api/v1/workout-sessions", new { dayId = (Guid?)null });
+
+            var completedDefault = await client.GetFromJsonAsync<JsonElement>("/api/v1/workout-sessions");
+            Assert.Equal(0, completedDefault.GetProperty("items").GetArrayLength());
+
+            var inProgress = await client.GetFromJsonAsync<JsonElement>("/api/v1/workout-sessions?status=InProgress");
+            Assert.Equal(1, inProgress.GetProperty("items").GetArrayLength());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    private async Task<(Guid DayId, Guid ExerciseId)> CreateWeightRepsDayAsync(HttpClient client)
+    {
+        Guid exerciseId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<MySelfDbContext>();
+            exerciseId = await db.Exercises
+                .Where(e => e.DefaultTrackingMode == MySelf.Domain.Exercises.TrackingMode.WeightAndReps)
+                .OrderBy(e => e.Name)
+                .Select(e => e.Id)
+                .FirstAsync();
+        }
+
+        var programId = (await (await client.PostAsJsonAsync("/api/v1/programs", new { name = "S" })).Content
+            .ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var dayId = (await (await client.PostAsJsonAsync($"/api/v1/programs/{programId}/days", new { name = "Day" })).Content
+            .ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        var put = await client.PutAsJsonAsync($"/api/v1/workout-days/{dayId}", new
+        {
+            exercises = new[]
+            {
+                new
+                {
+                    exerciseId, sortOrder = 0, supersetRef = (string?)null, supersetMemberOrder = 0,
+                    restSeconds = (int?)null, notes = (string?)null,
+                    sets = new[]
+                    {
+                        new { sortOrder = 0, kind = "Standard", isAmrap = false, targetToFailure = false, targetRepsMin = (int?)5, targetRepsMax = (int?)5, targetWeightKg = (double?)100.0, targetRir = (int?)null },
+                    },
+                },
+            },
+            supersets = Array.Empty<object>(),
+        });
+        put.EnsureSuccessStatusCode();
+        return (dayId, exerciseId);
+    }
+
+    private static async Task<(Guid SessionId, Guid SetId)> StartAndGetFirstSetAsync(HttpClient client, Guid dayId)
+    {
+        var start = await client.PostAsJsonAsync("/api/v1/workout-sessions", new { dayId });
+        start.EnsureSuccessStatusCode();
+        var detail = await start.Content.ReadFromJsonAsync<JsonElement>();
+        return (
+            detail.GetProperty("id").GetGuid(),
+            detail.GetProperty("exercises")[0].GetProperty("sets")[0].GetProperty("id").GetGuid());
+    }
+
+    [Fact]
+    public async Task Completing_reports_new_personal_records_and_they_show_in_exercise_history()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (dayId, exerciseId) = await CreateWeightRepsDayAsync(client);
+            var (sessionId, setId) = await StartAndGetFirstSetAsync(client, dayId);
+
+            await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/set-logs",
+                new { setLogId = setId, weightKg = 120.0, reps = 5, reachedFailure = false });
+
+            var completed = await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/complete",
+                new { localDate = "2026-09-05", notes = (string?)null });
+            var body = await completed.Content.ReadFromJsonAsync<JsonElement>();
+            var prs = body.GetProperty("newPersonalRecords").EnumerateArray().ToList();
+            Assert.Contains(prs, p => p.GetProperty("type").GetString() == "HeaviestWeight" && p.GetProperty("value").GetDecimal() == 120m);
+
+            var history = await client.GetFromJsonAsync<JsonElement>($"/api/v1/exercises/{exerciseId}/history");
+            Assert.True(history.GetProperty("personalRecords").GetArrayLength() >= 1);
+            var firstSession = history.GetProperty("sessions").EnumerateArray().First();
+            Assert.Equal(sessionId, firstSession.GetProperty("sessionId").GetGuid());
+            Assert.True(firstSession.GetProperty("estimatedOneRepMax").GetDecimal() > 120m);
+
+            var trend = await client.GetFromJsonAsync<JsonElement>($"/api/v1/analytics/strength?exerciseId={exerciseId}&range=all");
+            Assert.Equal(1, trend.GetProperty("points").GetArrayLength());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Add_replace_and_remove_exercises_during_a_session()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var ex = await TwoExerciseIdsAsync();
+            var start = await client.PostAsJsonAsync("/api/v1/workout-sessions", new { dayId = (Guid?)null });
+            var sessionId = (await start.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+            var added = await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/exercises", new { exerciseId = ex[0], sets = 2 });
+            Assert.Equal(HttpStatusCode.OK, added.StatusCode);
+            var detail = await added.Content.ReadFromJsonAsync<JsonElement>();
+            var exLog = detail.GetProperty("exercises").EnumerateArray().Single();
+            var exLogId = exLog.GetProperty("id").GetGuid();
+            Assert.Equal(2, exLog.GetProperty("sets").GetArrayLength());
+
+            var withSet = await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/exercises/{exLogId}/add-set", new { });
+            var d2 = await withSet.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(3, d2.GetProperty("exercises")[0].GetProperty("sets").GetArrayLength());
+
+            var replaced = await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/exercises/{exLogId}/replace",
+                new { exerciseId = ex[1], scope = "TodayOnly" });
+            var d3 = await replaced.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(ex[1], d3.GetProperty("exercises")[0].GetProperty("exerciseId").GetGuid());
+
+            var removed = await client.DeleteAsync($"/api/v1/workout-sessions/{sessionId}/exercises/{exLogId}");
+            var d4 = await removed.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(0, d4.GetProperty("exercises").GetArrayLength());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Replace_with_today_and_future_updates_the_source_day()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (dayId, exerciseId) = await CreateWeightRepsDayAsync(client);
+            var otherExercise = (await TwoExerciseIdsAsync()).First(e => e != exerciseId);
+
+            var start = await client.PostAsJsonAsync("/api/v1/workout-sessions", new { dayId });
+            var detail = await start.Content.ReadFromJsonAsync<JsonElement>();
+            var sessionId = detail.GetProperty("id").GetGuid();
+            var exLogId = detail.GetProperty("exercises")[0].GetProperty("id").GetGuid();
+
+            await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/exercises/{exLogId}/replace",
+                new { exerciseId = otherExercise, scope = "TodayAndFuture" });
+
+            var day = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-days/{dayId}");
+            Assert.Equal(otherExercise, day.GetProperty("exercises")[0].GetProperty("exerciseId").GetGuid());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Cannot_remove_an_exercise_that_has_a_logged_set()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (dayId, _) = await CreateWeightRepsDayAsync(client);
+            var (sessionId, setId) = await StartAndGetFirstSetAsync(client, dayId);
+            var exLogId = (await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-sessions/{sessionId}"))
+                .GetProperty("exercises")[0].GetProperty("id").GetGuid();
+
+            await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/set-logs",
+                new { setLogId = setId, weightKg = 100.0, reps = 5, reachedFailure = false });
+
+            var removed = await client.DeleteAsync($"/api/v1/workout-sessions/{sessionId}/exercises/{exLogId}");
+            Assert.Equal(HttpStatusCode.Conflict, removed.StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Completed_session_appears_on_the_calendar_and_can_be_rescheduled()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (dayId, _) = await CreateWeightRepsDayAsync(client);
+            var (sessionId, setId) = await StartAndGetFirstSetAsync(client, dayId);
+            await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/set-logs",
+                new { setLogId = setId, weightKg = 100.0, reps = 5, reachedFailure = false });
+            await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/complete",
+                new { localDate = "2026-09-10", notes = (string?)null });
+
+            var cal = await client.GetFromJsonAsync<JsonElement>("/api/v1/workout-calendar?from=2026-09-01&to=2026-09-30");
+            var day = cal.GetProperty("days").EnumerateArray().Single();
+            Assert.Equal("2026-09-10", day.GetProperty("date").GetString());
+            Assert.Equal(sessionId, day.GetProperty("sessions")[0].GetProperty("id").GetGuid());
+
+            var moved = await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/reschedule",
+                new { localDate = "2026-09-12" });
+            Assert.Equal(HttpStatusCode.OK, moved.StatusCode);
+
+            var cal2 = await client.GetFromJsonAsync<JsonElement>("/api/v1/workout-calendar?from=2026-09-01&to=2026-09-30");
+            var day2 = cal2.GetProperty("days").EnumerateArray().Single();
+            Assert.Equal("2026-09-12", day2.GetProperty("date").GetString());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Rescheduling_an_in_progress_session_is_rejected()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var start = await client.PostAsJsonAsync("/api/v1/workout-sessions", new { dayId = (Guid?)null });
+            var sessionId = (await start.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+            var moved = await client.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/reschedule",
+                new { localDate = "2026-09-12" });
+            Assert.Equal(HttpStatusCode.Conflict, moved.StatusCode);
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task History_only_lists_your_own_sessions()
+    {
+        var (owner, ownerEmail) = await factory.RegisterAndAuthenticateAsync();
+        var (other, otherEmail) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var (sessionId, setId, mode) = await StartWithASetAsync(owner);
+            await owner.PostAsJsonAsync($"/api/v1/workout-sessions/{sessionId}/set-logs", LogBodyFor(setId, mode));
+            await owner.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/complete", new { localDate = "2026-09-04", notes = (string?)null });
+
+            var otherHistory = await other.GetFromJsonAsync<JsonElement>("/api/v1/workout-sessions?status=Completed");
+            Assert.Equal(0, otherHistory.GetProperty("items").GetArrayLength());
         }
         finally
         {

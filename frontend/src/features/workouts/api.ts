@@ -1,6 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiFetch } from "../../lib/api";
 import { useAuth } from "../auth/auth";
+import { enqueue } from "./offlineQueue";
+
+/**
+ * Run a set mutation; if it fails with a network (non-ApiError) error, queue it for retry
+ * and resolve so the workout isn't blocked (docs/02 offline autosave). A real rejection
+ * (validation / 404 / 409) still throws.
+ */
+async function postOrQueue<T>(url: string, body: unknown, accessToken: string | undefined): Promise<T | null> {
+  try {
+    return await apiFetch<T>(url, { method: "POST", body, accessToken });
+  } catch (e) {
+    if (e instanceof ApiError) throw e;
+    enqueue(url, body);
+    return null;
+  }
+}
 
 // --- types (hand-written until the OpenAPI client lands) ---
 
@@ -38,6 +54,37 @@ export type ProgramDetail = {
   // xmin concurrency token — echo back on PUT /programs and PUT /workout-days.
   rowVersion: number;
   days: DayListItem[];
+};
+
+export type ProgramDayStat = {
+  dayId: string;
+  dayName: string;
+  sessions: number;
+  lastPerformedOn: string | null;
+};
+
+export type ProgramPrStat = {
+  exerciseName: string;
+  type: string;
+  value: number;
+  achievedOn: string;
+};
+
+/** Aggregates for a program's Overview tab (GET /api/v1/programs/{id}/stats). */
+export type ProgramStats = {
+  totalSessions: number;
+  firstPerformedOn: string | null;
+  lastPerformedOn: string | null;
+  sessionsThisWeek: number;
+  sessionsThisMonth: number;
+  weeklyAverage: number;
+  totalVolumeKg: number;
+  avgDurationSeconds: number | null;
+  completedSets: number;
+  skippedSets: number;
+  skippedSetRate: number;
+  perDay: ProgramDayStat[];
+  personalRecords: ProgramPrStat[];
 };
 
 export type SetPrescriptionDetail = {
@@ -134,9 +181,33 @@ export type ExerciseLogDetail = {
   exerciseName: string;
   trackingMode: string;
   sortOrder: number;
+  restSeconds: number | null;
   supersetGroupSnapshotId: string | null;
   supersetMemberOrder: number;
+  supersetRestAfterRoundSeconds: number | null;
   sets: SetLogDetail[];
+};
+
+export type SessionSummary = {
+  durationSeconds: number | null;
+  completedSetCount: number;
+  skippedSetCount: number;
+  totalReps: number;
+  totalVolumeKg: number;
+};
+
+export type PersonalRecordType =
+  | "HeaviestWeight"
+  | "BestEstimatedOneRepMax"
+  | "MostRepsAtWeight"
+  | "BestExerciseVolume";
+
+export type PersonalRecordDetail = {
+  type: PersonalRecordType;
+  value: number;
+  weightKg: number | null;
+  reps: number | null;
+  achievedOn: string;
 };
 
 export type WorkoutSessionDetail = {
@@ -149,8 +220,54 @@ export type WorkoutSessionDetail = {
   completedAt: string | null;
   performedOnLocalDate: string | null;
   notes: string | null;
+  wasEdited: boolean;
+  summary: SessionSummary;
+  newPersonalRecords: PersonalRecordDetail[];
   exercises: ExerciseLogDetail[];
 };
+
+export type ExerciseHistoryEntry = {
+  sessionId: string;
+  performedOn: string;
+  dayName: string | null;
+  topSetWeightKg: number | null;
+  topSetReps: number | null;
+  estimatedOneRepMax: number | null;
+  volume: number;
+  completedSets: number;
+};
+
+export type ExerciseHistoryResult = {
+  exerciseId: string;
+  exerciseName: string;
+  personalRecords: PersonalRecordDetail[];
+  sessions: ExerciseHistoryEntry[];
+};
+
+export type StrengthPoint = { date: string; estimatedOneRepMax: number | null; volume: number };
+export type StrengthAnalyticsResult = { exerciseId: string; range: string; points: StrengthPoint[] };
+
+export type WorkoutSessionListItem = {
+  id: string;
+  dayName: string | null;
+  programName: string | null;
+  status: "InProgress" | "Completed" | "Discarded";
+  startedAt: string;
+  completedAt: string | null;
+  performedOnLocalDate: string | null;
+  wasEdited: boolean;
+  summary: SessionSummary;
+};
+
+export type WorkoutSessionListResult = {
+  items: WorkoutSessionListItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
+export type CalendarDay = { date: string; sessions: WorkoutSessionListItem[] };
+export type WorkoutCalendarResult = { from: string; to: string; days: CalendarDay[] };
 
 export type LogSetBody = {
   setLogId: string;
@@ -243,9 +360,14 @@ export function useMutateProgram(programId: string | null) {
         apiFetch<void>(`/api/v1/programs/${id}/activate`, { method: "POST", accessToken }),
       onSuccess: invalidate,
     }),
-    archive: useMutation({
+    remove: useMutation({
       mutationFn: (id: string) =>
         apiFetch<void>(`/api/v1/programs/${id}`, { method: "DELETE", accessToken }),
+      onSuccess: invalidate,
+    }),
+    archive: useMutation({
+      mutationFn: (id: string) =>
+        apiFetch<void>(`/api/v1/programs/${id}/archive`, { method: "POST", accessToken }),
       onSuccess: invalidate,
     }),
     clone: useMutation({
@@ -336,19 +458,46 @@ export function useBulkExercises(programId: string | null) {
   };
 }
 
-/** The caller's InProgress session, or null when nothing is running — a 404 isn't an error here. */
+const ACTIVE_CACHE_KEY = "myself.activeSession";
+
+function readActiveCache(): WorkoutSessionDetail | null | undefined {
+  try {
+    const raw = localStorage.getItem(ACTIVE_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as WorkoutSessionDetail) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The caller's InProgress session, or null when nothing is running (a 404 isn't an error).
+ * The last result is mirrored to localStorage so a mid-workout reload paints instantly
+ * before the network responds (docs/02 "browser refresh/crash restores the draft").
+ */
 export function useActiveSession() {
   const accessToken = useToken();
   return useQuery({
     queryKey: ["workout-session", "active"],
     queryFn: async () => {
+      let result: WorkoutSessionDetail | null;
       try {
-        return await apiFetch<WorkoutSessionDetail>("/api/v1/workout-sessions/active", { accessToken });
+        result = await apiFetch<WorkoutSessionDetail>("/api/v1/workout-sessions/active", { accessToken });
       } catch (e) {
-        if (e instanceof ApiError && e.status === 404) return null;
-        throw e;
+        if (e instanceof ApiError && e.status === 404) {
+          result = null;
+        } else {
+          throw e;
+        }
       }
+      try {
+        if (result) localStorage.setItem(ACTIVE_CACHE_KEY, JSON.stringify(result));
+        else localStorage.removeItem(ACTIVE_CACHE_KEY);
+      } catch {
+        /* ignore storage failures */
+      }
+      return result;
     },
+    initialData: readActiveCache,
     enabled: accessToken != null,
   });
 }
@@ -364,14 +513,117 @@ export function useStartSession() {
   });
 }
 
+/** Per-exercise history: current PRs + one entry per completed session it appears in. */
+export function useExerciseHistory(exerciseId: string | null, dayId?: string) {
+  const accessToken = useToken();
+  return useQuery({
+    queryKey: ["exercise-history", exerciseId, dayId ?? null],
+    queryFn: () =>
+      apiFetch<ExerciseHistoryResult>(
+        `/api/v1/exercises/${exerciseId}/history${dayId ? `?dayId=${dayId}` : ""}`,
+        { accessToken },
+      ),
+    enabled: accessToken != null && exerciseId != null,
+  });
+}
+
+/** e1RM + volume trend for one exercise over a range ("30d" | "90d" | "1y" | "all"). */
+export function useStrengthAnalytics(exerciseId: string | null, range: string) {
+  const accessToken = useToken();
+  return useQuery({
+    queryKey: ["strength-analytics", exerciseId, range],
+    queryFn: () =>
+      apiFetch<StrengthAnalyticsResult>(
+        `/api/v1/analytics/strength?exerciseId=${exerciseId}&range=${range}`,
+        { accessToken },
+      ),
+    enabled: accessToken != null && exerciseId != null,
+  });
+}
+
+/** Completed sessions between two ISO dates, grouped by local performed-date.
+ *  Pass a programId to limit it to sessions started from that program. */
+export function useWorkoutCalendar(from: string, to: string, programId?: string) {
+  const accessToken = useToken();
+  return useQuery({
+    queryKey: ["workout-calendar", from, to, programId ?? null],
+    queryFn: () =>
+      apiFetch<WorkoutCalendarResult>(
+        `/api/v1/workout-calendar?from=${from}&to=${to}${programId ? `&programId=${programId}` : ""}`,
+        { accessToken },
+      ),
+    enabled: accessToken != null,
+  });
+}
+
+/** Aggregate numbers for a program's Overview tab. */
+export function useProgramStats(programId: string | null) {
+  const accessToken = useToken();
+  return useQuery({
+    queryKey: ["program-stats", programId],
+    queryFn: () => apiFetch<ProgramStats>(`/api/v1/programs/${programId}/stats`, { accessToken }),
+    enabled: accessToken != null && programId != null,
+  });
+}
+
+/** Correct the local date a completed session counts against. */
+export function useRescheduleSession() {
+  const accessToken = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sessionId, localDate }: { sessionId: string; localDate: string }) =>
+      apiFetch<WorkoutSessionDetail>(`/api/v1/workout-sessions/${sessionId}/reschedule`, {
+        method: "POST",
+        body: { localDate },
+        accessToken,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["workout-calendar"] });
+      qc.invalidateQueries({ queryKey: ["workout-session"] });
+      qc.invalidateQueries({ queryKey: ["program-stats"] });
+    },
+  });
+}
+
+/** One session by id — used by the completed-workout edit screen. */
+export function useSession(id: string | null) {
+  const accessToken = useToken();
+  return useQuery({
+    queryKey: ["workout-session", id],
+    queryFn: () => apiFetch<WorkoutSessionDetail>(`/api/v1/workout-sessions/${id}`, { accessToken }),
+    enabled: accessToken != null && id != null,
+  });
+}
+
+/** Past workouts, newest first (default status Completed). */
+export function useSessionHistory(status: "Completed" | "Discarded" = "Completed") {
+  const accessToken = useToken();
+  return useQuery({
+    queryKey: ["workout-session", "history", status],
+    queryFn: () =>
+      apiFetch<WorkoutSessionListResult>(`/api/v1/workout-sessions?status=${status}&pageSize=50`, { accessToken }),
+    enabled: accessToken != null,
+  });
+}
+
+/** Everything a set change can move: the session itself, plus (when editing a completed
+ *  one) the history list, calendar, program stats and per-exercise strength views. */
+function invalidateAfterSetChange(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ["workout-session"] });
+  qc.invalidateQueries({ queryKey: ["workout-calendar"] });
+  qc.invalidateQueries({ queryKey: ["program-stats"] });
+  qc.invalidateQueries({ queryKey: ["exercise-history"] });
+  qc.invalidateQueries({ queryKey: ["strength-analytics"] });
+}
+
 /** Log (or re-log) a performed set — validated server-side by the exercise's tracking mode. */
 export function useLogSet(sessionId: string) {
   const accessToken = useToken();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: LogSetBody) =>
-      apiFetch<SetLogDetail>(`/api/v1/workout-sessions/${sessionId}/set-logs`, { method: "POST", body, accessToken }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["workout-session"] }),
+      postOrQueue<SetLogDetail>(`/api/v1/workout-sessions/${sessionId}/set-logs`, body, accessToken),
+    onSuccess: () => invalidateAfterSetChange(qc),
   });
 }
 
@@ -381,12 +633,12 @@ export function useSkipSet(sessionId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ setLogId, reason }: { setLogId: string; reason?: string }) =>
-      apiFetch<SetLogDetail>(`/api/v1/workout-sessions/${sessionId}/skip-set`, {
-        method: "POST",
-        body: { setLogId, reason: reason ?? null },
+      postOrQueue<SetLogDetail>(
+        `/api/v1/workout-sessions/${sessionId}/skip-set`,
+        { setLogId, reason: reason ?? null },
         accessToken,
-      }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["workout-session"] }),
+      ),
+    onSuccess: () => invalidateAfterSetChange(qc),
   });
 }
 
@@ -404,7 +656,11 @@ export function useCompleteSession(sessionId: string) {
         accessToken,
       });
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["workout-session"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["workout-session"] });
+      qc.invalidateQueries({ queryKey: ["program-stats"] });
+      qc.invalidateQueries({ queryKey: ["workout-calendar"] });
+    },
   });
 }
 
@@ -417,4 +673,39 @@ export function useDiscardSession(sessionId: string) {
       apiFetch<void>(`/api/v1/workout-sessions/${sessionId}/discard`, { method: "POST", body: {}, accessToken }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["workout-session"] }),
   });
+}
+
+/** Mid-session structure edits: add / replace / add-set / remove an exercise (docs/02 §7). */
+export function useSessionExercises(sessionId: string) {
+  const accessToken = useToken();
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["workout-session"] });
+  const base = `/api/v1/workout-sessions/${sessionId}`;
+
+  return {
+    add: useMutation({
+      mutationFn: (exerciseId: string) =>
+        apiFetch<WorkoutSessionDetail>(`${base}/exercises`, { method: "POST", body: { exerciseId, sets: 3 }, accessToken }),
+      onSuccess: invalidate,
+    }),
+    replace: useMutation({
+      mutationFn: ({ exerciseLogId, exerciseId, scope }: { exerciseLogId: string; exerciseId: string; scope: "TodayOnly" | "TodayAndFuture" }) =>
+        apiFetch<WorkoutSessionDetail>(`${base}/exercises/${exerciseLogId}/replace`, {
+          method: "POST",
+          body: { exerciseId, scope },
+          accessToken,
+        }),
+      onSuccess: invalidate,
+    }),
+    addSet: useMutation({
+      mutationFn: (exerciseLogId: string) =>
+        apiFetch<WorkoutSessionDetail>(`${base}/exercises/${exerciseLogId}/add-set`, { method: "POST", body: {}, accessToken }),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (exerciseLogId: string) =>
+        apiFetch<WorkoutSessionDetail>(`${base}/exercises/${exerciseLogId}`, { method: "DELETE", accessToken }),
+      onSuccess: invalidate,
+    }),
+  };
 }

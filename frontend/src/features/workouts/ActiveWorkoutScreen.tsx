@@ -1,16 +1,23 @@
 import { useState } from "react";
-import { Link } from "react-router";
-import { Button, Card, CardKicker, CardTitle, Field, Input, PageHeader, Tag } from "../../components/ui";
+import { Link, useNavigate } from "react-router";
+import { Button, Card, CardKicker, CardTitle, Field, Input, PageHeader, Skeleton, Tag } from "../../components/ui";
 import { ApiError } from "../../lib/api";
 import {
   useActiveSession,
   useCompleteSession,
   useDiscardSession,
+  useExerciseHistory,
   useLogSet,
+  useSessionExercises,
   useSkipSet,
 } from "./api";
-import type { ExerciseLogDetail, LogSetBody, SetLogDetail } from "./api";
+import type { ExerciseLogDetail, LogSetBody, SetLogDetail, WorkoutSessionDetail } from "./api";
+import { ExercisePicker } from "./ExercisePicker";
+import { SyncStatus } from "./SyncStatus";
 import { useConfirm } from "./useConfirm";
+import { useRestTimer } from "./useRestTimer";
+
+type SessionOps = ReturnType<typeof useSessionExercises>;
 
 function targetLabel(set: SetLogDetail) {
   const reps =
@@ -41,7 +48,21 @@ function fieldsFor(mode: string): { key: FieldKey; label: string }[] {
   }
 }
 
-function SetRow({ sessionId, set, index, mode }: { sessionId: string; set: SetLogDetail; index: number; mode: string }) {
+function SetRow({
+  sessionId,
+  set,
+  index,
+  mode,
+  prevCompleted,
+  onActed,
+}: {
+  sessionId: string;
+  set: SetLogDetail;
+  index: number;
+  mode: string;
+  prevCompleted: SetLogDetail | undefined;
+  onActed: () => void;
+}) {
   const fields = fieldsFor(mode);
   const [values, setValues] = useState<Record<string, string>>(() => ({
     weightKg: set.weightKg?.toString() ?? "",
@@ -68,6 +89,7 @@ function SetRow({ sessionId, set, index, mode }: { sessionId: string; set: SetLo
     }
     try {
       await logSet.mutateAsync(body);
+      onActed();
     } catch (e) {
       setError(e instanceof ApiError ? (Object.values(e.errors ?? {})[0]?.[0] ?? e.detail ?? e.title) : "Could not save.");
     }
@@ -97,10 +119,31 @@ function SetRow({ sessionId, set, index, mode }: { sessionId: string; set: SetLo
             <Button variant={done ? "secondary" : "primary"} size="sm" onClick={log} disabled={busy}>
               {done ? "Update" : "Log set"}
             </Button>
+            {!done && prevCompleted && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  // Prefill from the previous completed set of this exercise; never auto-completes
+                  // (locked decision: "Copy previous set fills both fields but never completes").
+                  setValues((v) => ({
+                    ...v,
+                    weightKg: prevCompleted.weightKg?.toString() ?? v.weightKg,
+                    addedWeightKg: prevCompleted.addedWeightKg?.toString() ?? v.addedWeightKg,
+                    assistanceKg: prevCompleted.assistanceKg?.toString() ?? v.assistanceKg,
+                    reps: prevCompleted.reps?.toString() ?? v.reps,
+                    durationSeconds: prevCompleted.durationSeconds?.toString() ?? v.durationSeconds,
+                  }))
+                }
+                disabled={busy}
+              >
+                Copy previous
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => skipSet.mutate({ setLogId: set.id })}
+              onClick={() => skipSet.mutate({ setLogId: set.id }, { onSuccess: onActed })}
               disabled={busy}
             >
               Skip
@@ -114,8 +157,25 @@ function SetRow({ sessionId, set, index, mode }: { sessionId: string; set: SetLo
   );
 }
 
-function ExerciseCard({ sessionId, exercise }: { sessionId: string; exercise: ExerciseLogDetail }) {
+function ExerciseCard({
+  sessionId,
+  exercise,
+  ops,
+  onSetActed,
+}: {
+  sessionId: string;
+  exercise: ExerciseLogDetail;
+  ops: SessionOps;
+  onSetActed: (exercise: ExerciseLogDetail, set: SetLogDetail) => void;
+}) {
   const doneCount = exercise.sets.filter((s) => s.completedAt || s.skippedAt).length;
+  const { data: history } = useExerciseHistory(exercise.exerciseId);
+  const prev = history?.sessions.find((s) => s.sessionId !== sessionId && s.topSetWeightKg != null);
+  const [replacing, setReplacing] = useState<{ exerciseId: string; name: string } | null>(null);
+  const [picking, setPicking] = useState(false);
+  const canRemove = exercise.sets.every((s) => s.completedAt == null);
+  const busy = ops.replace.isPending || ops.addSet.isPending || ops.remove.isPending;
+
   return (
     <div className="mb-4">
       <CardKicker>{exercise.trackingMode.replace(/([A-Z])/g, " $1").trim()}</CardKicker>
@@ -126,11 +186,84 @@ function ExerciseCard({ sessionId, exercise }: { sessionId: string; exercise: Ex
             {doneCount}/{exercise.sets.length} sets
           </Tag>
         </div>
+        {prev && (
+          <p className="m-0 text-xs text-foreground-muted">
+            Previous: {prev.topSetWeightKg} kg × {prev.topSetReps} ·{" "}
+            {new Date(`${prev.performedOn}T00:00:00`).toLocaleDateString()}
+          </p>
+        )}
         <div className="flex flex-col gap-2">
           {exercise.sets.map((set, i) => (
-            <SetRow key={set.id} sessionId={sessionId} set={set} index={i} mode={exercise.trackingMode} />
+            <SetRow
+              key={set.id}
+              sessionId={sessionId}
+              set={set}
+              index={i}
+              mode={exercise.trackingMode}
+              prevCompleted={[...exercise.sets.slice(0, i)].reverse().find((s) => s.completedAt != null)}
+              onActed={() => onSetActed(exercise, set)}
+            />
           ))}
         </div>
+
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          <Button variant="ghost" size="sm" onClick={() => ops.addSet.mutate(exercise.id)} disabled={busy}>
+            + Add set
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setPicking((p) => !p)} disabled={busy}>
+            Replace
+          </Button>
+          {canRemove && (
+            <Button variant="ghost" size="sm" onClick={() => ops.remove.mutate(exercise.id)} disabled={busy}>
+              Remove
+            </Button>
+          )}
+        </div>
+
+        {picking && !replacing && (
+          <ExercisePicker
+            existingIds={new Set()}
+            onClose={() => setPicking(false)}
+            onPick={(ex) => setReplacing({ exerciseId: ex.id, name: ex.name })}
+          />
+        )}
+
+        {replacing && (
+          <div className="rounded-control border border-border p-3 text-[13px]">
+            <p className="m-0 mb-2">
+              Replace <strong>{exercise.exerciseName}</strong> with <strong>{replacing.name}</strong>?
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  ops.replace.mutate(
+                    { exerciseLogId: exercise.id, exerciseId: replacing.exerciseId, scope: "TodayOnly" },
+                    { onSettled: () => { setReplacing(null); setPicking(false); } },
+                  );
+                }}
+              >
+                This workout only
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  ops.replace.mutate(
+                    { exerciseLogId: exercise.id, exerciseId: replacing.exerciseId, scope: "TodayAndFuture" },
+                    { onSettled: () => { setReplacing(null); setPicking(false); } },
+                  );
+                }}
+              >
+                Also update the day
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setReplacing(null)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   );
@@ -144,7 +277,15 @@ export function ActiveWorkoutScreen() {
     return (
       <>
         <PageHeader title="Active workout" />
-        <p className="text-sm text-foreground-muted">Loading…</p>
+        <div className="flex flex-col gap-4">
+          {[0, 1].map((i) => (
+            <Card key={i} className="gap-3">
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-9" />
+              <Skeleton className="h-9" />
+            </Card>
+          ))}
+        </div>
       </>
     );
   }
@@ -178,8 +319,39 @@ function RunningSession({
   confirm: ReturnType<typeof useConfirm>["confirm"];
   dialog: ReturnType<typeof useConfirm>["dialog"];
 }) {
+  const navigate = useNavigate();
   const complete = useCompleteSession(session.id);
   const discard = useDiscardSession(session.id);
+  const ops = useSessionExercises(session.id);
+  const rest = useRestTimer();
+  const [finished, setFinished] = useState<WorkoutSessionDetail | null>(null);
+  const [addingExercise, setAddingExercise] = useState(false);
+
+  // Start the rest countdown when a set is logged/skipped: after each set for a standalone
+  // exercise, or after the whole round for a superset (docs/02 §7).
+  const onSetActed = (exercise: ExerciseLogDetail, set: SetLogDetail) => {
+    if (!exercise.supersetGroupSnapshotId) {
+      if (exercise.restSeconds) rest.start(exercise.restSeconds);
+      return;
+    }
+    const members = session.exercises.filter(
+      (e) => e.supersetGroupSnapshotId === exercise.supersetGroupSnapshotId,
+    );
+    const roundComplete = members.every((m) => {
+      const s = m.sets.find((x) => x.sortOrder === set.sortOrder);
+      if (!s || s.id === set.id) return true; // no set this round, or the one just acted on
+      return s.completedAt != null || s.skippedAt != null;
+    });
+    if (roundComplete && exercise.supersetRestAfterRoundSeconds) {
+      rest.start(exercise.supersetRestAfterRoundSeconds);
+    }
+  };
+
+  const finish = () => complete.mutate(undefined, { onSuccess: (data) => setFinished(data) });
+
+  if (finished) {
+    return <SessionComplete session={finished} onDone={() => navigate("/workouts/history")} />;
+  }
 
   const totalSets = session.exercises.reduce((n, e) => n + e.sets.length, 0);
   const actedSets = session.exercises.reduce(
@@ -195,6 +367,7 @@ function RunningSession({
         subtitle={session.programName ?? "No source program"}
         actions={
           <>
+            <SyncStatus />
             <Button
               variant="ghost"
               onClick={async () => {
@@ -214,8 +387,9 @@ function RunningSession({
             </Button>
             <Button
               variant="primary"
-              onClick={() => complete.mutate(undefined)}
-              disabled={complete.isPending || discard.isPending}
+              onClick={finish}
+              disabled={complete.isPending || discard.isPending || actedSets === 0}
+              title={actedSets === 0 ? "Log or skip at least one set first" : undefined}
             >
               {complete.isPending ? "Finishing…" : "Finish workout"}
             </Button>
@@ -226,21 +400,97 @@ function RunningSession({
       {totalSets > 0 && (
         <p className="mb-3 text-[13px] text-foreground-muted">
           {actedSets} of {totalSets} sets logged or skipped
+          {actedSets === 0 && " — log or skip at least one to finish"}
         </p>
       )}
 
-      {session.exercises.length === 0 ? (
-        <Card>
-          <p className="text-sm text-foreground-muted">
-            No exercises in this ad-hoc session. Adding exercises mid-workout is a later slice — you can
-            still finish it to put it on record.
+      {session.exercises.length === 0 && (
+        <Card className="mb-4">
+          <p className="m-0 text-sm text-foreground-muted">
+            No exercises yet — add one below. An empty workout can't be finished; discard it if
+            you're not training now.
           </p>
         </Card>
-      ) : (
-        session.exercises.map((exercise) => (
-          <ExerciseCard key={exercise.id} sessionId={session.id} exercise={exercise} />
-        ))
       )}
+
+      {session.exercises.map((exercise) => (
+        <ExerciseCard
+          key={exercise.id}
+          sessionId={session.id}
+          exercise={exercise}
+          ops={ops}
+          onSetActed={onSetActed}
+        />
+      ))}
+
+      {rest.bar}
+
+      {addingExercise ? (
+        <Card>
+          <ExercisePicker
+            existingIds={new Set(session.exercises.map((e) => e.exerciseId))}
+            onClose={() => setAddingExercise(false)}
+            onPick={(ex) => ops.add.mutate(ex.id, { onSettled: () => setAddingExercise(false) })}
+          />
+        </Card>
+      ) : (
+        <Button variant="secondary" onClick={() => setAddingExercise(true)}>
+          + Add exercise
+        </Button>
+      )}
+    </>
+  );
+}
+
+const PR_LABEL: Record<string, string> = {
+  HeaviestWeight: "Heaviest weight",
+  BestEstimatedOneRepMax: "New estimated 1RM",
+  MostRepsAtWeight: "Most reps at a weight",
+  BestExerciseVolume: "Highest exercise volume",
+};
+
+function SessionComplete({ session, onDone }: { session: WorkoutSessionDetail; onDone: () => void }) {
+  const s = session.summary;
+  const minutes = s.durationSeconds != null ? Math.round(s.durationSeconds / 60) : null;
+
+  return (
+    <>
+      <PageHeader title="Workout complete" subtitle={session.dayName ?? "Ad-hoc workout"} />
+      <Card className="mb-4 gap-2">
+        <CardKicker>Summary</CardKicker>
+        <div className="flex flex-wrap gap-2">
+          {minutes != null && <Tag tone="neutral">{minutes} min</Tag>}
+          <Tag tone="neutral">{s.completedSetCount} sets</Tag>
+          {s.skippedSetCount > 0 && <Tag tone="warning">{s.skippedSetCount} skipped</Tag>}
+          <Tag tone="neutral">{s.totalReps} reps</Tag>
+          {s.totalVolumeKg > 0 && <Tag tone="neutral">{Math.round(s.totalVolumeKg).toLocaleString()} kg volume</Tag>}
+        </div>
+      </Card>
+
+      {session.newPersonalRecords.length > 0 && (
+        <Card className="mb-4 gap-2">
+          <CardKicker>Personal records</CardKicker>
+          <div className="flex flex-col gap-1.5">
+            {session.newPersonalRecords.map((pr, i) => (
+              <div key={i} className="flex items-center gap-2 text-[13px]">
+                <Tag tone="success">PR</Tag>
+                <span>
+                  {PR_LABEL[pr.type] ?? pr.type}:{" "}
+                  <strong>
+                    {pr.type === "MostRepsAtWeight"
+                      ? `${pr.value} reps @ ${pr.weightKg} kg`
+                      : `${Math.round(pr.value * 10) / 10} kg`}
+                  </strong>
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <Button variant="primary" onClick={onDone}>
+        View history
+      </Button>
     </>
   );
 }

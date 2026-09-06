@@ -20,10 +20,16 @@ public class ExerciseLog
 
     public int SortOrder { get; set; }
 
+    /// <summary>Rest after a set of this exercise, seconds — snapshotted from the day. Null = no timer.</summary>
+    public int? RestSeconds { get; set; }
+
     /// <summary>Groups this log with its superset partners for round display; the id of the
     /// source <see cref="SupersetGroup"/> at snapshot time. Null outside a superset.</summary>
     public Guid? SupersetGroupSnapshotId { get; set; }
     public int SupersetMemberOrder { get; set; }
+
+    /// <summary>Rest after a whole superset round, seconds — snapshotted; same for every member. Null outside a superset.</summary>
+    public int? SupersetRestAfterRoundSeconds { get; set; }
 
     public List<SetLog> Sets { get; set; } = [];
 }
