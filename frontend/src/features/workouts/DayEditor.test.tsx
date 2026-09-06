@@ -245,4 +245,35 @@ describe("DayEditor", () => {
     await user.click(screen.getByRole("button", { name: "Delete day" }));
     expect(onDeleteDay).toHaveBeenCalled();
   });
+
+  it("offers Duplicate day in the ⋯ menu, wired to onDuplicateDay", async () => {
+    installFetch();
+    const onDuplicateDay = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <Providers>
+        <DayEditor dayId="d1" programId="p1" onClose={() => {}} onDuplicateDay={onDuplicateDay} />
+      </Providers>,
+    );
+
+    await screen.findByText("Back Squat");
+    await user.click(screen.getByRole("button", { name: "Day options" }));
+    await user.click(screen.getByRole("button", { name: "Duplicate day" }));
+    expect(onDuplicateDay).toHaveBeenCalled();
+  });
+
+  it("hides Duplicate day when no onDuplicateDay handler is given", async () => {
+    installFetch();
+    const user = userEvent.setup();
+    render(
+      <Providers>
+        <DayEditor dayId="d1" programId="p1" onClose={() => {}} />
+      </Providers>,
+    );
+
+    await screen.findByText("Back Squat");
+    await user.click(screen.getByRole("button", { name: "Day options" }));
+    expect(screen.getByRole("button", { name: "Rename day" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Duplicate day" })).not.toBeInTheDocument();
+  });
 });

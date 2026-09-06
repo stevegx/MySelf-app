@@ -476,7 +476,12 @@ public static class ProgramEndpoints
             statusCode: StatusCodes.Status201Created);
     }
 
-    private static WorkoutDay CloneDay(WorkoutDay source)
+    /// <summary>
+    /// Deep-copies a day's tree into detached new entities (fresh ids, shared catalogue
+    /// references). Used by program clone and by <c>POST /workout-days/{id}/duplicate</c>;
+    /// callers set <see cref="WorkoutDay.ProgramId"/> / <see cref="WorkoutDay.SortOrder"/>.
+    /// </summary>
+    internal static WorkoutDay CloneDay(WorkoutDay source)
     {
         // New superset rows, keyed by the source id so the exercises can point at the copies.
         var supersetByOldId = source.Supersets.ToDictionary(
@@ -494,6 +499,7 @@ public static class ProgramEndpoints
             Name = source.Name,
             SortOrder = source.SortOrder,
             EstimatedDurationMinutes = source.EstimatedDurationMinutes,
+            FocusMuscleIds = [.. source.FocusMuscleIds],
             Supersets = supersetByOldId.Values.ToList(),
             Exercises = source.Exercises
                 .OrderBy(e => e.SortOrder)
@@ -526,7 +532,7 @@ public static class ProgramEndpoints
         };
     }
 
-    private static string Truncate(string value, int max) =>
+    internal static string Truncate(string value, int max) =>
         value.Length <= max ? value : value[..max];
 
     private static async Task<IResult> AddDayAsync(

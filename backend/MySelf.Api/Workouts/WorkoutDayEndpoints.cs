@@ -22,6 +22,7 @@ public static class WorkoutDayEndpoints
 
         days.MapGet("/{id:guid}", GetAsync).WithName("GetWorkoutDay");
         days.MapPut("/{id:guid}", UpdateAsync).WithName("UpdateWorkoutDay");
+        days.MapPost("/{id:guid}/duplicate", DuplicateAsync).WithName("DuplicateWorkoutDay");
         days.MapDelete("/{id:guid}", DeleteAsync).WithName("DeleteWorkoutDay");
         days.MapPost("/{id:guid}/exercises/bulk-copy", BulkCopyAsync).WithName("BulkCopyDayExercises");
         days.MapPost("/{id:guid}/exercises/bulk-move", BulkMoveAsync).WithName("BulkMoveDayExercises");
@@ -318,6 +319,50 @@ public static class WorkoutDayEndpoints
         db.WorkoutDays.Remove(day);
         await db.SaveChangesAsync(ct);
         return Results.NoContent();
+    }
+
+    /// <summary>
+    /// Deep-copy this day — name, focus, every exercise with its set prescriptions and
+    /// superset groupings — into the same program as a new draft day, appended at the end
+    /// and named "… (copy)". Copied rows get fresh ids; the catalogue exercise reference is
+    /// shared, not duplicated. No row-version guard: it only appends (like <c>AddDay</c>).
+    /// </summary>
+    private static async Task<IResult> DuplicateAsync(Guid id, HttpContext http, MySelfDbContext db, CancellationToken ct)
+    {
+        if (!http.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var source = await db.OwnedDays(userId)
+            .Include(d => d.Exercises).ThenInclude(e => e.Sets)
+            .Include(d => d.Supersets)
+            .FirstOrDefaultAsync(d => d.Id == id, ct);
+        if (source is null)
+        {
+            return Results.NotFound();
+        }
+
+        var program = await db.WorkoutPrograms
+            .Include(p => p.Days)
+            .FirstAsync(p => p.Id == source.ProgramId, ct);
+
+        if (program.Days.Count >= WorkoutLimits.MaxDaysPerProgram)
+        {
+            return TooMany($"A program can have at most {WorkoutLimits.MaxDaysPerProgram} days.");
+        }
+
+        var clone = CloneDay(source);
+        clone.ProgramId = program.Id;
+        clone.Name = Truncate($"{source.Name} (copy)", 80);
+        clone.SortOrder = program.Days.Max(d => d.SortOrder) + 1;
+
+        db.WorkoutDays.Add(clone);
+        await db.SaveChangesAsync(ct);
+
+        return Results.Json(
+            new DayListItem(clone.Id, clone.Name, clone.SortOrder, clone.Exercises.Count),
+            statusCode: StatusCodes.Status201Created);
     }
 
     /// <summary>

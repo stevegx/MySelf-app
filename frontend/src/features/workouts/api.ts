@@ -427,6 +427,11 @@ export function useMutateProgram(programId: string | null) {
         apiFetch<void>(`/api/v1/workout-days/${dayId}`, { method: "DELETE", accessToken }),
       onSuccess: invalidate,
     }),
+    duplicateDay: useMutation({
+      mutationFn: (dayId: string) =>
+        apiFetch<DayListItem>(`/api/v1/workout-days/${dayId}/duplicate`, { method: "POST", accessToken }),
+      onSuccess: invalidate,
+    }),
     // Rename / relabel a program and/or reorder its days. Pass the program's rowVersion.
     updateProgram: useMutation({
       mutationFn: (body: { name?: string; splitLabel?: string | null; dayOrder?: string[]; rowVersion: number }) =>

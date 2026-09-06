@@ -796,6 +796,9 @@ function ProgramDetail({
                   onSaved={() => {}}
                   onClose={() => setSelectedDayId(null)}
                   onDeleteDay={() => removeDay(selectedDay)}
+                  onDuplicateDay={() =>
+                    m.duplicateDay.mutate(selectedDay.id, { onSuccess: (d) => setSelectedDayId(d.id) })
+                  }
                 />
               </Card>
             ) : (

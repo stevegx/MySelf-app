@@ -148,6 +148,7 @@ export function DayEditor({
   onClose,
   onSaved,
   onDeleteDay,
+  onDuplicateDay,
 }: {
   dayId: string;
   programId: string;
@@ -157,6 +158,8 @@ export function DayEditor({
   onSaved?: () => void;
   /** When set, the header's ⋯ menu offers "Delete day" and calls this. */
   onDeleteDay?: () => void;
+  /** When set, the header's ⋯ menu offers "Duplicate day" and calls this. */
+  onDuplicateDay?: () => void;
 }) {
   const { data: day, isLoading } = useDay(dayId);
   const { data: program } = useProgram(programId);
@@ -428,6 +431,18 @@ export function DayEditor({
                 >
                   Rename day
                 </button>
+                {onDuplicateDay && (
+                  <button
+                    type="button"
+                    className="rounded-[6px] px-2 py-1.5 text-left text-[13px] hover:bg-surface-subtle"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onDuplicateDay();
+                    }}
+                  >
+                    Duplicate day
+                  </button>
+                )}
                 {onDeleteDay && (
                   <button
                     type="button"
