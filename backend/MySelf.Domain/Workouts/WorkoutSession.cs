@@ -38,5 +38,10 @@ public class WorkoutSession
 
     public string? Notes { get; set; }
 
+    /// <summary>Set true the first time a set is changed after the session was completed
+    /// (docs/02 §7: "Completed workout logs stay editable… marks the session as Edited").
+    /// Surfaced as an "Edited" badge; the summary and PRs are recomputed on each edit.</summary>
+    public bool WasEdited { get; set; }
+
     public List<ExerciseLog> ExerciseLogs { get; set; } = [];
 }

@@ -79,7 +79,7 @@ public static class WorkoutSessionEndpoints
                 g.OrderBy(s => s.StartedAt)
                     .Select(s => new WorkoutSessionListItem(
                         s.Id, s.DayName, s.ProgramName, s.Status.ToString(),
-                        s.StartedAt, s.CompletedAt, s.PerformedOnLocalDate, ToSummary(s)))
+                        s.StartedAt, s.CompletedAt, s.PerformedOnLocalDate, s.WasEdited, ToSummary(s)))
                     .ToList()))
             .ToList();
 
@@ -231,7 +231,7 @@ public static class WorkoutSessionEndpoints
         var items = sessions
             .Select(s => new WorkoutSessionListItem(
                 s.Id, s.DayName, s.ProgramName, s.Status.ToString(),
-                s.StartedAt, s.CompletedAt, s.PerformedOnLocalDate, ToSummary(s)))
+                s.StartedAt, s.CompletedAt, s.PerformedOnLocalDate, s.WasEdited, ToSummary(s)))
             .ToList();
 
         return Results.Ok(new WorkoutSessionListResult(items, page, pageSize, total));
@@ -281,7 +281,7 @@ public static class WorkoutSessionEndpoints
             return Unauthorized();
         }
 
-        var session = await LoadInProgressForEditAsync(db, userId, id, ct);
+        var session = await LoadForSetEditAsync(db, userId, id, ct);
         if (session is null)
         {
             return await NotFoundOrConflict(db, userId, id, ct);
@@ -316,6 +316,11 @@ public static class WorkoutSessionEndpoints
         set.SkippedAt = null;
         set.SkippedReason = null;
 
+        if (session.Status == SessionStatus.Completed)
+        {
+            await RecomputeAfterEditAsync(db, userId, session, clock.GetUtcNow(), ct);
+        }
+
         await db.SaveChangesAsync(ct);
         return Results.Ok(ToSetDetail(set));
     }
@@ -333,7 +338,7 @@ public static class WorkoutSessionEndpoints
             return Unauthorized();
         }
 
-        var session = await LoadInProgressForEditAsync(db, userId, id, ct);
+        var session = await LoadForSetEditAsync(db, userId, id, ct);
         if (session is null)
         {
             return await NotFoundOrConflict(db, userId, id, ct);
@@ -352,6 +357,11 @@ public static class WorkoutSessionEndpoints
         set.WeightKg = set.AddedWeightKg = set.AssistanceKg = set.DistanceMeters = null;
         set.Reps = set.DurationSeconds = set.Rir = null;
         set.ReachedFailure = false;
+
+        if (session.Status == SessionStatus.Completed)
+        {
+            await RecomputeAfterEditAsync(db, userId, session, clock.GetUtcNow(), ct);
+        }
 
         await db.SaveChangesAsync(ct);
         return Results.Ok(ToSetDetail(set));
@@ -673,11 +683,42 @@ public static class WorkoutSessionEndpoints
             .Where(s => s.Id == id && s.Status == SessionStatus.InProgress)
             .FirstOrDefaultAsync(ct);
 
+    /// <summary>
+    /// Loads a session for a set-level change: the running one, or a completed one being
+    /// edited after the fact (docs/02 §7). A discarded session is not editable.
+    /// </summary>
+    private static Task<WorkoutSession?> LoadForSetEditAsync(
+        MySelfDbContext db, Guid userId, Guid id, CancellationToken ct) =>
+        db.OwnedSessions(userId)
+            .Include(s => s.ExerciseLogs).ThenInclude(e => e.Sets)
+            .Where(s => s.Id == id
+                && (s.Status == SessionStatus.InProgress || s.Status == SessionStatus.Completed))
+            .FirstOrDefaultAsync(ct);
+
     /// <summary>Distinguish "no such session for this user" (404) from "it exists but isn't running" (409).</summary>
     private static async Task<IResult> NotFoundOrConflict(MySelfDbContext db, Guid userId, Guid id, CancellationToken ct)
     {
         var exists = await db.OwnedSessions(userId).AnyAsync(s => s.Id == id, ct);
         return exists ? SessionNotInProgress() : Results.NotFound();
+    }
+
+    /// <summary>
+    /// After a set on an already-completed session changes: flag it Edited and rebuild that
+    /// session's personal records — an edit can create a new PR or invalidate one it held
+    /// (docs/02 §7). Old rows for this session are dropped and re-detected against the rest
+    /// of the user's history.
+    /// </summary>
+    private static async Task RecomputeAfterEditAsync(
+        MySelfDbContext db, Guid userId, WorkoutSession session, DateTimeOffset now, CancellationToken ct)
+    {
+        session.WasEdited = true;
+
+        var stale = await db.PersonalRecords.Where(p => p.SessionId == session.Id).ToListAsync(ct);
+        db.PersonalRecords.RemoveRange(stale);
+        await db.SaveChangesAsync(ct); // clear first so re-detection compares against a clean history
+
+        var fresh = await DetectPersonalRecordsAsync(db, userId, session, now, ct);
+        db.PersonalRecords.AddRange(fresh);
     }
 
     private static (ExerciseLog? Exercise, SetLog? Set) FindSet(WorkoutSession session, Guid setLogId)
@@ -731,6 +772,7 @@ public static class WorkoutSessionEndpoints
         s.CompletedAt,
         s.PerformedOnLocalDate,
         s.Notes,
+        s.WasEdited,
         ToSummary(s),
         newPrs ?? [],
         s.ExerciseLogs

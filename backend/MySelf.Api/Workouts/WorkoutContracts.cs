@@ -190,6 +190,7 @@ public sealed record WorkoutSessionDetail(
     DateTimeOffset? CompletedAt,
     DateOnly? PerformedOnLocalDate,
     string? Notes,
+    bool WasEdited,
     SessionSummary Summary,
     IReadOnlyList<PersonalRecordDetail> NewPersonalRecords,
     IReadOnlyList<ExerciseLogDetail> Exercises);
@@ -241,6 +242,7 @@ public sealed record WorkoutSessionListItem(
     DateTimeOffset StartedAt,
     DateTimeOffset? CompletedAt,
     DateOnly? PerformedOnLocalDate,
+    bool WasEdited,
     SessionSummary Summary);
 
 public sealed record WorkoutSessionListResult(
