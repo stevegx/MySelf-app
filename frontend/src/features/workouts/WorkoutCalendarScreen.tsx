@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button, Card, PageHeader, Tag } from "../../components/ui";
 import { cn } from "../../lib/cn";
@@ -105,6 +106,10 @@ export function WorkoutCalendarScreen() {
               {s.summary.totalVolumeKg > 0 && (
                 <Tag tone="neutral">{Math.round(s.summary.totalVolumeKg).toLocaleString()} kg</Tag>
               )}
+              {s.wasEdited && <Tag tone="neutral">Edited</Tag>}
+              <Link to={`/workouts/session/${s.id}`} className="text-[12px] text-primary underline">
+                Edit
+              </Link>
               <label className="ml-auto text-[12px] text-foreground-muted">
                 Move to{" "}
                 <input

@@ -220,6 +220,7 @@ export type WorkoutSessionDetail = {
   completedAt: string | null;
   performedOnLocalDate: string | null;
   notes: string | null;
+  wasEdited: boolean;
   summary: SessionSummary;
   newPersonalRecords: PersonalRecordDetail[];
   exercises: ExerciseLogDetail[];
@@ -254,6 +255,7 @@ export type WorkoutSessionListItem = {
   startedAt: string;
   completedAt: string | null;
   performedOnLocalDate: string | null;
+  wasEdited: boolean;
   summary: SessionSummary;
 };
 
@@ -583,6 +585,16 @@ export function useRescheduleSession() {
   });
 }
 
+/** One session by id — used by the completed-workout edit screen. */
+export function useSession(id: string | null) {
+  const accessToken = useToken();
+  return useQuery({
+    queryKey: ["workout-session", id],
+    queryFn: () => apiFetch<WorkoutSessionDetail>(`/api/v1/workout-sessions/${id}`, { accessToken }),
+    enabled: accessToken != null && id != null,
+  });
+}
+
 /** Past workouts, newest first (default status Completed). */
 export function useSessionHistory(status: "Completed" | "Discarded" = "Completed") {
   const accessToken = useToken();
@@ -594,6 +606,16 @@ export function useSessionHistory(status: "Completed" | "Discarded" = "Completed
   });
 }
 
+/** Everything a set change can move: the session itself, plus (when editing a completed
+ *  one) the history list, calendar, program stats and per-exercise strength views. */
+function invalidateAfterSetChange(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ["workout-session"] });
+  qc.invalidateQueries({ queryKey: ["workout-calendar"] });
+  qc.invalidateQueries({ queryKey: ["program-stats"] });
+  qc.invalidateQueries({ queryKey: ["exercise-history"] });
+  qc.invalidateQueries({ queryKey: ["strength-analytics"] });
+}
+
 /** Log (or re-log) a performed set — validated server-side by the exercise's tracking mode. */
 export function useLogSet(sessionId: string) {
   const accessToken = useToken();
@@ -601,7 +623,7 @@ export function useLogSet(sessionId: string) {
   return useMutation({
     mutationFn: (body: LogSetBody) =>
       postOrQueue<SetLogDetail>(`/api/v1/workout-sessions/${sessionId}/set-logs`, body, accessToken),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["workout-session"] }),
+    onSuccess: () => invalidateAfterSetChange(qc),
   });
 }
 
@@ -616,7 +638,7 @@ export function useSkipSet(sessionId: string) {
         { setLogId, reason: reason ?? null },
         accessToken,
       ),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["workout-session"] }),
+    onSuccess: () => invalidateAfterSetChange(qc),
   });
 }
 

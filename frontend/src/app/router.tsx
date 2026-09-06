@@ -13,6 +13,7 @@ import { DashboardScreen } from "../features/dashboard/DashboardScreen";
 import { WorkoutLayout } from "../features/workouts/WorkoutLayout";
 import { WorkoutBuilderScreen } from "../features/workouts/WorkoutBuilderScreen";
 import { ActiveWorkoutScreen } from "../features/workouts/ActiveWorkoutScreen";
+import { SessionEditScreen } from "../features/workouts/SessionEditScreen";
 import { WorkoutHistoryScreen } from "../features/workouts/WorkoutHistoryScreen";
 import { WorkoutCalendarScreen } from "../features/workouts/WorkoutCalendarScreen";
 import { NutritionScreen } from "../features/nutrition/NutritionScreen";
@@ -57,6 +58,7 @@ export const router = createBrowserRouter([
               { path: "dashboard", element: <DashboardScreen /> },
               { path: "workouts", element: <Navigate to="/workouts/builder" replace /> },
               { path: "workouts/active", element: <ActiveWorkoutScreen /> },
+              { path: "workouts/session/:id", element: <SessionEditScreen /> },
               {
                 element: <WorkoutLayout />,
                 children: [

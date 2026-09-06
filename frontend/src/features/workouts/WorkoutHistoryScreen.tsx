@@ -22,21 +22,27 @@ function formatDuration(seconds: number | null) {
 function Row({ s }: { s: WorkoutSessionListItem }) {
   const duration = formatDuration(s.summary.durationSeconds);
   return (
-    <Card className="gap-1">
-      <div className="flex items-center justify-between">
-        <span className="font-bold">{s.dayName ?? "Ad-hoc workout"}</span>
-        <span className="text-xs text-foreground-muted">{formatDate(s.performedOnLocalDate)}</span>
-      </div>
-      {s.programName && <span className="text-xs text-foreground-muted">{s.programName}</span>}
-      <div className="mt-1 flex flex-wrap gap-1.5">
-        <Tag tone="neutral">{s.summary.completedSetCount} sets</Tag>
-        {s.summary.skippedSetCount > 0 && <Tag tone="warning">{s.summary.skippedSetCount} skipped</Tag>}
-        {s.summary.totalVolumeKg > 0 && (
-          <Tag tone="neutral">{Math.round(s.summary.totalVolumeKg).toLocaleString()} kg volume</Tag>
-        )}
-        {duration && <Tag tone="neutral">{duration}</Tag>}
-      </div>
-    </Card>
+    <Link
+      to={`/workouts/session/${s.id}`}
+      className="block rounded-card no-underline transition-colors hover:bg-surface-subtle"
+    >
+      <Card className="gap-1">
+        <div className="flex items-center justify-between">
+          <span className="font-bold">{s.dayName ?? "Ad-hoc workout"}</span>
+          <span className="text-xs text-foreground-muted">{formatDate(s.performedOnLocalDate)}</span>
+        </div>
+        {s.programName && <span className="text-xs text-foreground-muted">{s.programName}</span>}
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          <Tag tone="neutral">{s.summary.completedSetCount} sets</Tag>
+          {s.summary.skippedSetCount > 0 && <Tag tone="warning">{s.summary.skippedSetCount} skipped</Tag>}
+          {s.summary.totalVolumeKg > 0 && (
+            <Tag tone="neutral">{Math.round(s.summary.totalVolumeKg).toLocaleString()} kg volume</Tag>
+          )}
+          {duration && <Tag tone="neutral">{duration}</Tag>}
+          {s.wasEdited && <Tag tone="neutral">Edited</Tag>}
+        </div>
+      </Card>
+    </Link>
   );
 }
 
