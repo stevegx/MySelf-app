@@ -492,6 +492,95 @@ public class WorkoutSessionEndpointTests(WebApplicationFactory<Program> factory,
             Assert.Equal("2026-09-05", after.GetProperty("lastPerformedOn").GetString());
             Assert.Equal(1, after.GetProperty("completedSets").GetInt32());
             Assert.Equal(1, after.GetProperty("perDay")[0].GetProperty("sessions").GetInt32());
+
+            // Muscle coverage is present (an array); entries, when the exercise has primary
+            // muscles, name a muscle and a positive sets-per-week.
+            var coverageProp = after.GetProperty("muscleWeeklySets");
+            Assert.Equal(JsonValueKind.Array, coverageProp.ValueKind);
+            Assert.All(coverageProp.EnumerateArray(), m =>
+            {
+                Assert.False(string.IsNullOrWhiteSpace(m.GetProperty("muscle").GetString()));
+                Assert.True(m.GetProperty("setsPerWeek").GetDouble() > 0);
+            });
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Program_stats_report_completed_sets_per_primary_muscle()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            Guid exerciseId;
+            string primaryMuscle;
+            using (var scope = factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<MySelfDbContext>();
+                var picked = await db.Exercises
+                    .Where(e => e.Muscles.Any(m => m.Role == MySelf.Domain.Exercises.MuscleRole.Primary))
+                    .OrderBy(e => e.Name)
+                    .Select(e => new
+                    {
+                        e.Id,
+                        Muscle = e.Muscles
+                            .Where(m => m.Role == MySelf.Domain.Exercises.MuscleRole.Primary)
+                            .Select(m => m.Muscle.Name)
+                            .First(),
+                    })
+                    .FirstAsync();
+                exerciseId = picked.Id;
+                primaryMuscle = picked.Muscle;
+            }
+
+            var programId = (await (await client.PostAsJsonAsync("/api/v1/programs", new { name = "P", splitLabel = (string?)null }))
+                .Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+            var dayId = (await (await client.PostAsJsonAsync($"/api/v1/programs/{programId}/days", new { name = "D" }))
+                .Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+            await client.PutAsJsonAsync($"/api/v1/workout-days/{dayId}", new
+            {
+                name = "D",
+                estimatedDurationMinutes = (int?)null,
+                exercises = new[]
+                {
+                    new
+                    {
+                        exerciseId,
+                        sortOrder = 0,
+                        supersetRef = (string?)null,
+                        supersetMemberOrder = 0,
+                        restSeconds = (int?)60,
+                        notes = (string?)null,
+                        sets = new[]
+                        {
+                            new { sortOrder = 0, kind = "Standard", isAmrap = false, targetToFailure = false, targetRepsMin = (int?)8, targetRepsMax = (int?)8, targetWeightKg = (double?)50, targetRir = (int?)2 },
+                            new { sortOrder = 1, kind = "Standard", isAmrap = false, targetToFailure = false, targetRepsMin = (int?)8, targetRepsMax = (int?)8, targetWeightKg = (double?)50, targetRir = (int?)2 },
+                        },
+                    },
+                },
+                supersets = Array.Empty<object>(),
+            });
+
+            var start = await (await client.PostAsJsonAsync("/api/v1/workout-sessions", new { dayId }))
+                .Content.ReadFromJsonAsync<JsonElement>();
+            var sessionId = start.GetProperty("id").GetGuid();
+            foreach (var set in start.GetProperty("exercises")[0].GetProperty("sets").EnumerateArray())
+            {
+                await client.PostAsJsonAsync(
+                    $"/api/v1/workout-sessions/{sessionId}/set-logs",
+                    new { setLogId = set.GetProperty("id").GetGuid(), weightKg = 50.0, reps = 8, reachedFailure = false });
+            }
+            await client.PostAsJsonAsync(
+                $"/api/v1/workout-sessions/{sessionId}/complete", new { localDate = "2026-09-05", notes = (string?)null });
+
+            var stats = await client.GetFromJsonAsync<JsonElement>($"/api/v1/programs/{programId}/stats?today=2026-09-05");
+            var entry = stats.GetProperty("muscleWeeklySets").EnumerateArray()
+                .First(m => m.GetProperty("muscle").GetString() == primaryMuscle);
+            // 2 completed sets ÷ 1 week (program is < 1 week old) = 2.0.
+            Assert.Equal(2.0, entry.GetProperty("setsPerWeek").GetDouble());
         }
         finally
         {

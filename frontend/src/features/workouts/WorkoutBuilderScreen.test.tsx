@@ -79,6 +79,7 @@ describe("WorkoutBuilderScreen — Train home", () => {
         { dayId: "d2", dayName: "Pull", sessions: 2, lastPerformedOn: null },
       ],
       personalRecords: [],
+      muscleWeeklySets: [{ muscle: "Quads", setsPerWeek: 3.5 }, { muscle: "Chest", setsPerWeek: 12 }],
     };
     const spy = vi.fn<typeof fetch>((input, init) => {
       const url = typeof input === "string" ? input : input.toString();
@@ -342,6 +343,7 @@ describe("WorkoutBuilderScreen — manage programs", () => {
       personalRecords: [
         { exerciseName: "Back Squat", type: "HeaviestWeight", value: 140, achievedOn: "2026-09-04" },
       ],
+      muscleWeeklySets: [{ muscle: "Chest", setsPerWeek: 10 }],
     };
     vi.stubGlobal(
       "fetch",
@@ -369,6 +371,7 @@ describe("WorkoutBuilderScreen — manage programs", () => {
     expect(timesCard).toHaveTextContent("7");
     expect(screen.getByText("2.5/wk average")).toBeInTheDocument();
     expect(screen.getByText(/Back Squat/)).toBeInTheDocument();
+    expect(screen.getByText(/Muscle coverage/)).toBeInTheDocument();
     expect(screen.getByText(/When you trained this program/)).toBeInTheDocument();
 
     // The editable day list lives behind the Days tab.

@@ -72,11 +72,16 @@ public sealed record ProgramStats(
     int SkippedSets,
     double SkippedSetRate,
     IReadOnlyList<ProgramDayStat> PerDay,
-    IReadOnlyList<ProgramPrStat> PersonalRecords);
+    IReadOnlyList<ProgramPrStat> PersonalRecords,
+    // Completed working sets per primary muscle ÷ weeks in range — a coverage / "don't skip
+    // leg day" signal. Lowest first.
+    IReadOnlyList<MuscleWeeklySets> MuscleWeeklySets);
 
 public sealed record ProgramDayStat(Guid DayId, string DayName, int Sessions, DateOnly? LastPerformedOn);
 
 public sealed record ProgramPrStat(string ExerciseName, string Type, double Value, DateOnly AchievedOn);
+
+public sealed record MuscleWeeklySets(string Muscle, double SetsPerWeek);
 
 // --- day detail ---
 

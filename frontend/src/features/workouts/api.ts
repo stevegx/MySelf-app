@@ -76,6 +76,8 @@ export type ProgramPrStat = {
   achievedOn: string;
 };
 
+export type MuscleWeeklySets = { muscle: string; setsPerWeek: number };
+
 /** Aggregates for a program's Overview tab (GET /api/v1/programs/{id}/stats). */
 export type ProgramStats = {
   totalSessions: number;
@@ -91,6 +93,7 @@ export type ProgramStats = {
   skippedSetRate: number;
   perDay: ProgramDayStat[];
   personalRecords: ProgramPrStat[];
+  muscleWeeklySets: MuscleWeeklySets[];
 };
 
 export type SetPrescriptionDetail = {

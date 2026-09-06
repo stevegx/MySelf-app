@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using MySelf.Domain.Exercises;
 using MySelf.Domain.Workouts;
 using MySelf.Infrastructure.Persistence;
 
@@ -194,6 +195,42 @@ public static class ProgramEndpoints
             program.Days.Select(d => (d.Id, d.Name)).ToList(),
             localToday);
 
+        // Completed working sets per primary muscle ÷ weeks in range — the coverage signal.
+        var exerciseIds = sessions.SelectMany(s => s.ExerciseLogs).Select(e => e.ExerciseId).Distinct().ToList();
+        var primaryMusclesByExercise = await db.Exercises
+            .AsNoTracking()
+            .Where(e => exerciseIds.Contains(e.Id))
+            .Select(e => new
+            {
+                e.Id,
+                Muscles = e.Muscles
+                    .Where(m => m.Role == MuscleRole.Primary)
+                    .Select(m => m.Muscle.Name)
+                    .ToList(),
+            })
+            .ToDictionaryAsync(x => x.Id, x => x.Muscles, ct);
+
+        var setsByMuscle = new Dictionary<string, int>();
+        foreach (var log in sessions.SelectMany(s => s.ExerciseLogs))
+        {
+            if (!primaryMusclesByExercise.TryGetValue(log.ExerciseId, out var muscles) || muscles.Count == 0)
+            {
+                continue;
+            }
+            var completed = log.Sets.Count(s => s.CompletedAt is not null);
+            foreach (var m in muscles)
+            {
+                setsByMuscle[m] = setsByMuscle.GetValueOrDefault(m) + completed;
+            }
+        }
+
+        var weeks = Math.Max(1, stats.WeeksInRange);
+        var muscleWeeklySets = setsByMuscle
+            .Select(kv => new MuscleWeeklySets(kv.Key, Math.Round((double)kv.Value / weeks, 1)))
+            .OrderBy(x => x.SetsPerWeek)
+            .ThenBy(x => x.Muscle)
+            .ToList();
+
         // PRs achieved in those sessions (docs/02 §7 PR types), newest first.
         var sessionIds = sessions.Select(s => s.Id).ToList();
         var prs = await db.PersonalRecords
@@ -225,7 +262,8 @@ public static class ProgramEndpoints
                 .ToList(),
             prs
                 .Select(x => new ProgramPrStat(x.ExerciseName, x.Type.ToString(), (double)x.Value, x.AchievedOn))
-                .ToList()));
+                .ToList(),
+            muscleWeeklySets));
     }
 
     private static async Task<IResult> UpdateAsync(

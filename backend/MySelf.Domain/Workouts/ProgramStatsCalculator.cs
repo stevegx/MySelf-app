@@ -15,7 +15,9 @@ public readonly record struct ProgramStatsResult(
     int CompletedSets,
     int SkippedSets,
     double SkippedSetRate,
-    IReadOnlyList<ProgramDayStatResult> PerDay);
+    IReadOnlyList<ProgramDayStatResult> PerDay,
+    // Weeks the rolling averages are divided by (weeks the program has existed, capped at 8).
+    int WeeksInRange);
 
 /// <summary>
 /// Rolls a program's completed <see cref="WorkoutSession"/>s up into the Overview numbers.
@@ -42,7 +44,7 @@ public static class ProgramStatsCalculator
         var emptyPerDay = days.Select(d => new ProgramDayStatResult(d.Id, d.Name, 0, null)).ToList();
         if (performed.Count == 0)
         {
-            return new ProgramStatsResult(0, null, null, 0, 0, 0, 0m, null, 0, 0, 0, emptyPerDay);
+            return new ProgramStatsResult(0, null, null, 0, 0, 0, 0m, null, 0, 0, 0, emptyPerDay, 1);
         }
 
         var first = performed.Min(p => p.Date);
@@ -84,7 +86,7 @@ public static class ProgramStatsCalculator
 
         return new ProgramStatsResult(
             performed.Count, first, last, sessionsThisWeek, sessionsThisMonth,
-            weeklyAverage, totalVolume, avgDuration, completedSets, skippedSets, skippedRate, perDay);
+            weeklyAverage, totalVolume, avgDuration, completedSets, skippedSets, skippedRate, perDay, weeks);
     }
 
     /// <summary>Monday-based week start — matches the dashboard bars and the calendar grid.</summary>

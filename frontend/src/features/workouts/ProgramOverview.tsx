@@ -143,6 +143,35 @@ function OverviewSkeleton() {
   );
 }
 
+function MuscleCoverage({ rows }: { rows: { muscle: string; setsPerWeek: number }[] }) {
+  const max = Math.max(1, ...rows.map((r) => r.setsPerWeek));
+  return (
+    <Card className="gap-2">
+      <CardKicker>Muscle coverage — completed sets / week</CardKicker>
+      <p className="m-0 text-[12px] text-foreground-muted">
+        ~10+ sets/week per muscle is a common target. Lowest first.
+      </p>
+      <div className="flex flex-col gap-1.5">
+        {rows.map((r) => {
+          const low = r.setsPerWeek < 6;
+          return (
+            <div key={r.muscle} className="flex items-center gap-2 text-[13px]">
+              <span className={cn("w-24 shrink-0", low && "font-semibold text-warning")}>{r.muscle}</span>
+              <span className="h-2 flex-1 overflow-hidden rounded-full bg-viz-track">
+                <span
+                  className={cn("block h-full rounded-full", low ? "bg-warning" : "bg-primary")}
+                  style={{ width: `${(r.setsPerWeek / max) * 100}%` }}
+                />
+              </span>
+              <span className="w-10 shrink-0 text-right tabular-nums text-foreground-muted">{r.setsPerWeek}</span>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 export function ProgramOverview({ programId }: { programId: string }) {
   const { data: stats, isLoading, isError, refetch, isFetching } = useProgramStats(programId);
 
@@ -223,6 +252,8 @@ export function ProgramOverview({ programId }: { programId: string }) {
           </div>
         )}
       </Card>
+
+      {stats.muscleWeeklySets.length > 0 && <MuscleCoverage rows={stats.muscleWeeklySets} />}
 
       <ProgramMiniCalendar programId={programId} />
 
