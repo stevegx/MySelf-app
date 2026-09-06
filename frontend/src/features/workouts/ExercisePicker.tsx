@@ -13,6 +13,7 @@ export function ExercisePicker({
   onClose,
   existingIds,
   focusMuscleNames,
+  focusLabels,
   drawer = false,
 }: {
   onPick: (exercise: ExerciseListItem) => void;
@@ -20,6 +21,8 @@ export function ExercisePicker({
   existingIds: Set<string>;
   /** When set, exercises whose primary muscle is in this list are shown first / on their own. */
   focusMuscleNames?: string[];
+  /** Human-friendly names for the focus note (e.g. the 7 muscle groups); falls back to the raw muscle names. */
+  focusLabels?: string[];
   drawer?: boolean;
 }) {
   const [q, setQ] = useState("");
@@ -62,7 +65,7 @@ export function ExercisePicker({
 
       {focus.length > 0 && (
         <p className="m-0 mb-1 px-1 text-[11px] text-foreground-muted">
-          Showing exercises for {focus.join(", ")}.{" "}
+          Showing exercises for {(focusLabels && focusLabels.length > 0 ? focusLabels : focus).join(", ")}.{" "}
           {hiddenCount > 0 && (
             <button type="button" className="text-primary underline" onClick={() => setShowAll(true)}>
               Show all ({hiddenCount} more)

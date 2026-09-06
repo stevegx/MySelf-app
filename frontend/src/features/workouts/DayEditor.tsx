@@ -8,6 +8,13 @@ import { useMe } from "../auth/useMe";
 import { ExercisePicker } from "./ExercisePicker";
 import { ExerciseTrend } from "./ExerciseTrend";
 import { SortableList } from "./SortableList";
+import {
+  MUSCLE_GROUPS,
+  activeGroupKeys,
+  groupLabels,
+  toggleGroup,
+  type MuscleGroupKey,
+} from "./muscleGroups";
 import { useBulkExercises, useMuscles, useProgram, useUpdateDay, useUpdatePreferences, useDay } from "./api";
 import type { DayDetail, ExerciseListItem, UpdateDayBody } from "./api";
 
@@ -198,6 +205,7 @@ export function DayEditor({
   }, [muscles]);
 
   const focusNames = state.focusMuscleIds.map(muscleName).filter(Boolean);
+  const activeGroups = activeGroupKeys(state.focusMuscleIds, muscles ?? []);
   const warnOffFocus = me?.profile?.warnOffFocusExercises ?? true;
 
   if (isLoading || !day) {
@@ -256,13 +264,8 @@ export function DayEditor({
     }
   };
 
-  const toggleFocus = (id: number) =>
-    setState((s) => ({
-      ...s,
-      focusMuscleIds: s.focusMuscleIds.includes(id)
-        ? s.focusMuscleIds.filter((x) => x !== id)
-        : [...s.focusMuscleIds, id],
-    }));
+  const toggleFocusGroup = (key: MuscleGroupKey) =>
+    setState((s) => ({ ...s, focusMuscleIds: toggleGroup(key, s.focusMuscleIds, muscles ?? []) }));
 
   const removeExercise = (key: string) =>
     setState((s) => ({ ...s, exercises: s.exercises.filter((e) => e.key !== key) }));
@@ -425,14 +428,15 @@ export function DayEditor({
           </span>
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {(muscles ?? []).map((m) => {
-            const on = state.focusMuscleIds.includes(m.id);
+          {MUSCLE_GROUPS.map((g) => {
+            const on = activeGroups.includes(g.key);
             return (
               <button
-                key={m.id}
+                key={g.key}
                 type="button"
                 aria-pressed={on}
-                onClick={() => toggleFocus(m.id)}
+                disabled={!muscles}
+                onClick={() => toggleFocusGroup(g.key)}
                 className={cn(
                   "rounded-full border px-2.5 py-1 text-[12px]",
                   on
@@ -440,7 +444,7 @@ export function DayEditor({
                     : "border-border text-foreground-muted hover:border-border-strong",
                 )}
               >
-                {m.name}
+                {g.label}
               </button>
             );
           })}
@@ -695,6 +699,7 @@ export function DayEditor({
           onClose={() => setPicking(false)}
           existingIds={new Set(state.exercises.map((e) => e.exerciseId))}
           focusMuscleNames={focusNames}
+          focusLabels={groupLabels(activeGroups)}
         />
       )}
     </div>

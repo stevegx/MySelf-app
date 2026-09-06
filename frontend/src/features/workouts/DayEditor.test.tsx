@@ -164,12 +164,12 @@ describe("DayEditor", () => {
 
     await screen.findByText("Back Squat");
 
-    // Pick "Quads" as this day's focus.
-    await user.click(await screen.findByRole("button", { name: "Quads", pressed: false }));
+    // Pick the "Legs" group as this day's focus (it expands to Quads + co.).
+    await user.click(await screen.findByRole("button", { name: "Legs", pressed: false }));
 
     // Open the picker — it should say it's filtered, and offer to show the rest.
     await user.click(screen.getByRole("button", { name: /add exercise/i }));
-    expect(await screen.findByText(/Showing exercises for Quads/)).toBeInTheDocument();
+    expect(await screen.findByText(/Showing exercises for Legs/)).toBeInTheDocument();
     expect(screen.getByText(/Show all \(1 more\)/)).toBeInTheDocument();
 
     // Reveal all, then add the off-focus one -> inline note.
