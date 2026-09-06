@@ -113,11 +113,54 @@ with a "don't warn me again" that lives in Settings.
 - Live smoke: `GET /muscles` → 15; day PUT `focusMuscleIds: [4, 999]` → stored
   `[4]`; `PUT /me/preferences {false}` → `GET /me` shows `false`.
 
+## Slice 2c — wger illustration images (`272fb64`)
+
+The catalogue had no pictures. wger publishes CC-BY-SA "main" images for about a
+third of exercises (many recent ones are AI-generated — skipped those).
+
+- **Domain:** `Exercise.ImageUrl` / `ImageThumbUrl` / `ImageAttribution` (all
+  nullable) + migration (`AddExerciseImages`, three `character varying` columns).
+- **The enrichment tool.** The seed is `backend/seed-data/wger-catalogue.json`,
+  committed so `import` needs no network. Rather than re-`fetch` the whole
+  catalogue (which would churn names/muscles too), there's a new command that
+  touches *only* the image fields:
+  ```
+  dotnet run --project backend/MySelf.Tools.WgerImport -- enrich-images
+  ```
+  It reads the existing snapshot, pulls
+  `wger.de/api/v2/exerciseimage/?is_main=true` (paginated), matches each image's
+  `exercise_uuid` to our `ExternalId`, and rewrites the JSON with
+  `record ... with { ImageUrl = ..., ImageThumbUrl = ..., ImageAttribution = ... }`.
+  Result: **236 / 862** exercises (27%) get an illustration.
+
+  C# note: `SnapshotExercise` is a positional `record`, so `e with { ImageUrl = x }`
+  makes a copy with one field changed — records are immutable by default, `with`
+  is the idiomatic "change one thing" operator (like `{...obj, imageUrl: x}` in JS
+  but type-checked and shallow-cloned for you).
+
+- **`CatalogueImporter`** copies the three fields onto the entity;
+  `dotnet run ... -- import` reloads the enriched seed (idempotent).
+- **API:** `ExerciseListItem` gained `imageThumbUrl` / `imageUrl` /
+  `imageAttribution` via the same shared projection.
+- **Frontend:** `ExercisePicker` rows show a 36px `object-cover` thumbnail when
+  present; `onError` hides it if wger's CDN doesn't answer. We hotlink wger's
+  media URLs (no download/host step) — the trade-off is a dependency on their CDN
+  staying up.
+
+Attribution string: `"{author} · wger.de (CC BY-SA)"`, or just
+`"wger.de (CC BY-SA)"` when the image has no listed author.
+
+### Verified (2c)
+
+- Backend: 49 unit + 106 integration (the exercise-search test now also asserts a
+  broad "squat" search returns at least one `http…` thumbnail + a non-empty
+  attribution).
+- Frontend: 68 tests (DayEditor test asserts the Back Squat row renders its
+  `<img src>`).
+- Live: `GET /exercises?q=squat` → 7 / 20 rows carry a real wger thumbnail URL.
+
 ## Next
 
-- **Slice 2c** — wger image enrichment: `Exercise.ImageUrl` + attribution +
-  migration, a fetch pass in `MySelf.Tools.WgerImport`, thumbnails in the picker
-  and exercise detail.
 - **Slice 3** — the gym/phone logging redesign (current exercise expanded, rest
   collapsed, prefilled sets + `+/-` steppers + big Done, "last time" inline,
   auto-advance).
