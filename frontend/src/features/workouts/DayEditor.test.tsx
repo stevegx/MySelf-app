@@ -28,6 +28,22 @@ const day = {
     },
   ],
   supersets: [],
+  focusMuscleIds: [] as number[],
+};
+
+const MUSCLES = [
+  { id: 1, name: "Chest", isFront: true },
+  { id: 2, name: "Quads", isFront: true },
+  { id: 3, name: "Shoulders", isFront: true },
+];
+
+const ME = {
+  user: session.user,
+  profile: {
+    dateOfBirth: "1994-03-21", heightCm: 178, calculationSex: null, unitSystem: "Metric",
+    timezone: null, locale: null, onboardingCompletedAt: "2026-09-01T00:00:00Z", warnOffFocusExercises: true,
+  },
+  currentGoal: null,
 };
 
 const program = {
@@ -50,6 +66,18 @@ function installFetch() {
       Promise.resolve(new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } }));
 
     if (url.includes("/auth/refresh")) return json(session);
+    if (url.endsWith("/api/v1/me")) return json(ME);
+    if (url.endsWith("/api/v1/muscles")) return json(MUSCLES);
+    if (url.endsWith("/api/v1/me/preferences") && method === "PUT") return json({ ...ME.profile, warnOffFocusExercises: false });
+    if (url.includes("/api/v1/exercises?")) {
+      return json({
+        items: [
+          { id: "sq", name: "Back Squat", category: "Legs", defaultTrackingMode: "WeightAndReps", primaryMuscles: ["Quads"], secondaryMuscles: ["Glutes"], equipment: ["Barbell"] },
+          { id: "ohp", name: "Overhead Press", category: "Shoulders", defaultTrackingMode: "WeightAndReps", primaryMuscles: ["Shoulders"], secondaryMuscles: ["Triceps"], equipment: ["Barbell"] },
+        ],
+        page: 1, pageSize: 25, total: 2,
+      });
+    }
     if (url.includes("/api/v1/workout-days/d1") && method === "GET") return json(day);
     if (url.includes("/api/v1/workout-days/d1") && method === "PUT") return json(day);
     if (url.includes("/api/v1/programs/p1")) return json(program);
@@ -115,6 +143,36 @@ describe("DayEditor", () => {
     await user.type(firstWeight, "105");
 
     expect(await screen.findByText("Unsaved changes")).toBeInTheDocument();
+  });
+
+  it("sets a day focus, filters the picker to it, and warns on an off-focus add", async () => {
+    const calls = installFetch();
+    const user = userEvent.setup();
+    render(
+      <Providers>
+        <DayEditor dayId="d1" programId="p1" onClose={() => {}} />
+      </Providers>,
+    );
+
+    await screen.findByText("Back Squat");
+
+    // Pick "Quads" as this day's focus.
+    await user.click(await screen.findByRole("button", { name: "Quads", pressed: false }));
+
+    // Open the picker — it should say it's filtered, and offer to show the rest.
+    await user.click(screen.getByRole("button", { name: "+ Add exercise" }));
+    expect(await screen.findByText(/Showing exercises for Quads/)).toBeInTheDocument();
+    expect(screen.getByText(/Show all \(1 more\)/)).toBeInTheDocument();
+
+    // Reveal all, then add the off-focus one -> inline note.
+    await user.click(screen.getByRole("button", { name: /Show all/ }));
+    await user.click(await screen.findByRole("button", { name: /Overhead Press/ }));
+    expect(await screen.findByText(/outside this day's focus/i)).toBeInTheDocument();
+
+    // Focus id rides along on save.
+    await user.click(screen.getByRole("button", { name: /Save day/i }));
+    const put = calls.find((c) => c.method === "PUT" && c.url.includes("/workout-days/d1"));
+    expect((put!.body as { focusMuscleIds: number[] }).focusMuscleIds).toEqual([2]);
   });
 
   it("asks before discarding unsaved changes", async () => {

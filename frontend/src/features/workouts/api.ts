@@ -123,7 +123,11 @@ export type DayDetail = {
   programRowVersion: number;
   exercises: DayExerciseDetail[];
   supersets: { id: string; sortOrder: number; restAfterRoundSeconds: number }[];
+  // Muscle-group ids this day trains (empty = no focus set).
+  focusMuscleIds: number[];
 };
+
+export type MuscleGroup = { id: number; name: string; isFront: boolean };
 
 export type UpdateDayExercise = {
   exerciseId: string;
@@ -151,6 +155,8 @@ export type UpdateDayBody = {
   rowVersion?: number;
   exercises: UpdateDayExercise[];
   supersets: { ref: string; sortOrder: number; restAfterRoundSeconds: number }[];
+  // Muscle-group ids the day focuses on. Omit = leave as-is; [] = clear.
+  focusMuscleIds?: number[];
 };
 
 // --- workout sessions (docs/02 "Starting a workout", Story 3A) ---
@@ -336,6 +342,28 @@ export function useExerciseSearch(q: string) {
         { accessToken },
       ),
     enabled: accessToken != null,
+  });
+}
+
+/** The catalogue's ~15 muscle groups — for the day-focus picker. Effectively static. */
+export function useMuscles() {
+  const accessToken = useToken();
+  return useQuery({
+    queryKey: ["muscles"],
+    queryFn: () => apiFetch<MuscleGroup[]>("/api/v1/muscles", { accessToken }),
+    enabled: accessToken != null,
+    staleTime: 60 * 60 * 1000,
+  });
+}
+
+/** Flip a small UI preference (PUT /api/v1/me/preferences); refreshes GET /me. */
+export function useUpdatePreferences() {
+  const accessToken = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { warnOffFocusExercises: boolean }) =>
+      apiFetch<unknown>("/api/v1/me/preferences", { method: "PUT", body, accessToken }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["me"] }),
   });
 }
 

@@ -12,6 +12,7 @@ export type ProfileSummary = {
   timezone: string | null;
   locale: string | null;
   onboardingCompletedAt: string | null;
+  warnOffFocusExercises: boolean;
 };
 
 /** One nutrition goal (docs/04 UserGoal). Targets are null when nutrition was skipped or the goal is Track-only. */

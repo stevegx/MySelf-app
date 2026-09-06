@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from "lucide-react";
 import { Button, Checkbox, Input, Segmented } from "../../components/ui";
+import { cn } from "../../lib/cn";
 import { ApiError } from "../../lib/api";
+import { useMe } from "../auth/useMe";
 import { ExercisePicker } from "./ExercisePicker";
 import { SortableList } from "./SortableList";
-import { useBulkExercises, useProgram, useUpdateDay, useDay } from "./api";
+import { useBulkExercises, useMuscles, useProgram, useUpdateDay, useUpdatePreferences, useDay } from "./api";
 import type { DayDetail, ExerciseListItem, UpdateDayBody } from "./api";
 
 /**
@@ -40,7 +42,7 @@ type EditExercise = {
 
 type EditSuperset = { key: string; restAfterRoundSeconds: string };
 
-type EditState = { exercises: EditExercise[]; supersets: EditSuperset[] };
+type EditState = { exercises: EditExercise[]; supersets: EditSuperset[]; focusMuscleIds: number[] };
 
 let seq = 0;
 const uid = (prefix: string) => `${prefix}-${(seq += 1)}`;
@@ -85,7 +87,7 @@ function seed(day: DayDetail): EditState {
         })),
     }));
 
-  return { exercises, supersets };
+  return { exercises, supersets, focusMuscleIds: [...day.focusMuscleIds] };
 }
 
 const blankSet = (): EditSet => ({
@@ -102,6 +104,7 @@ const blankSet = (): EditSet => ({
 // A comparable snapshot for dirty-tracking (drops the volatile React keys).
 const fingerprint = (s: EditState) =>
   JSON.stringify({
+    focus: [...s.focusMuscleIds].sort((a, b) => a - b),
     exercises: s.exercises.map((e) => ({
       exerciseId: e.exerciseId,
       restSeconds: e.restSeconds,
@@ -126,10 +129,14 @@ export function DayEditor({
 }) {
   const { data: day, isLoading } = useDay(dayId);
   const { data: program } = useProgram(programId);
+  const { data: muscles } = useMuscles();
+  const { data: me } = useMe();
   const update = useUpdateDay(programId);
   const bulk = useBulkExercises(programId);
+  const prefs = useUpdatePreferences();
 
-  const [state, setState] = useState<EditState>({ exercises: [], supersets: [] });
+  const [state, setState] = useState<EditState>({ exercises: [], supersets: [], focusMuscleIds: [] });
+  const [offFocusNote, setOffFocusNote] = useState<{ name: string; muscles: string[] } | null>(null);
   const [baseline, setBaseline] = useState<string>("");
   const [loadedFrom, setLoadedFrom] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
@@ -163,6 +170,14 @@ export function DayEditor({
     if (!program) return [];
     return program.days.filter((d) => d.id !== dayId).map((d) => ({ id: d.id, label: d.name }));
   }, [program, dayId]);
+
+  const muscleName = useMemo(() => {
+    const m = new Map((muscles ?? []).map((x) => [x.id, x.name]));
+    return (id: number) => m.get(id) ?? "";
+  }, [muscles]);
+
+  const focusNames = state.focusMuscleIds.map(muscleName).filter(Boolean);
+  const warnOffFocus = me?.profile?.warnOffFocusExercises ?? true;
 
   if (isLoading || !day) {
     return <p className="text-sm text-foreground-muted">Loading day…</p>;
@@ -208,7 +223,24 @@ export function DayEditor({
       ],
     }));
     setPicking(false);
+
+    // Off-focus nudge (docs: never blocks — just informs). Only when this day has a focus,
+    // the exercise's primary muscles fall entirely outside it, and the user hasn't opted out.
+    if (warnOffFocus && focusNames.length > 0 && ex.primaryMuscles.length > 0) {
+      const outside = ex.primaryMuscles.filter((m) => !focusNames.includes(m));
+      if (outside.length === ex.primaryMuscles.length) {
+        setOffFocusNote({ name: ex.name, muscles: outside });
+      }
+    }
   };
+
+  const toggleFocus = (id: number) =>
+    setState((s) => ({
+      ...s,
+      focusMuscleIds: s.focusMuscleIds.includes(id)
+        ? s.focusMuscleIds.filter((x) => x !== id)
+        : [...s.focusMuscleIds, id],
+    }));
 
   const removeExercise = (key: string) =>
     setState((s) => ({ ...s, exercises: s.exercises.filter((e) => e.key !== key) }));
@@ -217,6 +249,7 @@ export function DayEditor({
     setState((s) => {
       const key = uid("ss");
       return {
+        ...s,
         supersets: [...s.supersets, { key, restAfterRoundSeconds: "60" }],
         exercises: s.exercises.map((e) => (e.key === exKey ? { ...e, supersetKey: key } : e)),
       };
@@ -241,6 +274,7 @@ export function DayEditor({
     return {
       name: day!.name,
       rowVersion: day!.programRowVersion,
+      focusMuscleIds: state.focusMuscleIds,
       exercises: state.exercises.map((e, index) => {
         let supersetMemberOrder = 0;
         if (e.supersetKey) {
@@ -355,6 +389,59 @@ export function DayEditor({
       {error && (
         <div role="alert" className="rounded-control border border-danger/40 bg-danger-soft px-3 py-2 text-sm text-danger">
           {error}
+        </div>
+      )}
+
+      <div className="rounded-control border border-border p-3">
+        <div className="mb-2 text-xs font-semibold text-foreground-muted">
+          Focus{" "}
+          <span className="font-normal">
+            — the muscles this day trains. Filters the exercise picker; you can still add anything.
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {(muscles ?? []).map((m) => {
+            const on = state.focusMuscleIds.includes(m.id);
+            return (
+              <button
+                key={m.id}
+                type="button"
+                aria-pressed={on}
+                onClick={() => toggleFocus(m.id)}
+                className={cn(
+                  "rounded-full border px-2.5 py-1 text-[12px]",
+                  on
+                    ? "border-primary bg-primary-soft font-semibold text-primary-pressed"
+                    : "border-border text-foreground-muted hover:border-border-strong",
+                )}
+              >
+                {m.name}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {offFocusNote && (
+        <div className="flex flex-wrap items-center gap-2 rounded-control border border-info/40 bg-info-soft px-3 py-2 text-[13px]">
+          <span>
+            Added <strong>{offFocusNote.name}</strong> — {offFocusNote.muscles.join(", ")}, outside this day's focus.
+          </span>
+          <span className="ml-auto flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setOffFocusNote(null)}>
+              Dismiss
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                prefs.mutate({ warnOffFocusExercises: false });
+                setOffFocusNote(null);
+              }}
+            >
+              Don&apos;t warn me again
+            </Button>
+          </span>
         </div>
       )}
 
@@ -540,6 +627,7 @@ export function DayEditor({
           onPick={addExercise}
           onClose={() => setPicking(false)}
           existingIds={new Set(state.exercises.map((e) => e.exerciseId))}
+          focusMuscleNames={focusNames}
         />
       ) : (
         <Button variant="secondary" onClick={() => setPicking(true)}>
