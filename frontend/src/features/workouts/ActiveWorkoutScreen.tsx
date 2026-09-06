@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { Button, Card, CardKicker, CardTitle, Field, Input, PageHeader, Skeleton, Tag } from "../../components/ui";
+import { ChevronDown } from "lucide-react";
+import { Button, Card, CardKicker, PageHeader, Skeleton, StepperInput, Tag } from "../../components/ui";
+import { cn } from "../../lib/cn";
 import { ApiError } from "../../lib/api";
 import {
   useActiveSession,
@@ -11,66 +13,90 @@ import {
   useSessionExercises,
   useSkipSet,
 } from "./api";
-import type { ExerciseLogDetail, LogSetBody, SetLogDetail, WorkoutSessionDetail } from "./api";
+import type { ExerciseHistoryEntry, ExerciseLogDetail, LogSetBody, SetLogDetail, WorkoutSessionDetail } from "./api";
 import { ExercisePicker } from "./ExercisePicker";
 import { SyncStatus } from "./SyncStatus";
 import { useConfirm } from "./useConfirm";
 import { useRestTimer } from "./useRestTimer";
 
 type SessionOps = ReturnType<typeof useSessionExercises>;
+type FieldKey = "weightKg" | "addedWeightKg" | "assistanceKg" | "reps" | "durationSeconds";
+
+/** Which performed fields (and their stepper size) a tracking mode uses. */
+function fieldsFor(mode: string): { key: FieldKey; label: string; step: number }[] {
+  switch (mode) {
+    case "WeightAndReps":
+      return [{ key: "weightKg", label: "kg", step: 2.5 }, { key: "reps", label: "reps", step: 1 }];
+    case "BodyweightPlusWeight":
+      return [{ key: "addedWeightKg", label: "+kg", step: 2.5 }, { key: "reps", label: "reps", step: 1 }];
+    case "AssistanceReps":
+      return [{ key: "assistanceKg", label: "assist kg", step: 2.5 }, { key: "reps", label: "reps", step: 1 }];
+    case "Duration":
+      return [{ key: "durationSeconds", label: "seconds", step: 5 }];
+    default: // BodyweightReps, RepsOnly
+      return [{ key: "reps", label: "reps", step: 1 }];
+  }
+}
 
 function targetLabel(set: SetLogDetail) {
   const reps =
     set.targetRepsMin != null && set.targetRepsMax != null
       ? set.targetRepsMin === set.targetRepsMax
-        ? `${set.targetRepsMin} reps`
-        : `${set.targetRepsMin}–${set.targetRepsMax} reps`
+        ? `${set.targetRepsMin}`
+        : `${set.targetRepsMin}–${set.targetRepsMax}`
       : null;
   const weight = set.targetWeightKg != null ? `${set.targetWeightKg} kg` : null;
-  return [weight, reps].filter(Boolean).join(" × ") || "no target";
+  return [weight, reps && `${reps} reps`].filter(Boolean).join(" × ") || "no target";
 }
 
-type FieldKey = "weightKg" | "addedWeightKg" | "assistanceKg" | "reps" | "durationSeconds";
-
-/** Which performed fields to show for a tracking mode (docs/02 tracking-mode-aware inputs). */
-function fieldsFor(mode: string): { key: FieldKey; label: string }[] {
-  switch (mode) {
-    case "WeightAndReps":
-      return [{ key: "weightKg", label: "Weight (kg)" }, { key: "reps", label: "Reps" }];
-    case "BodyweightPlusWeight":
-      return [{ key: "addedWeightKg", label: "Added (kg)" }, { key: "reps", label: "Reps" }];
-    case "AssistanceReps":
-      return [{ key: "assistanceKg", label: "Assist (kg)" }, { key: "reps", label: "Reps" }];
-    case "Duration":
-      return [{ key: "durationSeconds", label: "Seconds" }];
-    default: // BodyweightReps, RepsOnly
-      return [{ key: "reps", label: "Reps" }];
+/** Best starting value for a field: what's already performed → the previous set this
+ *  session → the day's target → last session's top set → blank. */
+function seedValue(
+  key: FieldKey,
+  set: SetLogDetail,
+  prev: SetLogDetail | undefined,
+  last: ExerciseHistoryEntry | undefined,
+): string {
+  const own = set[key];
+  if (own != null) return String(own);
+  const p = prev?.[key];
+  if (p != null) return String(p);
+  if (key === "weightKg") {
+    if (set.targetWeightKg != null) return String(set.targetWeightKg);
+    if (last?.topSetWeightKg != null) return String(last.topSetWeightKg);
   }
+  if (key === "reps") {
+    if (set.targetRepsMax != null) return String(set.targetRepsMax);
+    if (set.targetRepsMin != null) return String(set.targetRepsMin);
+    if (last?.topSetReps != null) return String(last.topSetReps);
+  }
+  return "";
 }
 
 function SetRow({
   sessionId,
   set,
   index,
-  mode,
-  prevCompleted,
+  fields,
+  prev,
+  last,
+  firstInputRef,
+  onLogged,
   onActed,
 }: {
   sessionId: string;
   set: SetLogDetail;
   index: number;
-  mode: string;
-  prevCompleted: SetLogDetail | undefined;
+  fields: ReturnType<typeof fieldsFor>;
+  prev: SetLogDetail | undefined;
+  last: ExerciseHistoryEntry | undefined;
+  firstInputRef?: React.Ref<HTMLInputElement>;
+  onLogged: () => void;
   onActed: () => void;
 }) {
-  const fields = fieldsFor(mode);
-  const [values, setValues] = useState<Record<string, string>>(() => ({
-    weightKg: set.weightKg?.toString() ?? "",
-    addedWeightKg: set.addedWeightKg?.toString() ?? "",
-    assistanceKg: set.assistanceKg?.toString() ?? "",
-    reps: set.reps?.toString() ?? "",
-    durationSeconds: set.durationSeconds?.toString() ?? "",
-  }));
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(fields.map((f) => [f.key, seedValue(f.key, set, prev, last)])),
+  );
   const [error, setError] = useState<string | null>(null);
 
   const logSet = useLogSet(sessionId);
@@ -90,66 +116,48 @@ function SetRow({
     try {
       await logSet.mutateAsync(body);
       onActed();
+      onLogged();
     } catch (e) {
       setError(e instanceof ApiError ? (Object.values(e.errors ?? {})[0]?.[0] ?? e.detail ?? e.title) : "Could not save.");
     }
   }
 
   return (
-    <div className="flex flex-wrap items-end gap-2.5 border-t border-border pt-2 first:border-t-0 first:pt-0">
-      <span className="w-12 shrink-0 text-xs text-foreground-muted">Set {index + 1}</span>
-      <span className="text-[13px] text-foreground-muted">Target: {targetLabel(set)}</span>
+    <div
+      className={cn(
+        "flex flex-wrap items-end gap-2 rounded-control border p-2",
+        done ? "border-success/40 bg-success-soft/40" : skipped ? "border-warning/40 bg-warning-soft/40" : "border-border",
+      )}
+    >
+      <span className="w-10 shrink-0 self-center text-xs font-semibold text-foreground-muted">#{index + 1}</span>
 
       {skipped ? (
-        <Tag tone="warning">Skipped{set.skippedReason ? ` · ${set.skippedReason}` : ""}</Tag>
+        <span className="self-center text-[13px] text-warning">Skipped{set.skippedReason ? ` · ${set.skippedReason}` : ""}</span>
       ) : (
         <>
-          {fields.map((f) => (
-            <Field key={f.key} label={f.label} className="w-[104px]">
-              <Input
-                type="number"
-                inputMode="decimal"
-                aria-label={`Set ${index + 1} ${f.label}`}
-                value={values[f.key]}
-                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-              />
-            </Field>
+          {fields.map((f, i) => (
+            <StepperInput
+              key={f.key}
+              label={f.label}
+              ariaLabel={`Set ${index + 1} ${f.label}`}
+              step={f.step}
+              value={values[f.key]}
+              onChange={(next) => setValues((v) => ({ ...v, [f.key]: next }))}
+              inputRef={i === 0 ? firstInputRef : undefined}
+            />
           ))}
-          <div className="flex gap-1.5">
-            <Button variant={done ? "secondary" : "primary"} size="sm" onClick={log} disabled={busy}>
-              {done ? "Update" : "Log set"}
-            </Button>
-            {!done && prevCompleted && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  // Prefill from the previous completed set of this exercise; never auto-completes
-                  // (locked decision: "Copy previous set fills both fields but never completes").
-                  setValues((v) => ({
-                    ...v,
-                    weightKg: prevCompleted.weightKg?.toString() ?? v.weightKg,
-                    addedWeightKg: prevCompleted.addedWeightKg?.toString() ?? v.addedWeightKg,
-                    assistanceKg: prevCompleted.assistanceKg?.toString() ?? v.assistanceKg,
-                    reps: prevCompleted.reps?.toString() ?? v.reps,
-                    durationSeconds: prevCompleted.durationSeconds?.toString() ?? v.durationSeconds,
-                  }))
-                }
-                disabled={busy}
-              >
-                Copy previous
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => skipSet.mutate({ setLogId: set.id }, { onSuccess: onActed })}
-              disabled={busy}
-            >
-              Skip
-            </Button>
-          </div>
-          {done && <Tag tone="success">Logged</Tag>}
+          <Button variant={done ? "secondary" : "primary"} onClick={log} disabled={busy} className="self-end">
+            {done ? "Update" : "Log"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => skipSet.mutate({ setLogId: set.id }, { onSuccess: () => { onActed(); onLogged(); } })}
+            disabled={busy}
+            className="self-end"
+          >
+            Skip
+          </Button>
         </>
       )}
       {error && <p className="w-full text-xs text-danger">{error}</p>}
@@ -157,52 +165,105 @@ function SetRow({
   );
 }
 
-function ExerciseCard({
+function CollapsedExercise({
+  exercise,
+  onOpen,
+}: {
+  exercise: ExerciseLogDetail;
+  onOpen: () => void;
+}) {
+  const done = exercise.sets.filter((s) => s.completedAt || s.skippedAt).length;
+  const total = exercise.sets.length;
+  const allDone = total > 0 && done === total;
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="mb-2 flex w-full items-center gap-3 rounded-card border border-border bg-surface px-4 py-3 text-left hover:border-border-strong"
+    >
+      <span className={cn("flex-1 text-sm font-semibold", allDone && "text-foreground-muted line-through")}>
+        {exercise.exerciseName}
+      </span>
+      <Tag tone={allDone ? "success" : "neutral"}>
+        {done}/{total}
+      </Tag>
+      <ChevronDown size={16} className="text-foreground-muted" aria-hidden />
+    </button>
+  );
+}
+
+function ExercisePanel({
   sessionId,
   exercise,
   ops,
   onSetActed,
+  onAllDone,
 }: {
   sessionId: string;
   exercise: ExerciseLogDetail;
   ops: SessionOps;
   onSetActed: (exercise: ExerciseLogDetail, set: SetLogDetail) => void;
+  onAllDone: () => void;
 }) {
-  const doneCount = exercise.sets.filter((s) => s.completedAt || s.skippedAt).length;
   const { data: history } = useExerciseHistory(exercise.exerciseId);
-  const prev = history?.sessions.find((s) => s.sessionId !== sessionId && s.topSetWeightKg != null);
+  const last = history?.sessions.find((s) => s.sessionId !== sessionId && s.completedSets > 0);
+  const fields = fieldsFor(exercise.trackingMode);
+
   const [replacing, setReplacing] = useState<{ exerciseId: string; name: string } | null>(null);
   const [picking, setPicking] = useState(false);
   const canRemove = exercise.sets.every((s) => s.completedAt == null);
   const busy = ops.replace.isPending || ops.addSet.isPending || ops.remove.isPending;
+
+  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const doneCount = exercise.sets.filter((s) => s.completedAt || s.skippedAt).length;
+
+  const advanceAfter = (loggedIndex: number) => {
+    const next = exercise.sets.find(
+      (s, i) => i > loggedIndex && s.completedAt == null && s.skippedAt == null,
+    );
+    if (next) {
+      const el = inputRefs.current[next.id];
+      el?.focus();
+      el?.scrollIntoView({ block: "center", behavior: "smooth" });
+    } else if (exercise.sets.every((s) => s.completedAt != null || s.skippedAt != null)) {
+      onAllDone();
+    }
+  };
 
   return (
     <div className="mb-4">
       <CardKicker>{exercise.trackingMode.replace(/([A-Z])/g, " $1").trim()}</CardKicker>
       <Card>
         <div className="flex items-center justify-between">
-          <CardTitle>{exercise.exerciseName}</CardTitle>
+          <span className="text-[17px] font-bold leading-tight">{exercise.exerciseName}</span>
           <Tag tone={doneCount === exercise.sets.length ? "success" : "neutral"}>
-            {doneCount}/{exercise.sets.length} sets
+            {doneCount}/{exercise.sets.length}
           </Tag>
         </div>
-        {prev && (
-          <p className="m-0 text-xs text-foreground-muted">
-            Previous: {prev.topSetWeightKg} kg × {prev.topSetReps} ·{" "}
-            {new Date(`${prev.performedOn}T00:00:00`).toLocaleDateString()}
-          </p>
-        )}
+        <p className="m-0 text-xs text-foreground-muted">
+          {last
+            ? `Last time: ${last.topSetWeightKg != null ? `${last.topSetWeightKg} kg × ` : ""}${last.topSetReps ?? "?"} · ${new Date(`${last.performedOn}T00:00:00`).toLocaleDateString()}`
+            : "First time doing this — no history yet."}
+        </p>
+
         <div className="flex flex-col gap-2">
           {exercise.sets.map((set, i) => (
-            <SetRow
-              key={set.id}
-              sessionId={sessionId}
-              set={set}
-              index={i}
-              mode={exercise.trackingMode}
-              prevCompleted={[...exercise.sets.slice(0, i)].reverse().find((s) => s.completedAt != null)}
-              onActed={() => onSetActed(exercise, set)}
-            />
+            <div key={set.id} className="flex flex-col gap-0.5">
+              <span className="pl-11 text-[11px] text-foreground-muted">Target {targetLabel(set)}</span>
+              <SetRow
+                sessionId={sessionId}
+                set={set}
+                index={i}
+                fields={fields}
+                prev={[...exercise.sets.slice(0, i)].reverse().find((s) => s.completedAt != null)}
+                last={last}
+                firstInputRef={(el) => {
+                  inputRefs.current[set.id] = el;
+                }}
+                onLogged={() => advanceAfter(i)}
+                onActed={() => onSetActed(exercise, set)}
+              />
+            </div>
           ))}
         </div>
 
@@ -237,24 +298,24 @@ function ExerciseCard({
               <Button
                 variant="primary"
                 size="sm"
-                onClick={() => {
+                onClick={() =>
                   ops.replace.mutate(
                     { exerciseLogId: exercise.id, exerciseId: replacing.exerciseId, scope: "TodayOnly" },
                     { onSettled: () => { setReplacing(null); setPicking(false); } },
-                  );
-                }}
+                  )
+                }
               >
                 This workout only
               </Button>
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => {
+                onClick={() =>
                   ops.replace.mutate(
                     { exerciseLogId: exercise.id, exerciseId: replacing.exerciseId, scope: "TodayAndFuture" },
                     { onSettled: () => { setReplacing(null); setPicking(false); } },
-                  );
-                }}
+                  )
+                }
               >
                 Also update the day
               </Button>
@@ -310,6 +371,11 @@ export function ActiveWorkoutScreen() {
   return <RunningSession session={session} confirm={confirm} dialog={dialog} />;
 }
 
+function firstUnfinished(exercises: ExerciseLogDetail[]): string | null {
+  const e = exercises.find((x) => x.sets.some((s) => s.completedAt == null && s.skippedAt == null));
+  return (e ?? exercises[0])?.id ?? null;
+}
+
 function RunningSession({
   session,
   confirm,
@@ -327,24 +393,31 @@ function RunningSession({
   const [finished, setFinished] = useState<WorkoutSessionDetail | null>(null);
   const [addingExercise, setAddingExercise] = useState(false);
 
-  // Start the rest countdown when a set is logged/skipped: after each set for a standalone
-  // exercise, or after the whole round for a superset (docs/02 §7).
+  // Which exercise is expanded. Seeded from the data; the user can override by tapping a
+  // collapsed row. Re-seeds only while the user hasn't picked one this render-life.
+  const [activeId, setActiveId] = useState<string | null>(() => firstUnfinished(session.exercises));
+  const active = session.exercises.some((e) => e.id === activeId) ? activeId : firstUnfinished(session.exercises);
+
   const onSetActed = (exercise: ExerciseLogDetail, set: SetLogDetail) => {
     if (!exercise.supersetGroupSnapshotId) {
       if (exercise.restSeconds) rest.start(exercise.restSeconds);
       return;
     }
-    const members = session.exercises.filter(
-      (e) => e.supersetGroupSnapshotId === exercise.supersetGroupSnapshotId,
-    );
+    const members = session.exercises.filter((e) => e.supersetGroupSnapshotId === exercise.supersetGroupSnapshotId);
     const roundComplete = members.every((m) => {
       const s = m.sets.find((x) => x.sortOrder === set.sortOrder);
-      if (!s || s.id === set.id) return true; // no set this round, or the one just acted on
+      if (!s || s.id === set.id) return true;
       return s.completedAt != null || s.skippedAt != null;
     });
-    if (roundComplete && exercise.supersetRestAfterRoundSeconds) {
-      rest.start(exercise.supersetRestAfterRoundSeconds);
-    }
+    if (roundComplete && exercise.supersetRestAfterRoundSeconds) rest.start(exercise.supersetRestAfterRoundSeconds);
+  };
+
+  const goToNextExercise = (fromId: string) => {
+    const idx = session.exercises.findIndex((e) => e.id === fromId);
+    const next = session.exercises
+      .slice(idx + 1)
+      .find((e) => e.sets.some((s) => s.completedAt == null && s.skippedAt == null));
+    if (next) setActiveId(next.id);
   };
 
   const finish = () => complete.mutate(undefined, { onSuccess: (data) => setFinished(data) });
@@ -398,10 +471,14 @@ function RunningSession({
       />
 
       {totalSets > 0 && (
-        <p className="mb-3 text-[13px] text-foreground-muted">
-          {actedSets} of {totalSets} sets logged or skipped
-          {actedSets === 0 && " — log or skip at least one to finish"}
-        </p>
+        <div className="mb-3">
+          <div className="h-1.5 overflow-hidden rounded-full bg-viz-track">
+            <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${(actedSets / totalSets) * 100}%` }} />
+          </div>
+          <p className="mt-1 text-[12px] text-foreground-muted">
+            {actedSets} of {totalSets} sets{actedSets === 0 && " — log or skip one to finish"}
+          </p>
+        </div>
       )}
 
       {session.exercises.length === 0 && (
@@ -413,15 +490,20 @@ function RunningSession({
         </Card>
       )}
 
-      {session.exercises.map((exercise) => (
-        <ExerciseCard
-          key={exercise.id}
-          sessionId={session.id}
-          exercise={exercise}
-          ops={ops}
-          onSetActed={onSetActed}
-        />
-      ))}
+      {session.exercises.map((exercise) =>
+        exercise.id === active ? (
+          <ExercisePanel
+            key={exercise.id}
+            sessionId={session.id}
+            exercise={exercise}
+            ops={ops}
+            onSetActed={onSetActed}
+            onAllDone={() => goToNextExercise(exercise.id)}
+          />
+        ) : (
+          <CollapsedExercise key={exercise.id} exercise={exercise} onOpen={() => setActiveId(exercise.id)} />
+        ),
+      )}
 
       {rest.bar}
 
