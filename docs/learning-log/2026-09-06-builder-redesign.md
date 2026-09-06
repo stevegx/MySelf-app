@@ -149,3 +149,69 @@ string *literals*, so `new Set(memberNames)` infers `Set<"Chest" | ...>` and
 | `ExerciseTrend.tsx` | **new** — inline e1RM sparkline |
 | `muscleGroups.ts` | **new** — 15-muscle → 7-group map + toggle/expand helpers |
 | `*.test.tsx` / `muscleGroups.test.ts` | updated for the new structure; rotation + group-mapping tests |
+
+---
+
+# Mockup influence, pass 2 (`af49d8d`, `4e7d5b7`, `07ab06d`, `7dab9c0`)
+
+Second batch off the `MySelf App UI Mockups` screens. User's brief: take the
+**design and appearance**, not the colours — palette stays "Balanced Indigo".
+
+## Slice G — organic look (`af49d8d`)
+
+Pure token/component pass:
+
+- Added `@fontsource/caprasimo`; new `--font-display` token; h1/h2 and
+  `CardTitle` render in the Caprasimo serif (weight 400 — the face is already
+  chunky). Smaller UI headings (h3–h6) stay Inter for density.
+- `--radius-card` 12 → 20, `--radius-control` 10 → 12, **new `--radius-pill`
+  (999px)**. `rounded-control` still covers inputs/panels; buttons, `Segmented`,
+  and the workout tab strips switched to `rounded-pill`. The Overview/Days
+  tabs became a filled-pill toggle inside a `bg-surface-subtle` track.
+- Zero colour-token edits.
+
+## Slice F — program list as a card grid (`4e7d5b7`)
+
+`ProgramList` was a flat row per program; now a responsive `grid` of `Card`s
+(serif name, split label, `N days · N exercises`, Active/Draft badge,
+full-width **Open**, then Duplicate / Delete). A pill filter row —
+`All / Active / Drafts` — narrows the grid (`shown` derived from `filter`).
+**No template gallery**: the user was clear ("dont suggest templates"), so the
+"New program" form stays the only way in.
+
+## Slice I — muscle-group filter pills in the drawer (`07ab06d`)
+
+Replaced the picker's "focus filter + Show all" toggle with a pill row: `All`
+plus the seven groups, in a small `FilterPill` sub-component. The picker owns
+a `Set<MuscleGroupKey>` seeded from the day's focus (`focusGroupKeys` prop,
+replacing `focusMuscleNames`/`focusLabels`). Filtering intersects an
+exercise's `primaryMuscles` with `expandGroupsToMuscleNames([...selected])`.
+`All` = clear the set = everything.
+
+## Slice H — ⋯ menu on the day editor (`7dab9c0`)
+
+The open day's header gets a `MoreHorizontal` button → a little dropdown:
+
+- **Rename day** — flips the `<h3>` to an `<Input>`. The day name is now part
+  of `DayEditor`'s `EditState` (seeded by `seed()`, in the dirty `fingerprint`,
+  sent by `buildBody()` as `name: state.name.trim() || day.name`). No new
+  endpoint — the day `PUT` already carries `name`; the rename just rides the
+  normal Save.
+- **Delete day** — calls an `onDeleteDay` prop. `WorkoutBuilderScreen` now has
+  one `removeDay()` shared by the day-list trash icon and this menu item.
+
+**Still pending:** *Duplicate day* (needs a `POST /workout-days/{id}/duplicate`
+backend endpoint — the `CloneDay` graph-copy helper already exists in
+`ProgramEndpoints`, just needs lifting to a shared spot) and the **weekly
+volume bar** (design agreed in principle, waiting on: split by day vs muscle
+group, planned vs logged sets).
+
+## Verification (pass 2)
+
+- `npm run build` + `npm run lint` clean; `npx vitest run` — **82 pass**
+  (+2 DayEditor tests for the rename-saves-name path and the `onDeleteDay`
+  wiring).
+- Browser: Train home + programs list + builder all render with the serif
+  titles / pill controls / softer cards, colours unchanged; program cards with
+  the `All/Active/Drafts` filter; the drawer's `All + 7 group` pill row filters
+  the list; the day `⋯` menu opens and Rename swaps in the name input.
