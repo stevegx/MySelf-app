@@ -120,11 +120,34 @@ history. 49 unit + 102 integration + 65 frontend tests._
 - Add/replace movement during session.
 - Offline local draft, recovery and sync status.
 
+### Phase 4W — workouts UX rework
+
+_Shipped 2026-09-06 (branch `phase-4-workouts-home`; see
+`docs/learning-log/2026-09-06-phase4-*`). An unplanned, user-driven pass done before the
+original Phase 4 below. Slices: **Train home** (the /workouts landing leads with the active
+program's day cards + Start; program list moved behind "Manage programs"); **exercise
+muscles + equipment** on `GET /exercises`; **day focus** (`WorkoutDay.FocusMuscleIds`,
+`GET /muscles`) + a filtered exercise picker + an off-focus nudge with a
+`UserProfile.WarnOffFocusExercises` setting (`PUT /me/preferences`); **wger illustration
+images** (`enrich-images` import command, ~27% coverage, hot-linked); **gym logging
+redesign** (one exercise expanded, pre-seeded sets, `−/+` steppers, one Log button,
+auto-advance); **mobile bottom tab bar** + a persistent **Resume-workout bar**;
+**muscle-coverage** signal on the program Overview (`ProgramStats.muscleWeeklySets`).
+Deferred: per-exercise "stalled lift" chip in the day editor. Migrations
+`20260906081458`–`20260906092651`. 49 unit + 107 integration + 71 frontend tests._
+
 ### Phase 4 — dashboard and progress
 
 - Aggregated dashboard endpoint.
 - Nutrition-first overview, workout frequency and body-weight trend.
 - Detailed strength/performance charts remain in Progress.
+- Body-weight logging (`BodyMeasurement`, `GET/POST /me/body-measurements`, `GET /analytics/weight`).
+- Light gamification (agreed 2026-09-06): weekly workout goal, streaks, achievement badges,
+  encouraging messages; goals across consistency / strength-PRs / body-weight / balance. No
+  XP/levels.
+- Context-aware theming (agreed 2026-09-06): dark "strong & heavy" for the active-workout
+  screen; a lighter, distinct palette for nutrition; calm + a gold "win" colour for
+  dashboard/progress. Built as theme scopes over the existing CSS-var tokens.
 
 ### Phase 5 — nutrition
 
