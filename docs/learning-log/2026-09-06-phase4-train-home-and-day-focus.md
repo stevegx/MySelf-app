@@ -167,3 +167,65 @@ Attribution string: `"{author} · wger.de (CC BY-SA)"`, or just
 - **Slice 4** — persistent Resume-workout bar everywhere; mobile bottom tab bar;
   per-exercise progression + "stalled" flag + under-trained-muscle hint in the
   drill-down.
+
+## Slice 3 — the gym logging screen, rebuilt (`a18f13e`)
+
+The active-workout screen was a flat scroll of every exercise with a number box
+per field and three buttons per set. Rebuilt for a phone between sets:
+
+- **One exercise open at a time.** The rest collapse to a tap-to-open row with a
+  `done/total` badge. When you finish an exercise's sets it auto-expands the next.
+- **Sets come pre-filled.** Priority: a value you already logged → the previous
+  set *this* session → the day's target → last session's top set → blank. So a
+  straight-sets workout is mostly just tapping **Log**.
+- **Steppers, not typing.** New `<StepperInput>` — `−  100  +` with big buttons
+  (weight ±2.5, reps ±1, seconds ±5); the middle stays a real input you can type
+  into. One primary **Log** button ("Update" once logged). After logging, focus
+  jumps to the next pending set's first field.
+- "Last time: 100 kg × 8" once per exercise; a thin progress bar up top.
+- The old "Copy previous" button is gone — that behaviour is the default now.
+
+React note: the "which exercise is expanded" state is seeded from the data
+(`firstUnfinished(exercises)`) but the user can override by tapping a row. The
+component reconciles: `active = exercises.some(e => e.id === activeId) ? activeId
+: firstUnfinished(...)` — so a stale id (exercise removed) falls back cleanly.
+
+## Slice 4 — navigation + a weakness signal (`cfed1e6`, `6599b67`)
+
+**Resume-workout bar.** A fixed pill rendered by `AppShell` on every screen while
+a session is `InProgress` (`useActiveSession()` has data), showing the day name +
+sets done/total, linking to `/workouts/active`. Hidden on that screen itself.
+
+**Mobile bottom tab bar.** The primary nav used to be a scrolling icon row at the
+top on phones. Now `AppShell` renders the sidebar nav `hidden nav:flex` (desktop
+only) and a separate `position: fixed` bottom `<nav>` `nav:hidden` with the five
+icon+label items. `<main>` gets `pb-[calc(4.5rem+env(safe-area-inset-bottom))]`
+so content clears it.
+
+**Muscle coverage** (the "don't skip leg day" signal). `GET
+/programs/{id}/stats` gained `muscleWeeklySets`: for every completed session
+started from the program, it joins each logged exercise to its **primary**
+muscles and tallies completed sets, then divides by `WeeksInRange` (the same
+1–8-week divisor the rolling averages use, now exposed on
+`ProgramStatsResult`). The Overview shows a bar per muscle, lowest first,
+warning-toned under ~6 sets/week.
+
+C# note: the tally is plain dictionary work after the query —
+`setsByMuscle[m] = setsByMuscle.GetValueOrDefault(m) + completedSets`. The only
+DB round-trip is loading `exerciseId → primary muscle names` for the exercises
+that actually appear in the sessions.
+
+Deferred: a per-exercise "stalled lift" chip in the day editor. The strength
+trend (e1RM sparkline, per exercise) already lives on the Progress screen; a
+compact version in the editor is a nice-to-have, not blocking.
+
+### Phase 4 verified
+
+- Backend: **49 unit + 107 integration** green (new: `/muscles` + day focus
+  round-trip, `/me/preferences` toggle, exercise search muscles/equipment/image,
+  program-stats sets-per-muscle).
+- Frontend: **71 tests**, lint, `npm run build` all clean (new suites:
+  `ResumeWorkoutBar`, Train-home; rewritten: `ActiveWorkoutScreen`, `DayEditor`,
+  `WorkoutBuilderScreen`).
+- Branch `phase-4-workouts-home`, ~14 commits. Ready for review, then merge to
+  `master`.
