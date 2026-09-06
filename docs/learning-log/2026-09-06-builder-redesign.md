@@ -227,19 +227,46 @@ focus muscle → `POST …/duplicate` → the program has 2 days; the copy carri
 focus, both exercises, the set (weight 100), and a *fresh* superset shared by
 both copied exercises; the original is byte-for-byte unchanged.
 
-**Still pending:** the **weekly volume bar** (mockup #2). Settled with the
-user: split is **user-toggleable** (by day / by muscle group), counts
-**actual logged** sets. Open: the verdict rule (leaning "coverage" — flag a
-near-zero slice, no noisy ratio alarms) and where it lives (leaning the Train
-home, since it reflects behaviour not the program on paper).
+## Slice — volume-balance read on the Train home (`7dc69ff`)
+
+The mockup's "Weekly volume" strip, pinned down with the user: **actual
+logged** sets (not planned), split **user-toggleable** (by day / by muscle
+group), **coverage** verdict, on the **Train home**.
+
+Backend: `GET /programs/{id}/stats` grew a `recentVolume` block — 14 local
+days ending "today", `byDay` = every program day 0-filled (grouped by
+`SourceDayId`), `byMuscle` = per primary-muscle counts. It reuses the
+sessions + the `primaryMusclesByExercise` map the endpoint **already loads**
+for `muscleWeeklySets`, so no new query and no new endpoint. A local static
+`DoneSets(...)` counts `SetLog`s with a `CompletedAt`.
+
+The 7-group fold stays on the client (`foldMusclesToGroups` in
+`muscleGroups.ts`) — the taxonomy lives in one place.
+
+`VolumeBalance.tsx`: a bar-per-row list, not a stacked bar. Reason (from the
+`dataviz` skill): with 7 muscle groups a stacked bar needs 7 categorical
+hues, and this palette's indigo/blue/violet are too close for a colour-blind
+reader — the skill says fold or re-form rather than cycle hues. A row list
+(label · thin track · one-hue fill normalised to the max · count) carries
+identity in the **label**, needs no palette, and reads "is it lopsided" just
+as well. Verdict: `sessions === 0` → nothing; `max < 6` → "Building a
+baseline"; no zero slice → "Balanced"; else name the first one or two zero
+slices "… light". Shown only when a session was logged in the window.
+
+Tests: integration (the block's shape + a window that ends before the only
+session → all zeros); 5 component tests (each verdict branch + the muscle
+toggle folding to 7 rows); a `foldMusclesToGroups` unit test. Not seen with
+live data — the dev account has no completed sessions.
+
+**Pass 2 complete.** Nothing from the mockups is still pending.
 
 ## Verification (pass 2)
 
-- Frontend `npm run build` + `npm run lint` clean; `npx vitest run` — **84 pass**
-  (+4 DayEditor tests: rename-saves-name, and the ⋯ menu's Delete / Duplicate /
-  no-Duplicate-without-handler wiring).
+- Frontend `npm run build` + `npm run lint` clean; `npx vitest run` — **89 pass**
+  (DayEditor: rename-saves-name + ⋯ Delete/Duplicate wiring; new `VolumeBalance`
+  ×5 and `foldMusclesToGroups` ×1).
 - Backend `dotnet test MySelf.sln` — **49 unit + 108 integration** green
-  (+1 for `Duplicate_day_…`).
+  (`Duplicate_day_…`; `recentVolume` folded into the existing stats test).
 - Browser: Train home + programs list + builder render with the serif titles /
   pill controls / softer cards, colours unchanged; program cards with the
   `All/Active/Drafts` filter; the drawer's `All + 7 group` pill row filters the
