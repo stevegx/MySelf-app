@@ -200,18 +200,49 @@ The open day's header gets a `MoreHorizontal` button → a little dropdown:
 - **Delete day** — calls an `onDeleteDay` prop. `WorkoutBuilderScreen` now has
   one `removeDay()` shared by the day-list trash icon and this menu item.
 
-**Still pending:** *Duplicate day* (needs a `POST /workout-days/{id}/duplicate`
-backend endpoint — the `CloneDay` graph-copy helper already exists in
-`ProgramEndpoints`, just needs lifting to a shared spot) and the **weekly
-volume bar** (design agreed in principle, waiting on: split by day vs muscle
-group, planned vs logged sets).
+## Slice H (cont.) — duplicate a day (`56e8ddf`)
+
+`POST /api/v1/workout-days/{id}/duplicate`. New C# angle: **reusing an EF
+entity-graph clone**. `CloneDay` already existed (`private static` in
+`ProgramEndpoints`, used by program-clone) — it builds a detached `WorkoutDay`
+whose children are all `new` with `Guid.NewGuid()` ids and no `Id` copied from
+the source, so `db.WorkoutDays.Add(clone)` inserts the whole tree fresh. Two
+changes: lifted it to `internal` (both endpoint classes are in `MySelf.Api`,
+and `WorkoutDayEndpoints` already does `using static … ProgramEndpoints`), and
+taught it to carry `FocusMuscleIds = [.. source.FocusMuscleIds]` — which also
+fixes program-clone, that had been dropping each day's focus.
+
+The handler: load the source day with its full graph (`Include … ThenInclude`),
+load the program for the `MaxDaysPerProgram` guard, `CloneDay(source)`, then set
+the three fields the caller owns — `ProgramId`, `Name = "{src} (copy)"`,
+`SortOrder = Max + 1`. No row-version guard: it only appends, like `AddDay`.
+Returns `DayListItem` + 201.
+
+Frontend: `useMutateProgram.duplicateDay`, a `onDuplicateDay` prop on
+`DayEditor` feeding a "Duplicate day" item in the ⋯ menu,
+`WorkoutBuilderScreen` selects the new day `onSuccess`.
+
+Integration test: a day with 2 exercises in a superset + a weighted set + a
+focus muscle → `POST …/duplicate` → the program has 2 days; the copy carries
+focus, both exercises, the set (weight 100), and a *fresh* superset shared by
+both copied exercises; the original is byte-for-byte unchanged.
+
+**Still pending:** the **weekly volume bar** (mockup #2). Settled with the
+user: split is **user-toggleable** (by day / by muscle group), counts
+**actual logged** sets. Open: the verdict rule (leaning "coverage" — flag a
+near-zero slice, no noisy ratio alarms) and where it lives (leaning the Train
+home, since it reflects behaviour not the program on paper).
 
 ## Verification (pass 2)
 
-- `npm run build` + `npm run lint` clean; `npx vitest run` — **82 pass**
-  (+2 DayEditor tests for the rename-saves-name path and the `onDeleteDay`
-  wiring).
-- Browser: Train home + programs list + builder all render with the serif
-  titles / pill controls / softer cards, colours unchanged; program cards with
-  the `All/Active/Drafts` filter; the drawer's `All + 7 group` pill row filters
-  the list; the day `⋯` menu opens and Rename swaps in the name input.
+- Frontend `npm run build` + `npm run lint` clean; `npx vitest run` — **84 pass**
+  (+4 DayEditor tests: rename-saves-name, and the ⋯ menu's Delete / Duplicate /
+  no-Duplicate-without-handler wiring).
+- Backend `dotnet test MySelf.sln` — **49 unit + 108 integration** green
+  (+1 for `Duplicate_day_…`).
+- Browser: Train home + programs list + builder render with the serif titles /
+  pill controls / softer cards, colours unchanged; program cards with the
+  `All/Active/Drafts` filter; the drawer's `All + 7 group` pill row filters the
+  list; the day `⋯` menu Rename swaps in the name input; **Duplicate day**
+  creates "Upper #1 (copy)" with focus + exercises carried, selects it, and it
+  deletes cleanly through the styled confirm.
