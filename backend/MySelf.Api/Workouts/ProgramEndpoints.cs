@@ -231,6 +231,57 @@ public static class ProgramEndpoints
             .ThenBy(x => x.Muscle)
             .ToList();
 
+        // Recent-volume balance for the Train home: completed sets over the last 14 local
+        // days, split by source day (every program day, 0-filled) and by primary muscle.
+        var windowFrom = localToday.AddDays(-13);
+        var recentSessions = sessions
+            .Where(s => s.PerformedOnLocalDate is { } d && d >= windowFrom && d <= localToday)
+            .ToList();
+
+        static int DoneSets(IEnumerable<WorkoutSession> group) =>
+            group.SelectMany(s => s.ExerciseLogs).SelectMany(e => e.Sets).Count(x => x.CompletedAt is not null);
+
+        var dayIds = program.Days.Select(d => d.Id).ToHashSet();
+        var recentSetsByDayId = recentSessions
+            .Where(s => s.SourceDayId is { } sid && dayIds.Contains(sid))
+            .GroupBy(s => s.SourceDayId!.Value)
+            .ToDictionary(g => g.Key, DoneSets);
+
+        var byDay = program.Days
+            .Select(d => new VolumeSlice(d.Name, recentSetsByDayId.GetValueOrDefault(d.Id)))
+            .ToList();
+
+        var otherSets = DoneSets(recentSessions.Where(s => s.SourceDayId is not { } sid || !dayIds.Contains(sid)));
+        if (otherSets > 0)
+        {
+            byDay.Add(new VolumeSlice("Other", otherSets));
+        }
+
+        var recentSetsByMuscle = new Dictionary<string, int>();
+        foreach (var log in recentSessions.SelectMany(s => s.ExerciseLogs))
+        {
+            if (!primaryMusclesByExercise.TryGetValue(log.ExerciseId, out var muscles) || muscles.Count == 0)
+            {
+                continue;
+            }
+            var done = log.Sets.Count(s => s.CompletedAt is not null);
+            foreach (var m in muscles)
+            {
+                recentSetsByMuscle[m] = recentSetsByMuscle.GetValueOrDefault(m) + done;
+            }
+        }
+
+        var recentVolume = new ProgramRecentVolume(
+            windowFrom,
+            localToday,
+            recentSessions.Count,
+            DoneSets(recentSessions),
+            byDay,
+            recentSetsByMuscle
+                .Select(kv => new VolumeSlice(kv.Key, kv.Value))
+                .OrderByDescending(x => x.Sets)
+                .ToList());
+
         // PRs achieved in those sessions (docs/02 §7 PR types), newest first.
         var sessionIds = sessions.Select(s => s.Id).ToList();
         var prs = await db.PersonalRecords
@@ -263,7 +314,8 @@ public static class ProgramEndpoints
             prs
                 .Select(x => new ProgramPrStat(x.ExerciseName, x.Type.ToString(), (double)x.Value, x.AchievedOn))
                 .ToList(),
-            muscleWeeklySets));
+            muscleWeeklySets,
+            recentVolume));
     }
 
     private static async Task<IResult> UpdateAsync(

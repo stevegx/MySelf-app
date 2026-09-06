@@ -75,13 +75,27 @@ public sealed record ProgramStats(
     IReadOnlyList<ProgramPrStat> PersonalRecords,
     // Completed working sets per primary muscle ÷ weeks in range — a coverage / "don't skip
     // leg day" signal. Lowest first.
-    IReadOnlyList<MuscleWeeklySets> MuscleWeeklySets);
+    IReadOnlyList<MuscleWeeklySets> MuscleWeeklySets,
+    // Completed sets over the last ~2 weeks, split two ways so the Train home can show a
+    // "balance" read: by source day (every program day, 0-filled) and by primary muscle
+    // (the client folds those into its coarse groups). Reflects what was actually logged.
+    ProgramRecentVolume RecentVolume);
 
 public sealed record ProgramDayStat(Guid DayId, string DayName, int Sessions, DateOnly? LastPerformedOn);
 
 public sealed record ProgramPrStat(string ExerciseName, string Type, double Value, DateOnly AchievedOn);
 
 public sealed record MuscleWeeklySets(string Muscle, double SetsPerWeek);
+
+public sealed record ProgramRecentVolume(
+    DateOnly From,
+    DateOnly To,
+    int Sessions,
+    int Sets,
+    IReadOnlyList<VolumeSlice> ByDay,
+    IReadOnlyList<VolumeSlice> ByMuscle);
+
+public sealed record VolumeSlice(string Label, int Sets);
 
 // --- day detail ---
 

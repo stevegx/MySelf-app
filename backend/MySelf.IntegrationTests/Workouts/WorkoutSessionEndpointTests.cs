@@ -502,6 +502,29 @@ public class WorkoutSessionEndpointTests(WebApplicationFactory<Program> factory,
                 Assert.False(string.IsNullOrWhiteSpace(m.GetProperty("muscle").GetString()));
                 Assert.True(m.GetProperty("setsPerWeek").GetDouble() > 0);
             });
+
+            // Recent-volume balance: the session falls in the 14-day window; byDay lists
+            // every program day (0-filled) with the trained one at one set.
+            var recent = after.GetProperty("recentVolume");
+            Assert.Equal("2026-08-23", recent.GetProperty("from").GetString());
+            Assert.Equal("2026-09-05", recent.GetProperty("to").GetString());
+            Assert.Equal(1, recent.GetProperty("sessions").GetInt32());
+            Assert.Equal(1, recent.GetProperty("sets").GetInt32());
+            var byDay = recent.GetProperty("byDay").EnumerateArray().ToList();
+            Assert.Single(byDay);
+            Assert.Equal(1, byDay[0].GetProperty("sets").GetInt32());
+            Assert.All(
+                recent.GetProperty("byMuscle").EnumerateArray(),
+                m => Assert.True(m.GetProperty("sets").GetInt32() > 0));
+
+            // A window that ends before the session sees nothing.
+            var stale = await client.GetFromJsonAsync<JsonElement>($"/api/v1/programs/{programId}/stats?today=2026-10-01");
+            var staleRecent = stale.GetProperty("recentVolume");
+            Assert.Equal(0, staleRecent.GetProperty("sessions").GetInt32());
+            Assert.Equal(0, staleRecent.GetProperty("sets").GetInt32());
+            Assert.All(
+                staleRecent.GetProperty("byDay").EnumerateArray(),
+                d => Assert.Equal(0, d.GetProperty("sets").GetInt32()));
         }
         finally
         {

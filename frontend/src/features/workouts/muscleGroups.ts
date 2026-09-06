@@ -64,3 +64,22 @@ export function toggleGroup(
 
 export const groupLabels = (keys: readonly MuscleGroupKey[]): string[] =>
   keys.map((k) => groupByKey.get(k)?.label ?? k);
+
+const groupKeyByMuscleName = new Map<string, MuscleGroupKey>(
+  MUSCLE_GROUPS.flatMap((g) => g.memberNames.map((n) => [n, g.key] as const)),
+);
+
+/**
+ * Sum per-muscle counts into the seven groups, returning all seven in canonical order
+ * (0-filled). Muscle names the taxonomy doesn't know are ignored.
+ */
+export function foldMusclesToGroups(
+  slices: { label: string; sets: number }[],
+): { key: MuscleGroupKey; label: string; sets: number }[] {
+  const totals = new Map<MuscleGroupKey, number>(MUSCLE_GROUPS.map((g) => [g.key, 0]));
+  for (const s of slices) {
+    const key = groupKeyByMuscleName.get(s.label);
+    if (key) totals.set(key, (totals.get(key) ?? 0) + s.sets);
+  }
+  return MUSCLE_GROUPS.map((g) => ({ key: g.key, label: g.label, sets: totals.get(g.key) ?? 0 }));
+}

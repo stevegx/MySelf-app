@@ -7,6 +7,7 @@ import { Button, Card, CardKicker, CardTitle, Checkbox, Input, PageHeader, Skele
 import { SortableList } from "./SortableList";
 import { DayEditor } from "./DayEditor";
 import { ProgramOverview } from "./ProgramOverview";
+import { VolumeBalance } from "./VolumeBalance";
 import { useConfirm } from "./useConfirm";
 import {
   useArchivedPrograms,
@@ -235,6 +236,9 @@ function WorkoutsHome({
         </Card>
       ) : (
         <div className="flex flex-col gap-2">
+          {stats?.recentVolume && stats.recentVolume.sessions > 0 && (
+            <VolumeBalance recent={stats.recentVolume} />
+          )}
           {orderedDays.map((d) => {
             const st = statByDay.get(d.id);
             return (

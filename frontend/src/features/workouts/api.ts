@@ -94,6 +94,19 @@ export type ProgramStats = {
   perDay: ProgramDayStat[];
   personalRecords: ProgramPrStat[];
   muscleWeeklySets: MuscleWeeklySets[];
+  /** Optional — older cached responses may lack it. Completed sets over the last ~14 days. */
+  recentVolume?: RecentVolume;
+};
+
+export type VolumeSlice = { label: string; sets: number };
+
+export type RecentVolume = {
+  from: string;
+  to: string;
+  sessions: number;
+  sets: number;
+  byDay: VolumeSlice[];
+  byMuscle: VolumeSlice[];
 };
 
 export type SetPrescriptionDetail = {

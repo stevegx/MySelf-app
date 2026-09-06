@@ -2,6 +2,7 @@ import {
   MUSCLE_GROUPS,
   activeGroupKeys,
   expandGroupsToMuscleNames,
+  foldMusclesToGroups,
   groupLabels,
   muscleIdsForGroup,
   toggleGroup,
@@ -74,5 +75,23 @@ describe("muscleGroups", () => {
   it("maps keys to human labels and to leaf names", () => {
     expect(groupLabels(["legs", "core"])).toEqual(["Legs", "Core"]);
     expect(expandGroupsToMuscleNames(["biceps"])).toEqual(["Biceps", "Brachialis"]);
+  });
+
+  it("folds per-muscle set counts into the seven groups, 0-filled and ordered", () => {
+    const folded = foldMusclesToGroups([
+      { label: "Quads", sets: 8 },
+      { label: "Glutes", sets: 4 }, // also Legs
+      { label: "Chest", sets: 6 },
+      { label: "Brachialis", sets: 2 }, // Biceps
+      { label: "Unknownus maximus", sets: 99 }, // ignored
+    ]);
+
+    expect(folded.map((g) => g.key)).toEqual(MUSCLE_GROUPS.map((g) => g.key));
+    const byKey = Object.fromEntries(folded.map((g) => [g.key, g.sets]));
+    expect(byKey.legs).toBe(12); // 8 + 4
+    expect(byKey.chest).toBe(6);
+    expect(byKey.biceps).toBe(2);
+    expect(byKey.back).toBe(0);
+    expect(byKey.core).toBe(0);
   });
 });
