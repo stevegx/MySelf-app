@@ -626,6 +626,19 @@ function ProgramDetail({
   const selectedDay =
     days.find((d) => d.id === selectedDayId) ?? (tab === "days" ? days[0] : undefined);
 
+  const removeDay = async (d: { id: string; name: string }) => {
+    if (
+      await confirm({
+        title: `Delete day "${d.name}"?`,
+        message: "Its exercises and set targets go with it. This can't be undone.",
+        confirmLabel: "Delete day",
+      })
+    ) {
+      if (selectedDayId === d.id) setSelectedDayId(null);
+      m.deleteDay.mutate(d.id);
+    }
+  };
+
   if (isLoading || !program) {
     return (
       <>
@@ -738,18 +751,7 @@ function ProgramDetail({
                     size="sm"
                     iconOnly
                     aria-label={`Delete day ${d.name}`}
-                    onClick={async () => {
-                      if (
-                        await confirm({
-                          title: `Delete day "${d.name}"?`,
-                          message: "Its exercises and set targets go with it. This can't be undone.",
-                          confirmLabel: "Delete day",
-                        })
-                      ) {
-                        if (selectedDayId === d.id) setSelectedDayId(null);
-                        m.deleteDay.mutate(d.id);
-                      }
-                    }}
+                    onClick={() => removeDay(d)}
                   >
                     <Trash2 size={14} aria-hidden />
                   </Button>
@@ -793,6 +795,7 @@ function ProgramDetail({
                   dayId={selectedDay.id}
                   onSaved={() => {}}
                   onClose={() => setSelectedDayId(null)}
+                  onDeleteDay={() => removeDay(selectedDay)}
                 />
               </Card>
             ) : (

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, Copy, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, Copy, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { Button, Checkbox, Input, Segmented, Tag } from "../../components/ui";
 import { cn } from "../../lib/cn";
 import { ApiError } from "../../lib/api";
@@ -59,7 +59,12 @@ function summaryTags(e: EditExercise): string[] {
 
 type EditSuperset = { key: string; restAfterRoundSeconds: string };
 
-type EditState = { exercises: EditExercise[]; supersets: EditSuperset[]; focusMuscleIds: number[] };
+type EditState = {
+  name: string;
+  exercises: EditExercise[];
+  supersets: EditSuperset[];
+  focusMuscleIds: number[];
+};
 
 let seq = 0;
 const uid = (prefix: string) => `${prefix}-${(seq += 1)}`;
@@ -105,7 +110,7 @@ function seed(day: DayDetail): EditState {
         })),
     }));
 
-  return { exercises, supersets, focusMuscleIds: [...day.focusMuscleIds] };
+  return { name: day.name, exercises, supersets, focusMuscleIds: [...day.focusMuscleIds] };
 }
 
 const blankSet = (): EditSet => ({
@@ -122,6 +127,7 @@ const blankSet = (): EditSet => ({
 // A comparable snapshot for dirty-tracking (drops the volatile React keys).
 const fingerprint = (s: EditState) =>
   JSON.stringify({
+    name: s.name.trim(),
     focus: [...s.focusMuscleIds].sort((a, b) => a - b),
     exercises: s.exercises.map((e) => ({
       exerciseId: e.exerciseId,
@@ -141,6 +147,7 @@ export function DayEditor({
   programId,
   onClose,
   onSaved,
+  onDeleteDay,
 }: {
   dayId: string;
   programId: string;
@@ -148,6 +155,8 @@ export function DayEditor({
   /** Called after a successful save. Defaults to onClose (full-screen use); the inline
    *  two-column builder passes a no-op so the day stays selected. */
   onSaved?: () => void;
+  /** When set, the header's ⋯ menu offers "Delete day" and calls this. */
+  onDeleteDay?: () => void;
 }) {
   const { data: day, isLoading } = useDay(dayId);
   const { data: program } = useProgram(programId);
@@ -157,7 +166,9 @@ export function DayEditor({
   const bulk = useBulkExercises(programId);
   const prefs = useUpdatePreferences();
 
-  const [state, setState] = useState<EditState>({ exercises: [], supersets: [], focusMuscleIds: [] });
+  const [state, setState] = useState<EditState>({ name: "", exercises: [], supersets: [], focusMuscleIds: [] });
+  const [renaming, setRenaming] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [offFocusNote, setOffFocusNote] = useState<{ name: string; muscles: string[] } | null>(null);
   const [baseline, setBaseline] = useState<string>("");
   const [loadedFrom, setLoadedFrom] = useState<string | null>(null);
@@ -291,7 +302,7 @@ export function DayEditor({
   function buildBody(): UpdateDayBody {
     const memberOrder = new Map<string, number>();
     return {
-      name: day!.name,
+      name: state.name.trim() || day!.name,
       rowVersion: day!.programRowVersion,
       focusMuscleIds: state.focusMuscleIds,
       exercises: state.exercises.map((e, index) => {
@@ -380,10 +391,59 @@ export function DayEditor({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="m-0 text-base font-bold">
-          {day.name}
-          {dirty ? <span className="ml-2 text-xs font-normal text-warning">Unsaved changes</span> : null}
-        </h3>
+        <div className="flex min-w-0 items-center gap-1.5">
+          {renaming ? (
+            <Input
+              autoFocus
+              aria-label="Day name"
+              className="max-w-[220px]"
+              value={state.name}
+              onChange={(e) => setState((s) => ({ ...s, name: e.target.value }))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") setRenaming(false);
+                if (e.key === "Escape") {
+                  setState((s) => ({ ...s, name: day.name }));
+                  setRenaming(false);
+                }
+              }}
+              onBlur={() => setRenaming(false)}
+            />
+          ) : (
+            <h3 className="m-0 truncate text-base font-bold">{state.name || day.name}</h3>
+          )}
+          {dirty ? <span className="shrink-0 text-xs font-normal text-warning">Unsaved changes</span> : null}
+          <span className="relative shrink-0">
+            <Button variant="ghost" size="sm" iconOnly aria-label="Day options" onClick={() => setMenuOpen((o) => !o)}>
+              <MoreHorizontal size={16} aria-hidden />
+            </Button>
+            {menuOpen && (
+              <span className="absolute left-0 top-full z-10 mt-1 flex min-w-[160px] flex-col rounded-control border border-border bg-surface p-1 shadow-lg">
+                <button
+                  type="button"
+                  className="rounded-[6px] px-2 py-1.5 text-left text-[13px] hover:bg-surface-subtle"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setRenaming(true);
+                  }}
+                >
+                  Rename day
+                </button>
+                {onDeleteDay && (
+                  <button
+                    type="button"
+                    className="rounded-[6px] px-2 py-1.5 text-left text-[13px] text-danger hover:bg-danger-soft"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onDeleteDay();
+                    }}
+                  >
+                    Delete day
+                  </button>
+                )}
+              </span>
+            )}
+          </span>
+        </div>
         <div className="flex gap-2">
           <Button variant="ghost" onClick={requestClose}>
             {dirty ? "Close" : "Cancel"}

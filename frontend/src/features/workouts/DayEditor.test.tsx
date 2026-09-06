@@ -206,4 +206,43 @@ describe("DayEditor", () => {
     await user.click(within(bar).getByRole("button", { name: "Discard" }));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it("renames the day from the ⋯ menu and saves the new name", async () => {
+    const calls = installFetch();
+    const user = userEvent.setup();
+    render(
+      <Providers>
+        <DayEditor dayId="d1" programId="p1" onClose={() => {}} />
+      </Providers>,
+    );
+
+    await screen.findByText("Back Squat");
+    await user.click(screen.getByRole("button", { name: "Day options" }));
+    await user.click(screen.getByRole("button", { name: "Rename day" }));
+
+    const nameInput = screen.getByRole("textbox", { name: "Day name" });
+    await user.clear(nameInput);
+    await user.type(nameInput, "Leg Day A");
+    expect(await screen.findByText("Unsaved changes")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Save day/i }));
+    const put = calls.find((c) => c.method === "PUT" && c.url.includes("/workout-days/d1"));
+    expect((put!.body as { name: string }).name).toBe("Leg Day A");
+  });
+
+  it("offers Delete day in the ⋯ menu, wired to onDeleteDay", async () => {
+    installFetch();
+    const onDeleteDay = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <Providers>
+        <DayEditor dayId="d1" programId="p1" onClose={() => {}} onDeleteDay={onDeleteDay} />
+      </Providers>,
+    );
+
+    await screen.findByText("Back Squat");
+    await user.click(screen.getByRole("button", { name: "Day options" }));
+    await user.click(screen.getByRole("button", { name: "Delete day" }));
+    expect(onDeleteDay).toHaveBeenCalled();
+  });
 });
