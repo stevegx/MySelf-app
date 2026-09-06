@@ -28,7 +28,11 @@ export function CardKicker({ children }: { children: ReactNode }) {
 }
 
 export function CardTitle({ children }: { children: ReactNode }) {
-  return <div className="font-bold text-[17px] leading-tight">{children}</div>;
+  return (
+    <div className="font-[family-name:var(--font-display)] text-[19px] font-normal leading-tight">
+      {children}
+    </div>
+  );
 }
 
 export function CardBody({

@@ -301,8 +301,10 @@ function Tab({ active, onClick, children }: { active: boolean; onClick: () => vo
       aria-selected={active}
       onClick={onClick}
       className={cn(
-        "-mb-px border-b-2 px-3 py-2 text-sm font-semibold",
-        active ? "border-primary text-foreground" : "border-transparent text-foreground-muted hover:text-foreground",
+        "rounded-pill px-3.5 py-1.5 text-sm font-semibold transition-colors",
+        active
+          ? "bg-primary text-on-primary"
+          : "text-foreground-muted hover:bg-surface-subtle hover:text-foreground",
       )}
     >
       {children}
@@ -654,7 +656,7 @@ function ProgramDetail({
 
       <InlineError error={m.remove.error ?? m.archive.error ?? m.activate.error ?? m.clone.error} />
 
-      <div role="tablist" className="mb-4 flex gap-1 border-b border-border">
+      <div role="tablist" className="mb-4 flex w-fit gap-1 rounded-pill bg-surface-subtle p-1">
         <Tab active={tab === "overview"} onClick={() => setTab("overview")}>
           Overview
         </Tab>

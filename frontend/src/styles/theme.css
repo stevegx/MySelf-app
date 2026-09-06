@@ -127,12 +127,16 @@
   --color-viz-negative: var(--viz-negative);
   --color-viz-track: var(--viz-track);
 
-  /* docs/06: 12px cards, 10px controls, pill only for tags/status */
-  --radius-card: 12px;
-  --radius-control: 10px;
+  /* Rounder "organic" surfaces (mockup influence): soft cards, gently rounded
+     controls, and a true pill for buttons / tabs / chips. Colours unchanged. */
+  --radius-card: 20px;
+  --radius-control: 12px;
+  --radius-pill: 999px;
 
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
     Arial, sans-serif;
+  /* Display face for page + card titles. */
+  --font-display: "Caprasimo", Georgia, "Times New Roman", serif;
 
   --breakpoint-nav: 45rem;
 }
@@ -164,6 +168,14 @@
     line-height: 1.15;
     letter-spacing: -0.015em;
     margin: 0 0 0.5rem;
+  }
+  /* Page-level titles carry the display face; smaller UI headings stay Inter
+     for density. Caprasimo only ships a 400 weight and already reads bold. */
+  h1,
+  h2 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: -0.01em;
   }
   h1 {
     font-size: 34px;
