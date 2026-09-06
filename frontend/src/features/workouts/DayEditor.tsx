@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from "lucide-react";
-import { Button, Checkbox, Input, Segmented } from "../../components/ui";
+import { ArrowDown, ArrowUp, ChevronDown, Copy, Plus, Trash2 } from "lucide-react";
+import { Button, Checkbox, Input, Segmented, Tag } from "../../components/ui";
 import { cn } from "../../lib/cn";
 import { ApiError } from "../../lib/api";
 import { useMe } from "../auth/useMe";
 import { ExercisePicker } from "./ExercisePicker";
+import { ExerciseTrend } from "./ExerciseTrend";
 import { SortableList } from "./SortableList";
 import { useBulkExercises, useMuscles, useProgram, useUpdateDay, useUpdatePreferences, useDay } from "./api";
 import type { DayDetail, ExerciseListItem, UpdateDayBody } from "./api";
@@ -37,8 +38,23 @@ type EditExercise = {
   notes: string;
   supersetKey: string | null;
   moreOpen: boolean;
+  collapsed: boolean; // UI only — the mockup shows a summary row you expand to edit sets
   sets: EditSet[];
 };
+
+/** Summary tags for a collapsed exercise row (sets · rep range · rest). */
+function summaryTags(e: EditExercise): string[] {
+  const tags: string[] = [`${e.sets.length} ${e.sets.length === 1 ? "set" : "sets"}`];
+  const mins = e.sets.map((s) => Number(s.repsMin)).filter((n) => Number.isFinite(n) && n > 0);
+  const maxs = e.sets.map((s) => Number(s.repsMax)).filter((n) => Number.isFinite(n) && n > 0);
+  if (mins.length || maxs.length) {
+    const lo = mins.length ? Math.min(...mins) : Math.min(...maxs);
+    const hi = maxs.length ? Math.max(...maxs) : Math.max(...mins);
+    tags.push(lo === hi ? `${lo} reps` : `${lo}–${hi} reps`);
+  }
+  if (e.restSeconds.trim() !== "") tags.push(`rest ${e.restSeconds}s`);
+  return tags;
+}
 
 type EditSuperset = { key: string; restAfterRoundSeconds: string };
 
@@ -72,6 +88,7 @@ function seed(day: DayDetail): EditState {
       notes: e.notes ?? "",
       supersetKey: e.supersetGroupId ? (supersetKeyByServerId.get(e.supersetGroupId) ?? null) : null,
       moreOpen: false,
+      collapsed: true,
       sets: e.sets
         .slice()
         .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -122,10 +139,14 @@ export function DayEditor({
   dayId,
   programId,
   onClose,
+  onSaved,
 }: {
   dayId: string;
   programId: string;
   onClose: () => void;
+  /** Called after a successful save. Defaults to onClose (full-screen use); the inline
+   *  two-column builder passes a no-op so the day stays selected. */
+  onSaved?: () => void;
 }) {
   const { data: day, isLoading } = useDay(dayId);
   const { data: program } = useProgram(programId);
@@ -218,6 +239,7 @@ export function DayEditor({
           notes: "",
           supersetKey: null,
           moreOpen: false,
+          collapsed: false,
           sets: [blankSet()],
         },
       ],
@@ -316,7 +338,10 @@ export function DayEditor({
     setError(null);
     try {
       await update.mutateAsync({ dayId, body: buildBody() });
-      onClose();
+      // The server now matches `state` — reset the dirty baseline so the editor can stay
+      // open cleanly (inline builder) instead of only ever closing.
+      setBaseline(fingerprint(state));
+      (onSaved ?? onClose)();
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         setError(
@@ -477,21 +502,43 @@ export function DayEditor({
           <div
             className={`rounded-control border p-3 ${grouped ? "border-primary/50 bg-primary-soft/30" : "border-border"}`}
           >
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="flex items-center gap-2 text-sm font-bold">
-                {dragHandle}
-                {e.serverId && (
-                  <Checkbox
-                    label=""
-                    aria-label={`Select ${e.exerciseName}`}
-                    checked={selected.has(e.serverId)}
-                    onChange={() => toggleSelected(e.serverId!)}
-                  />
+            <div className="flex items-center gap-2">
+              {dragHandle}
+              {e.serverId && (
+                <Checkbox
+                  label=""
+                  aria-label={`Select ${e.exerciseName}`}
+                  checked={selected.has(e.serverId)}
+                  onChange={() => toggleSelected(e.serverId!)}
+                />
+              )}
+              <button
+                type="button"
+                onClick={() => patchExercise(e.key, { collapsed: !e.collapsed })}
+                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                aria-expanded={!e.collapsed}
+              >
+                <ChevronDown
+                  size={15}
+                  aria-hidden
+                  className={cn("shrink-0 text-foreground-subtle transition-transform", e.collapsed && "-rotate-90")}
+                />
+                <span className="truncate text-sm font-bold">{e.exerciseName}</span>
+                {grouped && (
+                  <span className="shrink-0 text-xs font-normal text-primary-pressed">{groupLabel(e.supersetKey!)}</span>
                 )}
-                {e.exerciseName}
-                {grouped ? <span className="text-xs font-normal text-primary-pressed">{groupLabel(e.supersetKey!)}</span> : null}
-              </span>
-              <div className="flex gap-1">
+                {e.collapsed && (
+                  <span className="ml-1 hidden gap-1 sm:flex">
+                    {summaryTags(e).map((t) => (
+                      <Tag key={t} tone="neutral">
+                        {t}
+                      </Tag>
+                    ))}
+                  </span>
+                )}
+              </button>
+              {e.collapsed && <ExerciseTrend exerciseId={e.exerciseId} />}
+              <div className="flex shrink-0 gap-1">
                 <Button variant="secondary" size="sm" iconOnly aria-label="Move up" onClick={() => moveExercise(e.key, -1)}>
                   <ArrowUp size={14} aria-hidden />
                 </Button>
@@ -504,7 +551,16 @@ export function DayEditor({
               </div>
             </div>
 
-            <div className="flex flex-col gap-2">
+            {e.collapsed ? (
+              <div className="mt-1.5 flex flex-wrap gap-1 pl-7 sm:hidden">
+                {summaryTags(e).map((t) => (
+                  <Tag key={t} tone="neutral">
+                    {t}
+                  </Tag>
+                ))}
+              </div>
+            ) : (
+            <div className="mt-3 flex flex-col gap-2">
               <div className="grid grid-cols-[auto_1fr_1fr_1fr_1fr_auto] items-center gap-2 text-[11px] text-foreground-muted">
                 <span>#</span>
                 <span>Kind</span>
@@ -617,22 +673,29 @@ export function DayEditor({
                 </div>
               )}
             </div>
+            )}
           </div>
         );
         }}
       </SortableList>
 
-      {picking ? (
+      <button
+        type="button"
+        onClick={() => setPicking(true)}
+        className="flex items-center justify-center gap-2 rounded-control border border-dashed border-border-strong px-3 py-5 text-[13px] text-primary hover:border-primary hover:bg-primary-soft/40"
+      >
+        <Plus size={15} aria-hidden />
+        Add exercise
+      </button>
+
+      {picking && (
         <ExercisePicker
+          drawer
           onPick={addExercise}
           onClose={() => setPicking(false)}
           existingIds={new Set(state.exercises.map((e) => e.exerciseId))}
           focusMuscleNames={focusNames}
         />
-      ) : (
-        <Button variant="secondary" onClick={() => setPicking(true)}>
-          + Add exercise
-        </Button>
       )}
     </div>
   );

@@ -1,20 +1,26 @@
 import { useState } from "react";
+import { X } from "lucide-react";
 import { Button, Input } from "../../components/ui";
 import { useExerciseSearch } from "./api";
 import type { ExerciseListItem } from "./api";
 
-/** A small inline search panel for picking one catalogue exercise. */
+/**
+ * Search + pick one catalogue exercise. Renders inline (`drawer` false) or as a right-side
+ * slide-in drawer with a backdrop (`drawer` true — the program builder uses this).
+ */
 export function ExercisePicker({
   onPick,
   onClose,
   existingIds,
   focusMuscleNames,
+  drawer = false,
 }: {
   onPick: (exercise: ExerciseListItem) => void;
   onClose: () => void;
   existingIds: Set<string>;
   /** When set, exercises whose primary muscle is in this list are shown first / on their own. */
   focusMuscleNames?: string[];
+  drawer?: boolean;
 }) {
   const [q, setQ] = useState("");
   const [showAll, setShowAll] = useState(false);
@@ -29,18 +35,29 @@ export function ExercisePicker({
   const shown = focus.length === 0 || showAll ? items : matches;
   const hiddenCount = items.length - matches.length;
 
-  return (
-    <div className="rounded-control border border-border bg-surface-subtle p-3">
-      <div className="mb-2 flex items-center gap-2">
+  const body = (
+    <>
+      <div className={drawer ? "flex items-center justify-between" : "mb-2 flex items-center gap-2"}>
+        {drawer && <h3 className="m-0">Add exercise</h3>}
+        {drawer ? (
+          <Button variant="secondary" iconOnly aria-label="Close" onClick={onClose}>
+            <X size={16} aria-hidden />
+          </Button>
+        ) : null}
+      </div>
+
+      <div className={drawer ? "flex items-center gap-2" : "mb-2 flex items-center gap-2"}>
         <Input
           autoFocus
           placeholder="Search the exercise catalogue…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <Button variant="ghost" onClick={onClose}>
-          Close
-        </Button>
+        {!drawer && (
+          <Button variant="ghost" onClick={onClose}>
+            Close
+          </Button>
+        )}
       </div>
 
       {focus.length > 0 && (
@@ -62,7 +79,13 @@ export function ExercisePicker({
       {isLoading ? (
         <p className="m-0 px-1 py-2 text-xs text-foreground-muted">Searching…</p>
       ) : (
-        <ul className="m-0 flex max-h-64 list-none flex-col gap-1 overflow-y-auto p-0">
+        <ul
+          className={
+            drawer
+              ? "m-0 flex flex-1 list-none flex-col gap-1 overflow-y-auto p-0"
+              : "m-0 flex max-h-64 list-none flex-col gap-1 overflow-y-auto p-0"
+          }
+        >
           {shown.map((ex) => {
             const added = existingIds.has(ex.id);
             const off = focus.length > 0 && !inFocus(ex);
@@ -74,17 +97,6 @@ export function ExercisePicker({
                   onClick={() => onPick(ex)}
                   className="flex w-full items-center gap-3 rounded-control border border-border bg-surface px-3 py-2 text-left text-[13px] hover:border-border-strong disabled:opacity-50"
                 >
-                  {ex.imageThumbUrl && (
-                    <img
-                      src={ex.imageThumbUrl}
-                      alt=""
-                      loading="lazy"
-                      className="size-9 shrink-0 rounded-[6px] border border-border object-cover"
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                      }}
-                    />
-                  )}
                   <span className="min-w-0 flex-1">
                     <span className="font-semibold">{ex.name}</span>
                     <span className="ml-2 text-xs text-foreground-muted">{ex.category}</span>
@@ -120,6 +132,27 @@ export function ExercisePicker({
           )}
         </ul>
       )}
+    </>
+  );
+
+  if (!drawer) {
+    return <div className="rounded-control border border-border bg-surface-subtle p-3">{body}</div>;
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex justify-end bg-black/40"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Add exercise"
+      onClick={onClose}
+    >
+      <div
+        className="flex h-full w-[380px] max-w-[92vw] flex-col gap-3 overflow-y-auto bg-background p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {body}
+      </div>
     </div>
   );
 }

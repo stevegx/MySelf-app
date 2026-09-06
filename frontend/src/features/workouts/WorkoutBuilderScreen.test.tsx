@@ -304,7 +304,7 @@ describe("WorkoutBuilderScreen — manage programs", () => {
     await gotoManage(user);
     await user.click(await screen.findByText("PPL"));
     await user.click(await screen.findByRole("tab", { name: "Days" }));
-    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    await user.click(await screen.findByRole("button", { name: "Delete day Push" }));
 
     // The app's own dialog, and window.confirm was never used.
     expect(await screen.findByRole("dialog", { name: /Delete day/i })).toBeInTheDocument();
@@ -366,7 +366,8 @@ describe("WorkoutBuilderScreen — manage programs", () => {
     await gotoManage(user);
     await user.click(await screen.findByText("PPL"));
 
-    // Overview is the default tab.
+    // The detail view opens on Days now; Overview is a tab away.
+    await user.click(await screen.findByRole("tab", { name: "Overview" }));
     const timesCard = (await screen.findByText("Times performed")).closest("div")!.parentElement!;
     expect(timesCard).toHaveTextContent("7");
     expect(screen.getByText("2.5/wk average")).toBeInTheDocument();
@@ -376,7 +377,7 @@ describe("WorkoutBuilderScreen — manage programs", () => {
 
     // The editable day list lives behind the Days tab.
     await user.click(screen.getByRole("tab", { name: "Days" }));
-    expect(await screen.findByText("New day")).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText("New day…")).toBeInTheDocument();
   });
 
   it("creates a program and opens its detail view", async () => {
@@ -388,8 +389,8 @@ describe("WorkoutBuilderScreen — manage programs", () => {
     await user.type(await screen.findByPlaceholderText(/Program name/i), "PPL");
     await user.click(screen.getByRole("button", { name: "Create" }));
 
-    // Detail view for the new program.
-    expect(await screen.findByText("New day")).toBeInTheDocument();
+    // Detail view for the new program — opens on Days, which is empty for a fresh program.
+    expect(await screen.findByText(/Add your first day on the left/i)).toBeInTheDocument();
     expect(fetchSpy.mock.calls.some(([u, i]) => String(u).endsWith("/api/v1/programs") && i?.method === "POST")).toBe(true);
   });
 });

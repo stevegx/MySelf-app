@@ -87,18 +87,26 @@ function installFetch() {
   return calls;
 }
 
+type U = ReturnType<typeof userEvent.setup>;
+
+/** Exercise rows start collapsed (summary tags); click the name to reveal the set editor. */
+async function expandExercise(user: U, name: string) {
+  await user.click((await screen.findByText(name)).closest("button")!);
+}
+
 describe("DayEditor", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("shows every prescribed set instead of flattening them", async () => {
     installFetch();
+    const user = userEvent.setup();
     render(
       <Providers>
         <DayEditor dayId="d1" programId="p1" onClose={() => {}} />
       </Providers>,
     );
 
-    await screen.findByText("Back Squat");
+    await expandExercise(user, "Back Squat");
     // Two distinct set rows: one Standard, one Drop.
     expect(screen.getByDisplayValue("100")).toBeInTheDocument(); // set 1 weight
     expect(screen.getByDisplayValue("80")).toBeInTheDocument(); // set 2 weight
@@ -135,7 +143,7 @@ describe("DayEditor", () => {
       </Providers>,
     );
 
-    await screen.findByText("Back Squat");
+    await expandExercise(user, "Back Squat");
     expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
 
     const firstWeight = screen.getByDisplayValue("100");
@@ -160,17 +168,12 @@ describe("DayEditor", () => {
     await user.click(await screen.findByRole("button", { name: "Quads", pressed: false }));
 
     // Open the picker — it should say it's filtered, and offer to show the rest.
-    await user.click(screen.getByRole("button", { name: "+ Add exercise" }));
+    await user.click(screen.getByRole("button", { name: /add exercise/i }));
     expect(await screen.findByText(/Showing exercises for Quads/)).toBeInTheDocument();
     expect(screen.getByText(/Show all \(1 more\)/)).toBeInTheDocument();
 
     // Reveal all, then add the off-focus one -> inline note.
     await user.click(screen.getByRole("button", { name: /Show all/ }));
-    // Back Squat has a wger thumbnail.
-    expect(screen.getByRole("button", { name: /Back Squat/ }).querySelector("img")).toHaveAttribute(
-      "src",
-      "https://wger.de/media/x.png",
-    );
     await user.click(await screen.findByRole("button", { name: /Overhead Press/ }));
     expect(await screen.findByText(/outside this day's focus/i)).toBeInTheDocument();
 
@@ -190,7 +193,7 @@ describe("DayEditor", () => {
       </Providers>,
     );
 
-    await screen.findByText("Back Squat");
+    await expandExercise(user, "Back Squat");
     const firstWeight = screen.getByDisplayValue("100");
     await user.clear(firstWeight);
     await user.type(firstWeight, "105");

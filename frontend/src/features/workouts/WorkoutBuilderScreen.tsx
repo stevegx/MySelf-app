@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
-import { ChevronLeft, Plus, Play, Settings2, TriangleAlert } from "lucide-react";
+import { ChevronLeft, Plus, Play, Settings2, Trash2, TriangleAlert } from "lucide-react";
 import { ApiError } from "../../lib/api";
 import { cn } from "../../lib/cn";
 import { Button, Card, CardKicker, Checkbox, Input, PageHeader, Skeleton } from "../../components/ui";
@@ -39,21 +39,9 @@ export function WorkoutBuilderScreen() {
   // manage/build surface. A selected programId opens its detail regardless of view.
   const [view, setView] = useState<"home" | "programs">("home");
   const [programId, setProgramId] = useState<string | null>(null);
-  const [dayId, setDayId] = useState<string | null>(null);
-
-  if (programId && dayId) {
-    return (
-      <>
-        <PageHeader title="Edit day" actions={<BackButton onClick={() => setDayId(null)} label="Back to program" />} />
-        <Card>
-          <DayEditor programId={programId} dayId={dayId} onClose={() => setDayId(null)} />
-        </Card>
-      </>
-    );
-  }
 
   if (programId) {
-    return <ProgramDetail programId={programId} onBack={() => setProgramId(null)} onEditDay={setDayId} />;
+    return <ProgramDetail programId={programId} onBack={() => setProgramId(null)} />;
   }
 
   if (view === "programs") {
@@ -551,18 +539,21 @@ function ArchivedPrograms() {
 function ProgramDetail({
   programId,
   onBack,
-  onEditDay,
 }: {
   programId: string;
   onBack: () => void;
-  onEditDay: (id: string) => void;
 }) {
   const { data: program, isLoading } = useProgram(programId);
   const m = useMutateProgram(programId);
-  const startWorkout = useStartWorkout();
   const { confirm, dialog } = useConfirm();
   const [dayName, setDayName] = useState("");
-  const [tab, setTab] = useState<"overview" | "days">("overview");
+  const [tab, setTab] = useState<"overview" | "days">("days");
+  const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
+
+  // Default to the first day once the program loads; keep a valid selection as days change.
+  const days = program?.days ?? [];
+  const selectedDay =
+    days.find((d) => d.id === selectedDayId) ?? (tab === "days" ? days[0] : undefined);
 
   if (isLoading || !program) {
     return (
@@ -644,72 +635,107 @@ function ProgramDetail({
 
       {tab === "overview" && <ProgramOverview programId={program.id} />}
 
-      <div className={cn("flex flex-col gap-3", tab === "days" ? "" : "hidden")}>
-        <SortableList
-          items={program.days}
-          getId={(d) => d.id}
-          onReorder={(dayOrder) => m.updateProgram.mutate({ dayOrder, rowVersion: program.rowVersion })}
-        >
-          {(d, dayHandle) => (
-            <div className="flex items-center justify-between rounded-card border border-border bg-surface px-4 py-3">
-              <span className="flex items-center gap-2 text-[13px]">
-                {dayHandle}
-                <span className="font-semibold">{d.name}</span>
-                <span className="ml-1 text-xs text-foreground-muted">{d.exerciseCount} exercises</span>
-              </span>
-              <div className="flex gap-1">
-                <Button variant="primary" size="sm" onClick={() => startWorkout(d.id)}>
-                  <Play size={13} aria-hidden />
-                  Start
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => onEditDay(d.id)}>
-                  Edit
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={async () => {
-                    if (
-                      await confirm({
-                        title: `Delete day "${d.name}"?`,
-                        message: "Its exercises and set targets go with it. This can't be undone.",
-                        confirmLabel: "Delete day",
-                      })
-                    ) {
-                      m.deleteDay.mutate(d.id);
-                    }
-                  }}
-                >
-                  Delete
-                </Button>
-              </div>
-            </div>
-          )}
-        </SortableList>
-
-        <Card className="gap-2">
-          <CardKicker>New day</CardKicker>
-          <div className="flex gap-2">
-            <Input
-              placeholder="Day name (e.g. Push)"
-              value={dayName}
-              onChange={(e) => setDayName(e.target.value)}
-              className="max-w-[220px]"
-            />
-            <Button
-              variant="secondary"
-              disabled={!dayName.trim()}
-              onClick={() => {
-                m.addDay.mutate({ name: dayName.trim() });
-                setDayName("");
-              }}
+      {tab === "days" && (
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+          {/* Left: the day list. */}
+          <div className="flex shrink-0 flex-col gap-2 lg:w-[220px]">
+            <SortableList
+              items={program.days}
+              getId={(d) => d.id}
+              onReorder={(dayOrder) => m.updateProgram.mutate({ dayOrder, rowVersion: program.rowVersion })}
             >
-              <Plus size={14} aria-hidden />
-              Add day
-            </Button>
+              {(d, dayHandle) => (
+                <div
+                  className={cn(
+                    "flex items-center gap-2 rounded-card border px-3 py-2.5 text-[13px]",
+                    selectedDay?.id === d.id ? "border-primary bg-primary-soft" : "border-border bg-surface",
+                  )}
+                >
+                  {dayHandle}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDayId(d.id)}
+                    className="flex min-w-0 flex-1 flex-col items-start text-left"
+                  >
+                    <span className={cn("truncate font-semibold", selectedDay?.id === d.id && "text-primary-pressed")}>
+                      {d.name}
+                    </span>
+                    <span className="text-xs text-foreground-muted">{d.exerciseCount} exercises</span>
+                  </button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    iconOnly
+                    aria-label={`Delete day ${d.name}`}
+                    onClick={async () => {
+                      if (
+                        await confirm({
+                          title: `Delete day "${d.name}"?`,
+                          message: "Its exercises and set targets go with it. This can't be undone.",
+                          confirmLabel: "Delete day",
+                        })
+                      ) {
+                        if (selectedDayId === d.id) setSelectedDayId(null);
+                        m.deleteDay.mutate(d.id);
+                      }
+                    }}
+                  >
+                    <Trash2 size={14} aria-hidden />
+                  </Button>
+                </div>
+              )}
+            </SortableList>
+
+            <div className="flex gap-1.5">
+              <Input
+                placeholder="New day…"
+                value={dayName}
+                onChange={(e) => setDayName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && dayName.trim()) {
+                    m.addDay.mutate({ name: dayName.trim() }, { onSuccess: (d) => setSelectedDayId(d.id) });
+                    setDayName("");
+                  }
+                }}
+              />
+              <Button
+                variant="secondary"
+                iconOnly
+                aria-label="Add day"
+                disabled={!dayName.trim()}
+                onClick={() => {
+                  m.addDay.mutate({ name: dayName.trim() }, { onSuccess: (d) => setSelectedDayId(d.id) });
+                  setDayName("");
+                }}
+              >
+                <Plus size={15} aria-hidden />
+              </Button>
+            </div>
           </div>
-        </Card>
-      </div>
+
+          {/* Right: the selected day. */}
+          <div className="min-w-0 flex-1">
+            {selectedDay ? (
+              <Card key={selectedDay.id}>
+                <DayEditor
+                  programId={program.id}
+                  dayId={selectedDay.id}
+                  onSaved={() => {}}
+                  onClose={() => setSelectedDayId(null)}
+                />
+              </Card>
+            ) : (
+              <Card>
+                <p className="m-0 text-sm text-foreground-muted">
+                  {days.length === 0
+                    ? "Add your first day on the left — Push, Pull, Legs, whatever you like."
+                    : "Pick a day on the left to edit its exercises."}
+                </p>
+              </Card>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }
