@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { ChevronLeft, Plus, Play, Settings2, Trash2, TriangleAlert } from "lucide-react";
 import { ApiError } from "../../lib/api";
 import { cn } from "../../lib/cn";
-import { Button, Card, CardKicker, Checkbox, Input, PageHeader, Skeleton } from "../../components/ui";
+import { Button, Card, CardKicker, CardTitle, Checkbox, Input, PageHeader, Skeleton } from "../../components/ui";
 import { SortableList } from "./SortableList";
 import { DayEditor } from "./DayEditor";
 import { ProgramOverview } from "./ProgramOverview";
@@ -322,6 +322,11 @@ function ProgramList({ onOpen, onBack }: { onOpen: (id: string) => void; onBack?
   const [splitLabel, setSplitLabel] = useState("");
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [filter, setFilter] = useState<"all" | "active" | "drafts">("all");
+
+  const shown = (programs ?? []).filter(
+    (p) => filter === "all" || (filter === "active" ? p.isActive : !p.isActive),
+  );
 
   const toggle = (id: string) =>
     setSelected((s) => {
@@ -415,76 +420,110 @@ function ProgramList({ onOpen, onBack }: { onOpen: (id: string) => void; onBack?
 
       <InlineError error={m.remove.error ?? m.clone.error} />
 
+      {!selecting && programs && programs.length > 0 && (
+        <div className="mb-3 flex gap-1.5">
+          {(["all", "active", "drafts"] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              aria-pressed={filter === f}
+              onClick={() => setFilter(f)}
+              className={cn(
+                "rounded-pill border px-3 py-1 text-[12px] font-medium capitalize",
+                filter === f
+                  ? "border-primary bg-primary-soft text-primary-pressed"
+                  : "border-border text-foreground-muted hover:border-border-strong",
+              )}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+      )}
+
       {isLoading ? (
-        <div className="flex flex-col gap-2">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 3 }, (_, i) => (
-            <div key={i} className="flex items-center justify-between rounded-card border border-border bg-surface px-4 py-3">
-              <Skeleton className="h-4 w-40" />
-              <Skeleton className="h-4 w-12" />
-            </div>
+            <Card key={i} className="gap-3">
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-3 w-28" />
+              <Skeleton className="h-9 w-full" />
+            </Card>
           ))}
         </div>
       ) : programs && programs.length > 0 ? (
-        <div className="flex flex-col gap-2">
-          {programs.map((p) => (
-            <div
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {shown.map((p) => (
+            <Card
               key={p.id}
               className={cn(
-                "flex items-center gap-3 rounded-card border bg-surface px-4 py-3",
-                selecting && selected.has(p.id) ? "border-primary bg-primary-soft" : "border-border",
+                "gap-2",
+                selecting && selected.has(p.id) && "border-primary ring-1 ring-primary/30",
               )}
             >
-              {selecting && (
-                <Checkbox
-                  label=""
-                  checked={selected.has(p.id)}
-                  onChange={() => toggle(p.id)}
-                  aria-label={`Select ${p.name}`}
-                />
-              )}
-              <button
-                onClick={() => (selecting ? toggle(p.id) : onOpen(p.id))}
-                className="flex flex-1 items-center justify-between text-left"
-              >
-                <span>
-                  <span className="font-bold">{p.name}</span>
-                  {p.splitLabel ? <span className="ml-2 text-xs text-foreground-muted">{p.splitLabel}</span> : null}
-                  <span className="ml-2 text-xs text-foreground-muted">
-                    {p.dayCount} days · {p.exerciseCount} exercises
-                  </span>
-                </span>
-                {p.isActive ? (
-                  <span className="rounded-full bg-success-soft px-2 py-0.5 text-xs font-semibold text-success">Active</span>
-                ) : (
-                  <span className="text-xs text-foreground-muted">Draft</span>
+              <div className="flex items-start justify-between gap-2">
+                {selecting && (
+                  <Checkbox
+                    label=""
+                    checked={selected.has(p.id)}
+                    onChange={() => toggle(p.id)}
+                    aria-label={`Select ${p.name}`}
+                  />
                 )}
-              </button>
+                <button
+                  onClick={() => (selecting ? toggle(p.id) : onOpen(p.id))}
+                  className="min-w-0 flex-1 text-left"
+                >
+                  <CardTitle>{p.name}</CardTitle>
+                  {p.splitLabel ? (
+                    <div className="text-xs text-foreground-muted">{p.splitLabel}</div>
+                  ) : null}
+                </button>
+                {p.isActive ? (
+                  <span className="shrink-0 rounded-pill bg-success-soft px-2 py-0.5 text-xs font-semibold text-success">
+                    Active
+                  </span>
+                ) : (
+                  <span className="shrink-0 text-xs text-foreground-muted">Draft</span>
+                )}
+              </div>
+
+              <div className="text-xs text-foreground-muted">
+                {p.dayCount} {p.dayCount === 1 ? "day" : "days"} · {p.exerciseCount}{" "}
+                {p.exerciseCount === 1 ? "exercise" : "exercises"}
+              </div>
+
               {!selecting && (
-                <div className="flex gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => m.clone.mutate(p.id)} disabled={busy}>
-                    Duplicate
+                <>
+                  <Button variant="primary" block className="mt-1" onClick={() => onOpen(p.id)}>
+                    Open
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={busy}
-                    onClick={async () => {
-                      if (
-                        await confirm({
-                          title: `Delete "${p.name}"?`,
-                          message: "This can't be undone. Workouts you already logged from it are kept.",
-                          confirmLabel: "Delete",
-                        })
-                      ) {
-                        m.remove.mutate(p.id);
-                      }
-                    }}
-                  >
-                    Delete
-                  </Button>
-                </div>
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => m.clone.mutate(p.id)} disabled={busy}>
+                      Duplicate
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={busy}
+                      onClick={async () => {
+                        if (
+                          await confirm({
+                            title: `Delete "${p.name}"?`,
+                            message: "This can't be undone. Workouts you already logged from it are kept.",
+                            confirmLabel: "Delete",
+                          })
+                        ) {
+                          m.remove.mutate(p.id);
+                        }
+                      }}
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                </>
               )}
-            </div>
+            </Card>
           ))}
         </div>
       ) : (
