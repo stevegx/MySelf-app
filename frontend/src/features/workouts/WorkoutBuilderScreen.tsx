@@ -74,6 +74,7 @@ function DayCard({
   exerciseCount,
   sessions,
   lastPerformedOn,
+  upNext,
   onStart,
   onEdit,
 }: {
@@ -81,15 +82,24 @@ function DayCard({
   exerciseCount: number;
   sessions: number;
   lastPerformedOn: string | null;
+  /** This day is next in the program's rotation — the one to train today. */
+  upNext: boolean;
   onStart: () => void;
   onEdit: () => void;
 }) {
   const last = relativeDay(lastPerformedOn);
   return (
-    <Card className="gap-2">
+    <Card className={cn("gap-2", upNext && "border-primary ring-1 ring-primary/30")}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="font-bold">{name}</div>
+          <div className="flex items-center gap-2">
+            <span className="font-bold">{name}</span>
+            {upNext && (
+              <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary-pressed">
+                Up next
+              </span>
+            )}
+          </div>
           <div className="text-xs text-foreground-muted">
             {exerciseCount} {exerciseCount === 1 ? "exercise" : "exercises"}
           </div>
@@ -136,10 +146,31 @@ function WorkoutsHome({
 
   const statByDay = new Map((stats?.perDay ?? []).map((d) => [d.dayId, d]));
 
+  // Rotation "up next": the day that follows whichever was trained most recently,
+  // wrapping around; before anything's logged, the first day. Reuses the day
+  // SortOrder the builder already maintains — no fixed weekday schedule.
+  const orderedDays = [...(detail?.days ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
+  const upNextDayId = (() => {
+    if (orderedDays.length === 0) return null;
+    let latest: { id: string; on: string } | null = null;
+    for (const d of orderedDays) {
+      const on = statByDay.get(d.id)?.lastPerformedOn;
+      if (on && (!latest || on > latest.on)) latest = { id: d.id, on };
+    }
+    if (!latest) return orderedDays[0].id;
+    const i = orderedDays.findIndex((d) => d.id === latest!.id);
+    return orderedDays[(i + 1) % orderedDays.length].id;
+  })();
+  const upNextName = orderedDays.find((d) => d.id === upNextDayId)?.name ?? null;
+
   const header = (
     <PageHeader
       title="Train"
-      subtitle={active ? `${active.name} · active program` : "No active program yet"}
+      subtitle={
+        active
+          ? `${active.name} · active program${upNextName ? ` · up next: ${upNextName}` : ""}`
+          : "No active program yet"
+      }
       actions={
         <>
           <Button variant="secondary" onClick={() => startWorkout(null)}>
@@ -189,13 +220,11 @@ function WorkoutsHome({
     );
   }
 
-  const days = detail?.days ?? [];
-
   return (
     <>
       {header}
 
-      {days.length === 0 ? (
+      {orderedDays.length === 0 ? (
         <Card className="gap-3">
           <p className="m-0 text-sm text-foreground-muted">
             <strong>{active.name}</strong> has no days yet. Add one to start training from it.
@@ -206,7 +235,7 @@ function WorkoutsHome({
         </Card>
       ) : (
         <div className="flex flex-col gap-2">
-          {days.map((d) => {
+          {orderedDays.map((d) => {
             const st = statByDay.get(d.id);
             return (
               <DayCard
@@ -215,6 +244,7 @@ function WorkoutsHome({
                 exerciseCount={d.exerciseCount}
                 sessions={st?.sessions ?? 0}
                 lastPerformedOn={st?.lastPerformedOn ?? null}
+                upNext={d.id === upNextDayId}
                 onStart={() => startWorkout(d.id)}
                 onEdit={() => onOpenProgram(active.id)}
               />

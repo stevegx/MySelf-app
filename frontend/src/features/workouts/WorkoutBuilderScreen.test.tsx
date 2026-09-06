@@ -114,6 +114,53 @@ describe("WorkoutBuilderScreen — Train home", () => {
     });
   });
 
+  it("marks the next day in the rotation after the one trained most recently", async () => {
+    const programs = [
+      { id: "p1", name: "PPL", splitLabel: null, isActive: true, dayCount: 3, exerciseCount: 12, createdAt: "2026-08-01T00:00:00Z" },
+    ];
+    const detail = {
+      id: "p1", name: "PPL", splitLabel: null, isActive: true, createdAt: "2026-08-01T00:00:00Z", rowVersion: 1,
+      days: [
+        { id: "d1", name: "Push", sortOrder: 0, exerciseCount: 4 },
+        { id: "d2", name: "Pull", sortOrder: 1, exerciseCount: 4 },
+        { id: "d3", name: "Legs", sortOrder: 2, exerciseCount: 4 },
+      ],
+    };
+    const stats = {
+      totalSessions: 3, firstPerformedOn: "2026-08-20", lastPerformedOn: "2026-09-04",
+      sessionsThisWeek: 1, sessionsThisMonth: 3, weeklyAverage: 1, totalVolumeKg: 3000,
+      avgDurationSeconds: 3000, completedSets: 20, skippedSets: 0, skippedSetRate: 0,
+      perDay: [
+        { dayId: "d1", dayName: "Push", sessions: 1, lastPerformedOn: "2026-08-28" },
+        { dayId: "d2", dayName: "Pull", sessions: 1, lastPerformedOn: "2026-09-04" },
+        { dayId: "d3", dayName: "Legs", sessions: 1, lastPerformedOn: "2026-08-21" },
+      ],
+      personalRecords: [], muscleWeeklySets: [],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>((input) => {
+        const url = typeof input === "string" ? input : input.toString();
+        const json = (d: unknown, s = 200) =>
+          Promise.resolve(new Response(JSON.stringify(d), { status: s, headers: { "content-type": "application/json" } }));
+        if (url.includes("/auth/refresh")) return json({ accessToken: "t", user: { id: "u1", username: "demo", email: "d@e.com" } });
+        if (url.includes("/api/v1/programs/p1/stats")) return json(stats);
+        if (url.includes("/api/v1/programs/p1")) return json(detail);
+        if (url.endsWith("/api/v1/programs")) return json(programs);
+        return Promise.resolve(new Response(null, { status: 404 }));
+      }),
+    );
+
+    renderScreen();
+
+    // Pull was trained most recently -> Legs is up next.
+    const legsCard = (await screen.findByText("Legs")).closest("div")!.parentElement!;
+    expect(within(legsCard).getByText("Up next")).toBeInTheDocument();
+    expect(screen.getByText(/up next: Legs/i)).toBeInTheDocument();
+    // Only one day is flagged.
+    expect(screen.getAllByText("Up next")).toHaveLength(1);
+  });
+
   it("prompts to pick an active program when none is active", async () => {
     installFetch(); // empty program list
     renderScreen();
