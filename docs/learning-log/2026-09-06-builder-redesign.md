@@ -94,24 +94,58 @@ The matching day's `DayCard` gets an "Up next" pill + a primary ring, and
 the header subtitle reads `PPL · active program · up next: Legs`. Reuses the
 `SortOrder` the builder already maintains — no new field, no backend.
 
+## Follow-up — 7 muscle groups for day focus (`f2b97b9`)
+
+The focus chip row in `DayEditor` listed all **15 wger muscles** — Brachialis,
+Serratus anterior, Obliquus externus abdominis, Soleus and friends. Fine for
+*stats* granularity, far too much for *picking* what a day trains. Collapsed
+to seven: Chest / Back / Shoulders / Biceps / Triceps / Legs / Core.
+
+Key design call: this is a **UI-only** concern, so it does **not** touch the
+domain. The catalogue genuinely has 15 muscles; `WorkoutDay.FocusMuscleIds`
+still stores *leaf* muscle ids; the stats endpoints still report per-muscle.
+The mapping is a frontend constant, `muscleGroups.ts`:
+
+- `MUSCLE_GROUPS` — 7 `{ key, label, memberNames[] }`. A unit test asserts the
+  member names partition the 15 exactly (no muscle dropped or double-counted).
+- `toggleGroup(key, focusIds, muscles)` — picking "Legs" writes all five of
+  its member ids at once; toggling off removes the whole set. Symmetric, so a
+  round-trip leaves `FocusMuscleIds` (and the dirty `fingerprint`) unchanged.
+- `activeGroupKeys(focusIds, muscles)` — a chip reads as *on* when **any** one
+  of its members is in the focus set (forgiving of a partially-populated day).
+- The `ExercisePicker` filter is unchanged — it still matches on leaf muscle
+  *names* (`focusMuscleNames`, expanded from the ids). Only the "Showing
+  exercises for …" note changed: it now shows the group labels
+  (`focusLabels`) instead of a long list of leaf names.
+
+New concept worth noting from a JS background: `as const` on the
+`MUSCLE_GROUPS` array makes `memberNames` a `readonly ["Chest", ...]` tuple of
+string *literals*, so `new Set(memberNames)` infers `Set<"Chest" | ...>` and
+`set.has(someString)` won't compile. Fix: `new Set<string>(memberNames)`.
+
 ## Verification
 
 - `npm run build` + `npm run lint` clean.
-- `npx vitest run` — 72 pass. Reworked 4 `DayEditor` tests (expand the row
-  before asserting on set inputs; picker button renamed) and 3
-  `WorkoutBuilderScreen` tests (default tab is now Days; day delete is an
-  icon button; empty-days placeholder text). New test for the rotation pick.
-- Browser: opened `PPL x2` → Days tab shows the two columns; clicking the
-  `Bench Press` row expands/collapses the set editor; **Add exercise** slides
-  the picker in from the right with the focus filter working; Overview tab
-  still renders.
+- `npx vitest run` — **80 pass** (72 after slices A–D, +8 `muscleGroups`).
+  Reworked 4 `DayEditor` tests (expand the row before asserting on set inputs;
+  picker button renamed) and 3 `WorkoutBuilderScreen` tests (default tab is
+  now Days; day delete is an icon button; empty-days placeholder text). New
+  tests for the rotation pick and the group mapping; the "sets a day focus"
+  DayEditor test now picks the **Legs** group and checks it expands to Quads.
+- Browser (slices A–C, before the muscle-groups follow-up): opened `PPL x2` →
+  Days tab shows the two columns; the `Bench Press` row expands/collapses the
+  set editor; **Add exercise** slides the picker in from the right with the
+  focus filter working; Overview tab still renders. The 7-group chip change
+  was not browser-checked — the dev servers were down at commit time — but
+  it's exercised end-to-end through the real `DayEditor` in the focus test.
 
 ## New/changed files
 
 | File | What |
 |---|---|
 | `WorkoutBuilderScreen.tsx` | two-column Days tab; removed `dayId` plumbing; rotation `upNext` |
-| `DayEditor.tsx` | collapsible rows, `summaryTags()`, `onSaved`, drawer picker, dashed add button |
-| `ExercisePicker.tsx` | `drawer` variant (right slide-in + backdrop) |
+| `DayEditor.tsx` | collapsible rows, `summaryTags()`, `onSaved`, drawer picker, dashed add button; 7-group focus chips |
+| `ExercisePicker.tsx` | `drawer` variant (right slide-in + backdrop); `focusLabels` for the note |
 | `ExerciseTrend.tsx` | **new** — inline e1RM sparkline |
-| `*.test.tsx` | updated for the new structure; new rotation test |
+| `muscleGroups.ts` | **new** — 15-muscle → 7-group map + toggle/expand helpers |
+| `*.test.tsx` / `muscleGroups.test.ts` | updated for the new structure; rotation + group-mapping tests |
