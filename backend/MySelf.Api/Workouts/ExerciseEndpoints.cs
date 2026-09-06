@@ -1,4 +1,6 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using MySelf.Domain.Exercises;
 using MySelf.Infrastructure.Persistence;
 
 namespace MySelf.Api.Workouts;
@@ -10,6 +12,16 @@ namespace MySelf.Api.Workouts;
 public static class ExerciseEndpoints
 {
     private const int MaxPageSize = 50;
+
+    /// <summary>One shared EF projection so search and get-by-id stay in sync.</summary>
+    private static readonly Expression<Func<Exercise, ExerciseListItem>> ToListItem = e => new ExerciseListItem(
+        e.Id,
+        e.Name,
+        e.Category.Name,
+        e.DefaultTrackingMode.ToString(),
+        e.Muscles.Where(m => m.Role == MuscleRole.Primary).OrderBy(m => m.Muscle.Name).Select(m => m.Muscle.Name).ToList(),
+        e.Muscles.Where(m => m.Role == MuscleRole.Secondary).OrderBy(m => m.Muscle.Name).Select(m => m.Muscle.Name).ToList(),
+        e.Equipment.OrderBy(x => x.Equipment.Name).Select(x => x.Equipment.Name).ToList());
 
     public static IEndpointRouteBuilder MapExerciseEndpoints(this IEndpointRouteBuilder app)
     {
@@ -42,7 +54,7 @@ public static class ExerciseEndpoints
                 title: "Validation failed");
         }
 
-        var query = db.Exercises.AsNoTracking().Include(e => e.Category).AsQueryable();
+        var query = db.Exercises.AsNoTracking().AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(q))
         {
@@ -63,7 +75,7 @@ public static class ExerciseEndpoints
             .OrderBy(e => e.Name)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(e => new ExerciseListItem(e.Id, e.Name, e.Category.Name, e.DefaultTrackingMode.ToString()))
+            .Select(ToListItem)
             .ToListAsync(ct);
 
         return Results.Ok(new ExerciseSearchResult(items, page, pageSize, total));
@@ -73,9 +85,8 @@ public static class ExerciseEndpoints
     {
         var exercise = await db.Exercises
             .AsNoTracking()
-            .Include(e => e.Category)
             .Where(e => e.Id == id)
-            .Select(e => new ExerciseListItem(e.Id, e.Name, e.Category.Name, e.DefaultTrackingMode.ToString()))
+            .Select(ToListItem)
             .FirstOrDefaultAsync(ct);
 
         return exercise is null ? Results.NotFound() : Results.Ok(exercise);

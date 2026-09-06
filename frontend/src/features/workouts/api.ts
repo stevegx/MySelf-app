@@ -25,6 +25,9 @@ export type ExerciseListItem = {
   name: string;
   category: string;
   defaultTrackingMode: string;
+  primaryMuscles: string[];
+  secondaryMuscles: string[];
+  equipment: string[];
 };
 
 export type ExerciseSearchResult = {

@@ -40,6 +40,41 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
     }
 
     [Fact]
+    public async Task Exercise_search_returns_target_muscles_and_equipment()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var res = await client.GetFromJsonAsync<JsonElement>("/api/v1/exercises?q=bench%20press&pageSize=25");
+            var items = res.GetProperty("items").EnumerateArray().ToList();
+            Assert.NotEmpty(items);
+
+            // Every returned exercise carries the three lists (possibly empty).
+            Assert.All(items, e =>
+            {
+                Assert.Equal(JsonValueKind.Array, e.GetProperty("primaryMuscles").ValueKind);
+                Assert.Equal(JsonValueKind.Array, e.GetProperty("secondaryMuscles").ValueKind);
+                Assert.Equal(JsonValueKind.Array, e.GetProperty("equipment").ValueKind);
+            });
+
+            // "Bench Press" (the plain barbell one) is chest-primary in the seed.
+            var bench = items.First(e => e.GetProperty("name").GetString() == "Bench Press");
+            var primary = bench.GetProperty("primaryMuscles").EnumerateArray().Select(m => m.GetString()).ToList();
+            var secondary = bench.GetProperty("secondaryMuscles").EnumerateArray().Select(m => m.GetString()).ToList();
+            Assert.Contains("Chest", primary);
+            Assert.Contains("Triceps", secondary);
+
+            // Same shape from get-by-id.
+            var one = await client.GetFromJsonAsync<JsonElement>($"/api/v1/exercises/{bench.GetProperty("id").GetGuid()}");
+            Assert.Contains("Chest", one.GetProperty("primaryMuscles").EnumerateArray().Select(m => m.GetString()));
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
     public async Task Create_add_day_and_read_the_program_tree()
     {
         var (client, email) = await factory.RegisterAndAuthenticateAsync();

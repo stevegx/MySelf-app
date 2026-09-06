@@ -13,7 +13,7 @@ function installFetch() {
       Promise.resolve(new Response(JSON.stringify(b), { status: 200, headers: { "content-type": "application/json" } }));
     if (url.includes("/auth/refresh")) return json(AUTH);
     if (url.includes("/api/v1/exercises?")) {
-      return json({ items: [{ id: "x1", name: "Back Squat", category: "Legs", defaultTrackingMode: "WeightAndReps" }], page: 1, pageSize: 25, total: 1 });
+      return json({ items: [{ id: "x1", name: "Back Squat", category: "Legs", defaultTrackingMode: "WeightAndReps", primaryMuscles: ["Quads"], secondaryMuscles: [], equipment: ["Barbell"] }], page: 1, pageSize: 25, total: 1 });
     }
     if (url.includes("/api/v1/exercises/x1/history")) {
       return json({

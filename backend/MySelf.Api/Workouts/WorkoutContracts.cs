@@ -2,7 +2,14 @@ namespace MySelf.Api.Workouts;
 
 // --- exercise catalogue ---
 
-public sealed record ExerciseListItem(Guid Id, string Name, string Category, string DefaultTrackingMode);
+public sealed record ExerciseListItem(
+    Guid Id,
+    string Name,
+    string Category,
+    string DefaultTrackingMode,
+    IReadOnlyList<string> PrimaryMuscles,
+    IReadOnlyList<string> SecondaryMuscles,
+    IReadOnlyList<string> Equipment);
 
 public sealed record ExerciseSearchResult(IReadOnlyList<ExerciseListItem> Items, int Page, int PageSize, int Total);
 

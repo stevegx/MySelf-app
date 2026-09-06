@@ -44,11 +44,20 @@ export function ExercisePicker({
                   onClick={() => onPick(ex)}
                   className="flex w-full items-center justify-between gap-3 rounded-control border border-border bg-surface px-3 py-2 text-left text-[13px] hover:border-border-strong disabled:opacity-50"
                 >
-                  <span>
+                  <span className="min-w-0">
                     <span className="font-semibold">{ex.name}</span>
                     <span className="ml-2 text-xs text-foreground-muted">{ex.category}</span>
+                    {((ex.primaryMuscles?.length ?? 0) > 0 || (ex.equipment?.length ?? 0) > 0) && (
+                      <span className="mt-0.5 block truncate text-[11px] text-foreground-subtle">
+                        {(ex.primaryMuscles ?? []).join(", ")}
+                        {(ex.secondaryMuscles?.length ?? 0) > 0 && (
+                          <span className="text-foreground-subtle"> · +{ex.secondaryMuscles.join(", ")}</span>
+                        )}
+                        {(ex.equipment?.length ?? 0) > 0 && <span> · {ex.equipment.join(", ")}</span>}
+                      </span>
+                    )}
                   </span>
-                  <span className="text-xs text-foreground-muted">{added ? "Added" : "Add"}</span>
+                  <span className="shrink-0 text-xs text-foreground-muted">{added ? "Added" : "Add"}</span>
                 </button>
               </li>
             );
