@@ -1,42 +1,52 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { Button, Input } from "../../components/ui";
+import { cn } from "../../lib/cn";
+import { MUSCLE_GROUPS, expandGroupsToMuscleNames, type MuscleGroupKey } from "./muscleGroups";
 import { useExerciseSearch } from "./api";
 import type { ExerciseListItem } from "./api";
 
 /**
  * Search + pick one catalogue exercise. Renders inline (`drawer` false) or as a right-side
  * slide-in drawer with a backdrop (`drawer` true — the program builder uses this).
+ *
+ * A pill row filters the list by muscle group: "All" plus the seven groups. When the day
+ * has a focus, those groups start selected; the user can tap "All" or other groups freely.
  */
 export function ExercisePicker({
   onPick,
   onClose,
   existingIds,
-  focusMuscleNames,
-  focusLabels,
+  focusGroupKeys,
   drawer = false,
 }: {
   onPick: (exercise: ExerciseListItem) => void;
   onClose: () => void;
   existingIds: Set<string>;
-  /** When set, exercises whose primary muscle is in this list are shown first / on their own. */
-  focusMuscleNames?: string[];
-  /** Human-friendly names for the focus note (e.g. the 7 muscle groups); falls back to the raw muscle names. */
-  focusLabels?: string[];
+  /** Muscle groups the day focuses on — used to pre-select the filter pills. */
+  focusGroupKeys?: MuscleGroupKey[];
   drawer?: boolean;
 }) {
   const [q, setQ] = useState("");
-  const [showAll, setShowAll] = useState(false);
+  const [selected, setSelected] = useState<Set<MuscleGroupKey>>(() => new Set(focusGroupKeys ?? []));
   const { data, isLoading } = useExerciseSearch(q);
 
-  const focus = focusMuscleNames ?? [];
-  const inFocus = (ex: ExerciseListItem) =>
-    focus.length === 0 || (ex.primaryMuscles ?? []).some((m) => focus.includes(m));
+  const toggle = (key: MuscleGroupKey) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  const activeNames =
+    selected.size === 0 ? null : new Set(expandGroupsToMuscleNames([...selected]));
 
   const items = data?.items ?? [];
-  const matches = focus.length === 0 ? items : items.filter(inFocus);
-  const shown = focus.length === 0 || showAll ? items : matches;
-  const hiddenCount = items.length - matches.length;
+  const shown =
+    activeNames === null
+      ? items
+      : items.filter((ex) => (ex.primaryMuscles ?? []).some((m) => activeNames.has(m)));
 
   const body = (
     <>
@@ -63,21 +73,16 @@ export function ExercisePicker({
         )}
       </div>
 
-      {focus.length > 0 && (
-        <p className="m-0 mb-1 px-1 text-[11px] text-foreground-muted">
-          Showing exercises for {(focusLabels && focusLabels.length > 0 ? focusLabels : focus).join(", ")}.{" "}
-          {hiddenCount > 0 && (
-            <button type="button" className="text-primary underline" onClick={() => setShowAll(true)}>
-              Show all ({hiddenCount} more)
-            </button>
-          )}
-          {showAll && (
-            <button type="button" className="text-primary underline" onClick={() => setShowAll(false)}>
-              Show only focus
-            </button>
-          )}
-        </p>
-      )}
+      <div className="flex flex-wrap gap-1.5">
+        <FilterPill active={selected.size === 0} onClick={() => setSelected(new Set())}>
+          All
+        </FilterPill>
+        {MUSCLE_GROUPS.map((g) => (
+          <FilterPill key={g.key} active={selected.has(g.key)} onClick={() => toggle(g.key)}>
+            {g.label}
+          </FilterPill>
+        ))}
+      </div>
 
       {isLoading ? (
         <p className="m-0 px-1 py-2 text-xs text-foreground-muted">Searching…</p>
@@ -91,7 +96,6 @@ export function ExercisePicker({
         >
           {shown.map((ex) => {
             const added = existingIds.has(ex.id);
-            const off = focus.length > 0 && !inFocus(ex);
             return (
               <li key={ex.id}>
                 <button
@@ -103,7 +107,6 @@ export function ExercisePicker({
                   <span className="min-w-0 flex-1">
                     <span className="font-semibold">{ex.name}</span>
                     <span className="ml-2 text-xs text-foreground-muted">{ex.category}</span>
-                    {off && <span className="ml-2 text-[11px] text-info">off focus</span>}
                     {((ex.primaryMuscles?.length ?? 0) > 0 || (ex.equipment?.length ?? 0) > 0) && (
                       <span className="mt-0.5 block truncate text-[11px] text-foreground-subtle">
                         {(ex.primaryMuscles ?? []).join(", ")}
@@ -121,16 +124,7 @@ export function ExercisePicker({
           })}
           {data && shown.length === 0 && (
             <li className="px-1 py-2 text-xs text-foreground-muted">
-              {focus.length > 0 && !showAll ? (
-                <>
-                  No focus matches.{" "}
-                  <button type="button" className="text-primary underline" onClick={() => setShowAll(true)}>
-                    Show all
-                  </button>
-                </>
-              ) : (
-                "No matches."
-              )}
+              {activeNames === null ? "No matches." : "No matches in these groups."}
             </li>
           )}
         </ul>
@@ -157,5 +151,31 @@ export function ExercisePicker({
         {body}
       </div>
     </div>
+  );
+}
+
+function FilterPill({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "rounded-pill border px-2.5 py-1 text-[12px] font-medium",
+        active
+          ? "border-primary bg-primary-soft text-primary-pressed"
+          : "border-border text-foreground-muted hover:border-border-strong",
+      )}
+    >
+      {children}
+    </button>
   );
 }

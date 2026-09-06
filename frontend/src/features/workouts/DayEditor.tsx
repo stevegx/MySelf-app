@@ -8,13 +8,7 @@ import { useMe } from "../auth/useMe";
 import { ExercisePicker } from "./ExercisePicker";
 import { ExerciseTrend } from "./ExerciseTrend";
 import { SortableList } from "./SortableList";
-import {
-  MUSCLE_GROUPS,
-  activeGroupKeys,
-  groupLabels,
-  toggleGroup,
-  type MuscleGroupKey,
-} from "./muscleGroups";
+import { MUSCLE_GROUPS, activeGroupKeys, toggleGroup, type MuscleGroupKey } from "./muscleGroups";
 import { useBulkExercises, useMuscles, useProgram, useUpdateDay, useUpdatePreferences, useDay } from "./api";
 import type { DayDetail, ExerciseListItem, UpdateDayBody } from "./api";
 
@@ -698,8 +692,7 @@ export function DayEditor({
           onPick={addExercise}
           onClose={() => setPicking(false)}
           existingIds={new Set(state.exercises.map((e) => e.exerciseId))}
-          focusMuscleNames={focusNames}
-          focusLabels={groupLabels(activeGroups)}
+          focusGroupKeys={activeGroups}
         />
       )}
     </div>

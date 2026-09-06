@@ -167,14 +167,16 @@ describe("DayEditor", () => {
     // Pick the "Legs" group as this day's focus (it expands to Quads + co.).
     await user.click(await screen.findByRole("button", { name: "Legs", pressed: false }));
 
-    // Open the picker — it should say it's filtered, and offer to show the rest.
+    // Open the picker — it opens with the day's focus group pre-selected.
     await user.click(screen.getByRole("button", { name: /add exercise/i }));
-    expect(await screen.findByText(/Showing exercises for Legs/)).toBeInTheDocument();
-    expect(screen.getByText(/Show all \(1 more\)/)).toBeInTheDocument();
+    const picker = await screen.findByRole("dialog", { name: "Add exercise" });
+    expect(within(picker).getByRole("button", { name: "Legs", pressed: true })).toBeInTheDocument();
+    // The off-focus exercise is filtered out until we widen the filter.
+    expect(within(picker).queryByRole("button", { name: /Overhead Press/ })).not.toBeInTheDocument();
 
-    // Reveal all, then add the off-focus one -> inline note.
-    await user.click(screen.getByRole("button", { name: /Show all/ }));
-    await user.click(await screen.findByRole("button", { name: /Overhead Press/ }));
+    // Switch to "All", then add the off-focus one -> inline note in the editor.
+    await user.click(within(picker).getByRole("button", { name: "All" }));
+    await user.click(await within(picker).findByRole("button", { name: /Overhead Press/ }));
     expect(await screen.findByText(/outside this day's focus/i)).toBeInTheDocument();
 
     // Focus id rides along on save.
