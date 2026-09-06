@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
-import { ChevronLeft, Plus, Play } from "lucide-react";
+import { ChevronLeft, Plus, Play, Settings2, TriangleAlert } from "lucide-react";
 import { ApiError } from "../../lib/api";
 import { cn } from "../../lib/cn";
 import { Button, Card, CardKicker, Checkbox, Input, PageHeader, Skeleton } from "../../components/ui";
@@ -14,6 +14,7 @@ import {
   useMutateProgram,
   useProgram,
   usePrograms,
+  useProgramStats,
   useStartSession,
 } from "./api";
 
@@ -34,6 +35,9 @@ function useStartWorkout() {
 }
 
 export function WorkoutBuilderScreen() {
+  // "home" = the training view (active program's days, Start buttons); "programs" = the
+  // manage/build surface. A selected programId opens its detail regardless of view.
+  const [view, setView] = useState<"home" | "programs">("home");
   const [programId, setProgramId] = useState<string | null>(null);
   const [dayId, setDayId] = useState<string | null>(null);
 
@@ -52,7 +56,196 @@ export function WorkoutBuilderScreen() {
     return <ProgramDetail programId={programId} onBack={() => setProgramId(null)} onEditDay={setDayId} />;
   }
 
-  return <ProgramList onOpen={setProgramId} />;
+  if (view === "programs") {
+    return <ProgramList onOpen={setProgramId} onBack={() => setView("home")} />;
+  }
+
+  return <WorkoutsHome onManage={() => setView("programs")} onOpenProgram={setProgramId} />;
+}
+
+// ---------------------------------------------------------------------------
+// Workouts home — the training view. Leads with the active program's days so
+// "where do I start" is answered by the first thing on screen.
+// ---------------------------------------------------------------------------
+
+function relativeDay(iso: string | null): { label: string; stale: boolean } {
+  if (!iso) return { label: "Not done yet", stale: true };
+  const then = new Date(`${iso}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const days = Math.round((today.getTime() - then.getTime()) / 86_400_000);
+  if (days <= 0) return { label: "Done today", stale: false };
+  if (days === 1) return { label: "Yesterday", stale: false };
+  if (days < 7) return { label: `${days} days ago`, stale: false };
+  if (days < 14) return { label: "Last week", stale: true };
+  return { label: then.toLocaleDateString(undefined, { day: "numeric", month: "short" }), stale: true };
+}
+
+function DayCard({
+  name,
+  exerciseCount,
+  sessions,
+  lastPerformedOn,
+  onStart,
+  onEdit,
+}: {
+  name: string;
+  exerciseCount: number;
+  sessions: number;
+  lastPerformedOn: string | null;
+  onStart: () => void;
+  onEdit: () => void;
+}) {
+  const last = relativeDay(lastPerformedOn);
+  return (
+    <Card className="gap-2">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="font-bold">{name}</div>
+          <div className="text-xs text-foreground-muted">
+            {exerciseCount} {exerciseCount === 1 ? "exercise" : "exercises"}
+          </div>
+        </div>
+        <Button variant="primary" size="sm" onClick={onStart} disabled={exerciseCount === 0}>
+          <Play size={13} aria-hidden />
+          Start
+        </Button>
+      </div>
+      <div className="flex items-center gap-2 text-[12px] text-foreground-muted">
+        <span className={cn("inline-flex items-center gap-1", last.stale && "text-warning")}>
+          {last.stale && <TriangleAlert size={12} aria-hidden />}
+          {last.label}
+        </span>
+        <span aria-hidden>·</span>
+        <span>
+          done {sessions}
+          {"×"} this block
+        </span>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="ml-auto text-primary underline underline-offset-2 hover:no-underline"
+        >
+          Edit
+        </button>
+      </div>
+    </Card>
+  );
+}
+
+function WorkoutsHome({
+  onManage,
+  onOpenProgram,
+}: {
+  onManage: () => void;
+  onOpenProgram: (id: string) => void;
+}) {
+  const { data: programs, isLoading } = usePrograms();
+  const startWorkout = useStartWorkout();
+  const active = programs?.find((p) => p.isActive) ?? null;
+  const { data: detail } = useProgram(active?.id ?? null);
+  const { data: stats } = useProgramStats(active?.id ?? null);
+
+  const statByDay = new Map((stats?.perDay ?? []).map((d) => [d.dayId, d]));
+
+  const header = (
+    <PageHeader
+      title="Train"
+      subtitle={active ? `${active.name} · active program` : "No active program yet"}
+      actions={
+        <>
+          <Button variant="secondary" onClick={() => startWorkout(null)}>
+            <Play size={14} aria-hidden />
+            Ad-hoc workout
+          </Button>
+          <Button variant="ghost" onClick={onManage}>
+            <Settings2 size={15} aria-hidden />
+            Manage programs
+          </Button>
+        </>
+      }
+    />
+  );
+
+  if (isLoading) {
+    return (
+      <>
+        {header}
+        <div className="flex flex-col gap-2">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="rounded-card border border-border bg-surface px-4 py-4">
+              <Skeleton className="mb-2 h-4 w-32" />
+              <Skeleton className="h-3 w-48" />
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  }
+
+  if (!active) {
+    return (
+      <>
+        {header}
+        <Card className="gap-3">
+          <p className="m-0 text-sm text-foreground-muted">
+            {programs && programs.length > 0
+              ? "You have programs but none is active. Activate one to train from it."
+              : "Create a program to give your workouts some structure — or just start an ad-hoc workout."}
+          </p>
+          <Button variant="primary" className="self-start" onClick={onManage}>
+            {programs && programs.length > 0 ? "Choose active program" : "Create a program"}
+          </Button>
+        </Card>
+      </>
+    );
+  }
+
+  const days = detail?.days ?? [];
+
+  return (
+    <>
+      {header}
+
+      {days.length === 0 ? (
+        <Card className="gap-3">
+          <p className="m-0 text-sm text-foreground-muted">
+            <strong>{active.name}</strong> has no days yet. Add one to start training from it.
+          </p>
+          <Button variant="primary" className="self-start" onClick={() => onOpenProgram(active.id)}>
+            Add a day
+          </Button>
+        </Card>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {days.map((d) => {
+            const st = statByDay.get(d.id);
+            return (
+              <DayCard
+                key={d.id}
+                name={d.name}
+                exerciseCount={d.exerciseCount}
+                sessions={st?.sessions ?? 0}
+                lastPerformedOn={st?.lastPerformedOn ?? null}
+                onStart={() => startWorkout(d.id)}
+                onEdit={() => onOpenProgram(active.id)}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {programs && programs.length > 1 && (
+        <button
+          type="button"
+          onClick={onManage}
+          className="mt-4 text-[13px] text-foreground-muted underline underline-offset-2 hover:text-foreground"
+        >
+          {programs.length - 1} other {programs.length - 1 === 1 ? "program" : "programs"} · manage
+        </button>
+      )}
+    </>
+  );
 }
 
 /** One-line message from a failed mutation, for inline display. */
@@ -99,7 +292,7 @@ function Tab({ active, onClick, children }: { active: boolean; onClick: () => vo
   );
 }
 
-function ProgramList({ onOpen }: { onOpen: (id: string) => void }) {
+function ProgramList({ onOpen, onBack }: { onOpen: (id: string) => void; onBack?: () => void }) {
   const { data: programs, isLoading } = usePrograms();
   const create = useCreateProgram();
   const startWorkout = useStartWorkout();
@@ -161,6 +354,7 @@ function ProgramList({ onOpen }: { onOpen: (id: string) => void }) {
         subtitle="Build the workouts you train from. No fixed days."
         actions={
           <>
+            {onBack && <BackButton onClick={onBack} label="Back to Train" />}
             {programs && programs.length > 0 && (
               <Button variant="ghost" onClick={() => (selecting ? exitSelect() : setSelecting(true))}>
                 {selecting ? "Cancel" : "Select"}

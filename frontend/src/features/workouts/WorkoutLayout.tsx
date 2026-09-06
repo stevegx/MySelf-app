@@ -3,7 +3,7 @@ import { Dumbbell } from "lucide-react";
 import { useActiveSession } from "./api";
 
 const TABS = [
-  { to: "/workouts/builder", label: "Programs" },
+  { to: "/workouts/builder", label: "Train" },
   { to: "/workouts/history", label: "History" },
   { to: "/workouts/calendar", label: "Calendar" },
 ];
