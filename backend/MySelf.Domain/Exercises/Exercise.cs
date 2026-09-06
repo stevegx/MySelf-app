@@ -30,6 +30,11 @@ public class Exercise
     public string? LicenseUrl { get; set; }
     public string? Attribution { get; set; } // author(s)
 
+    // --- illustration (wger "main" exercise image; null when the source has none) ---
+    public string? ImageUrl { get; set; }
+    public string? ImageThumbUrl { get; set; }
+    public string? ImageAttribution { get; set; }
+
     public ICollection<ExerciseMuscle> Muscles { get; set; } = [];
     public ICollection<ExerciseEquipment> Equipment { get; set; } = [];
 }

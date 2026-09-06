@@ -118,6 +118,17 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
             Assert.Contains("Chest", primary);
             Assert.Contains("Triceps", secondary);
 
+            // Every row carries the (nullable) image fields; the seed enriched ~1/4 of the
+            // catalogue from wger, so a broad search turns up at least one with a thumbnail.
+            Assert.All(items, e => Assert.True(e.TryGetProperty("imageThumbUrl", out _)));
+            var withImage = (await client.GetFromJsonAsync<JsonElement>("/api/v1/exercises?q=squat&pageSize=50"))
+                .GetProperty("items").EnumerateArray()
+                .Where(e => e.GetProperty("imageThumbUrl").ValueKind == JsonValueKind.String)
+                .ToList();
+            Assert.NotEmpty(withImage);
+            Assert.StartsWith("http", withImage[0].GetProperty("imageThumbUrl").GetString());
+            Assert.False(string.IsNullOrWhiteSpace(withImage[0].GetProperty("imageAttribution").GetString()));
+
             // Same shape from get-by-id.
             var one = await client.GetFromJsonAsync<JsonElement>($"/api/v1/exercises/{bench.GetProperty("id").GetGuid()}");
             Assert.Contains("Chest", one.GetProperty("primaryMuscles").EnumerateArray().Select(m => m.GetString()));

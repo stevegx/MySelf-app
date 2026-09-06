@@ -9,7 +9,10 @@ public sealed record ExerciseListItem(
     string DefaultTrackingMode,
     IReadOnlyList<string> PrimaryMuscles,
     IReadOnlyList<string> SecondaryMuscles,
-    IReadOnlyList<string> Equipment);
+    IReadOnlyList<string> Equipment,
+    string? ImageThumbUrl,
+    string? ImageUrl,
+    string? ImageAttribution);
 
 public sealed record ExerciseSearchResult(IReadOnlyList<ExerciseListItem> Items, int Page, int PageSize, int Total);
 

@@ -72,9 +72,20 @@ export function ExercisePicker({
                   type="button"
                   disabled={added}
                   onClick={() => onPick(ex)}
-                  className="flex w-full items-center justify-between gap-3 rounded-control border border-border bg-surface px-3 py-2 text-left text-[13px] hover:border-border-strong disabled:opacity-50"
+                  className="flex w-full items-center gap-3 rounded-control border border-border bg-surface px-3 py-2 text-left text-[13px] hover:border-border-strong disabled:opacity-50"
                 >
-                  <span className="min-w-0">
+                  {ex.imageThumbUrl && (
+                    <img
+                      src={ex.imageThumbUrl}
+                      alt=""
+                      loading="lazy"
+                      className="size-9 shrink-0 rounded-[6px] border border-border object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
+                    />
+                  )}
+                  <span className="min-w-0 flex-1">
                     <span className="font-semibold">{ex.name}</span>
                     <span className="ml-2 text-xs text-foreground-muted">{ex.category}</span>
                     {off && <span className="ml-2 text-[11px] text-info">off focus</span>}

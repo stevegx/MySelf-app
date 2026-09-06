@@ -21,7 +21,10 @@ public static class ExerciseEndpoints
         e.DefaultTrackingMode.ToString(),
         e.Muscles.Where(m => m.Role == MuscleRole.Primary).OrderBy(m => m.Muscle.Name).Select(m => m.Muscle.Name).ToList(),
         e.Muscles.Where(m => m.Role == MuscleRole.Secondary).OrderBy(m => m.Muscle.Name).Select(m => m.Muscle.Name).ToList(),
-        e.Equipment.OrderBy(x => x.Equipment.Name).Select(x => x.Equipment.Name).ToList());
+        e.Equipment.OrderBy(x => x.Equipment.Name).Select(x => x.Equipment.Name).ToList(),
+        e.ImageThumbUrl,
+        e.ImageUrl,
+        e.ImageAttribution);
 
     public static IEndpointRouteBuilder MapExerciseEndpoints(this IEndpointRouteBuilder app)
     {

@@ -72,8 +72,8 @@ function installFetch() {
     if (url.includes("/api/v1/exercises?")) {
       return json({
         items: [
-          { id: "sq", name: "Back Squat", category: "Legs", defaultTrackingMode: "WeightAndReps", primaryMuscles: ["Quads"], secondaryMuscles: ["Glutes"], equipment: ["Barbell"] },
-          { id: "ohp", name: "Overhead Press", category: "Shoulders", defaultTrackingMode: "WeightAndReps", primaryMuscles: ["Shoulders"], secondaryMuscles: ["Triceps"], equipment: ["Barbell"] },
+          { id: "sq", name: "Back Squat", category: "Legs", defaultTrackingMode: "WeightAndReps", primaryMuscles: ["Quads"], secondaryMuscles: ["Glutes"], equipment: ["Barbell"], imageThumbUrl: "https://wger.de/media/x.png", imageUrl: "https://wger.de/media/x-full.png", imageAttribution: "wger.de (CC BY-SA)" },
+          { id: "ohp", name: "Overhead Press", category: "Shoulders", defaultTrackingMode: "WeightAndReps", primaryMuscles: ["Shoulders"], secondaryMuscles: ["Triceps"], equipment: ["Barbell"], imageThumbUrl: null, imageUrl: null, imageAttribution: null },
         ],
         page: 1, pageSize: 25, total: 2,
       });
@@ -166,6 +166,11 @@ describe("DayEditor", () => {
 
     // Reveal all, then add the off-focus one -> inline note.
     await user.click(screen.getByRole("button", { name: /Show all/ }));
+    // Back Squat has a wger thumbnail.
+    expect(screen.getByRole("button", { name: /Back Squat/ }).querySelector("img")).toHaveAttribute(
+      "src",
+      "https://wger.de/media/x.png",
+    );
     await user.click(await screen.findByRole("button", { name: /Overhead Press/ }));
     expect(await screen.findByText(/outside this day's focus/i)).toBeInTheDocument();
 

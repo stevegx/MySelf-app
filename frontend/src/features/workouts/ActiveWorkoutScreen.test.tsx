@@ -110,7 +110,7 @@ function installFetch(opts: { active?: unknown } = {}) {
     }
     if (url.includes("/api/v1/exercises?")) {
       return json({
-        items: [{ id: "x2", name: "Leg Press", category: "Legs", defaultTrackingMode: "WeightAndReps", primaryMuscles: ["Quads"], secondaryMuscles: ["Glutes"], equipment: ["Cable machine"] }],
+        items: [{ id: "x2", name: "Leg Press", category: "Legs", defaultTrackingMode: "WeightAndReps", primaryMuscles: ["Quads"], secondaryMuscles: ["Glutes"], equipment: ["Cable machine"], imageThumbUrl: null, imageUrl: null, imageAttribution: null }],
         page: 1,
         pageSize: 25,
         total: 1,

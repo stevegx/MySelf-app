@@ -28,6 +28,9 @@ export type ExerciseListItem = {
   primaryMuscles: string[];
   secondaryMuscles: string[];
   equipment: string[];
+  imageThumbUrl: string | null;
+  imageUrl: string | null;
+  imageAttribution: string | null;
 };
 
 export type ExerciseSearchResult = {
