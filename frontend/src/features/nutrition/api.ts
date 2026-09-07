@@ -151,3 +151,29 @@ export function useCreateCustomFood() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["my-foods"] }),
   });
 }
+
+// --- Barcode (Open Food Facts) ---
+
+export type BarcodeFood = {
+  barcode: string;
+  name: string | null;
+  brand: string | null;
+  source: string;
+  license: string;
+  per100g: {
+    energyKcal: number | null;
+    protein: number | null;
+    carbs: number | null;
+    fat: number | null;
+  };
+  servingQuantityGrams: number | null;
+};
+
+/** Look up a packaged food by barcode via the backend (Open Food Facts, cached). */
+export function useBarcodeLookup() {
+  const accessToken = useToken();
+  return useMutation({
+    mutationFn: (code: string) =>
+      apiFetch<BarcodeFood>(`/api/v1/foods/barcode/${encodeURIComponent(code)}`, { accessToken }),
+  });
+}

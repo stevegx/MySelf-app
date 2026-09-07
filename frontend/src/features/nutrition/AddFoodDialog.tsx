@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Button, Checkbox, Input, Segmented } from "../../components/ui";
+import { Button, Checkbox, Input, Segmented, Tag } from "../../components/ui";
 import { ApiError } from "../../lib/api";
-import { useAddMealItem, useCreateCustomFood, useFoodSearch } from "./api";
+import { useAddMealItem, useBarcodeLookup, useCreateCustomFood, useFoodSearch } from "./api";
 import type { CustomFood, MealAmountUnit, MealCategory, ServingBasis } from "./api";
 
 const num = (s: string) => (s.trim() === "" ? NaN : Number(s));
@@ -22,11 +22,16 @@ export function AddFoodDialog({
 }) {
   const add = useAddMealItem(date);
   const createFood = useCreateCustomFood();
+  const barcode = useBarcodeLookup();
 
   const [search, setSearch] = useState("");
   const { data: results } = useFoodSearch(search.trim());
+  const [code, setCode] = useState("");
 
   const [name, setName] = useState("");
+  const [brand, setBrand] = useState<string | null>(null);
+  const [savedBarcode, setSavedBarcode] = useState<string | null>(null);
+  const [sourceTag, setSourceTag] = useState<string | null>(null);
   const [basis, setBasis] = useState<ServingBasis>("Per100g");
   const [servingSize, setServingSize] = useState("");
   const [kcal, setKcal] = useState("");
@@ -38,6 +43,37 @@ export function AddFoodDialog({
   const [saveFood, setSaveFood] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const lookUp = async () => {
+    const c = code.trim();
+    if (!/^\d{8,14}$/.test(c)) return setError("A barcode is 8–14 digits.");
+    setError(null);
+    try {
+      const f = await barcode.mutateAsync(c);
+      setName(f.name ?? "");
+      setBrand(f.brand);
+      setSavedBarcode(f.barcode);
+      setSourceTag(`${f.source} · ${f.license}`);
+      setBasis("Per100g");
+      setUnit("Grams");
+      setServingSize(f.servingQuantityGrams != null ? String(f.servingQuantityGrams) : "");
+      setKcal(f.per100g.energyKcal != null ? String(f.per100g.energyKcal) : "");
+      setProtein(f.per100g.protein != null ? String(f.per100g.protein) : "");
+      setCarb(f.per100g.carbs != null ? String(f.per100g.carbs) : "");
+      setFat(f.per100g.fat != null ? String(f.per100g.fat) : "");
+      setSaveFood(true);
+    } catch (e) {
+      setError(
+        e instanceof ApiError && e.status === 404
+          ? "Not in Open Food Facts — fill it in below and it'll be saved with the barcode."
+          : e instanceof ApiError
+            ? (e.detail ?? e.title)
+            : "Couldn't reach the food database. Try again.",
+      );
+      setSavedBarcode(c);
+      setSaveFood(true);
+    }
+  };
+
   const onBasisChange = (b: ServingBasis) => {
     setBasis(b);
     setUnit(b === "PerServing" ? "Serving" : "Grams");
@@ -45,6 +81,9 @@ export function AddFoodDialog({
 
   const applyFood = (f: CustomFood) => {
     setName(f.name);
+    setBrand(f.brand);
+    setSavedBarcode(f.barcode);
+    setSourceTag(null);
     setBasis(f.servingBasis);
     setUnit(f.servingBasis === "PerServing" ? "Serving" : "Grams");
     setServingSize(f.servingSizeGrams != null ? String(f.servingSizeGrams) : "");
@@ -90,8 +129,8 @@ export function AddFoodDialog({
         await createFood
           .mutateAsync({
             name: n,
-            brand: null,
-            barcode: null,
+            brand,
+            barcode: savedBarcode,
             servingBasis: basis,
             servingSizeGrams: size,
             kcal: values.kcal,
@@ -150,10 +189,35 @@ export function AddFoodDialog({
           </ul>
         )}
 
-        <label className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
-          Name
-          <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Plain yogurt" />
-        </label>
+        <div className="flex items-end gap-2">
+          <label className="flex flex-1 flex-col gap-1 text-xs font-semibold text-foreground-muted">
+            Barcode
+            <Input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && lookUp()}
+              placeholder="8–14 digits"
+              inputMode="numeric"
+            />
+          </label>
+          <Button variant="secondary" size="sm" onClick={lookUp} disabled={barcode.isPending}>
+            {barcode.isPending ? "Looking up…" : "Look up"}
+          </Button>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <span className="flex items-center gap-2 text-xs font-semibold text-foreground-muted">
+            Name
+            {sourceTag && <Tag tone="neutral">{sourceTag}</Tag>}
+          </span>
+          <Input
+            autoFocus
+            aria-label="Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Plain yogurt"
+          />
+        </div>
 
         <Segmented<ServingBasis>
           aria-label="Nutrients are given"

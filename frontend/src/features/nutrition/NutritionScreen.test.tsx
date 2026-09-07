@@ -53,6 +53,12 @@ function installFetch(day: unknown, opts: { myFoods?: unknown[] } = {}) {
 
     if (url.includes("/auth/refresh")) return json(AUTH);
     if (url.includes("/api/v1/foods/search")) return json(opts.myFoods ?? []);
+    if (url.includes("/api/v1/foods/barcode/")) {
+      return json({
+        barcode: "5000112637922", name: "Diet Cola", brand: "Cola Co", source: "Open Food Facts",
+        license: "ODbL", per100g: { energyKcal: 0.4, protein: 0, carbs: 0, fat: 0 }, servingQuantityGrams: 330,
+      });
+    }
     if (url.includes("/api/v1/foods/custom") && method === "POST") return json({ ...SAVED_FOOD, id: "new" }, 201);
     if (url.match(/\/api\/v1\/nutrition-days\/[\d-]+\/items$/) && method === "POST") {
       current = dayWithLunchItem((init!.body ? JSON.parse(init!.body as string).category : ""));
@@ -140,6 +146,23 @@ describe("NutritionScreen", () => {
       expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/items"))).toBe(true);
       expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/foods/custom"))).toBe(true);
     });
+  });
+
+  it("prefills the form from a barcode lookup", async () => {
+    installFetch(emptyDay("2026-09-08"));
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: "Add food to Snacks" }));
+    const dialog = await screen.findByRole("dialog", { name: /Add food to Snacks/i });
+
+    await user.type(within(dialog).getByLabelText("Barcode"), "5000112637922");
+    await user.click(within(dialog).getByRole("button", { name: "Look up" }));
+
+    await waitFor(() => expect(within(dialog).getByLabelText("Name")).toHaveValue("Diet Cola"));
+    expect(within(dialog).getByLabelText(/Calories/i)).toHaveValue(0.4);
+    expect(within(dialog).getByText(/Open Food Facts · ODbL/)).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Save to My Foods")).toBeChecked();
   });
 
   it("removes a logged item", async () => {
