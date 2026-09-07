@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronRight, Circle, Dumbbell, Scale, Utensils } from "lucide-react";
+import { Dumbbell, Scale, Utensils } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Button, Card, CardKicker, PageHeader, Ring, Skeleton } from "../../components/ui";
 import { cn } from "../../lib/cn";
@@ -38,13 +38,6 @@ function startOfWeek(d: Date) {
   s.setDate(s.getDate() - mondayIndex(s));
   return s;
 }
-
-const SETUP_ITEMS: { label: string; to: string }[] = [
-  { label: "Create your first workout program", to: "/workouts/builder" },
-  { label: "Set up your workout days", to: "/workouts/builder" },
-  { label: "Log your first meal", to: "/nutrition" },
-  { label: "Log your weight", to: "/progress" },
-];
 
 function useWorkoutFrequency() {
   const { data, isLoading } = useSessionHistory();
@@ -242,23 +235,6 @@ export function DashboardScreen() {
               </Button>
             </>
           )}
-        </Card>
-
-        <Card className="col-span-2">
-          <CardKicker>Get set up</CardKicker>
-          <div className="flex flex-col gap-0.5">
-            {SETUP_ITEMS.map((item) => (
-              <button
-                key={item.label}
-                onClick={() => navigate(item.to)}
-                className="flex items-center gap-2.5 border-b border-border px-1 py-2.5 text-left hover:bg-surface-subtle"
-              >
-                <Circle size={16} className="text-primary" aria-hidden />
-                <span className="flex-1 text-sm">{item.label}</span>
-                <ChevronRight size={16} className="text-foreground-muted" aria-hidden />
-              </button>
-            ))}
-          </div>
         </Card>
       </div>
     </>
