@@ -26,7 +26,7 @@ export function AddFoodScreen() {
             <div className="h-[52%] w-[70%] rounded-xl border-2 border-primary" />
             <ScanLine size={34} className="absolute text-primary" aria-hidden />
           </div>
-          <p className="mt-3 text-[13px] text-foreground-muted">
+          <p className="mt-3 text-sm text-foreground-muted">
             Point your camera at a barcode
           </p>
           <Button variant="secondary" block onClick={() => navigate("/nutrition")}>
@@ -42,7 +42,7 @@ export function AddFoodScreen() {
             </div>
             <Tag tone="neutral">Open Food Facts</Tag>
           </div>
-          <div className="text-[11px] text-foreground-muted">Fetched just now</div>
+          <div className="text-[12px] text-foreground-muted">Fetched just now</div>
           <hr className="my-2 border-0 border-t border-border" />
 
           <div className="flex flex-wrap items-end gap-2.5">
@@ -68,7 +68,7 @@ export function AddFoodScreen() {
                 className="rounded-control bg-surface-subtle p-2.5"
               >
                 <div className="text-base font-bold">{tile.value}</div>
-                <div className="text-[11px] text-foreground-muted">{tile.label}</div>
+                <div className="text-[12px] text-foreground-muted">{tile.label}</div>
               </div>
             ))}
           </div>

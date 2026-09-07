@@ -12,7 +12,7 @@ export function PageHeader({ title, subtitle, actions }: PageHeaderProps) {
       <div>
         <h2 className="mb-0.5">{title}</h2>
         {subtitle ? (
-          <div className="text-[13px] text-foreground-muted">{subtitle}</div>
+          <div className="text-sm text-foreground-muted">{subtitle}</div>
         ) : null}
       </div>
       {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}

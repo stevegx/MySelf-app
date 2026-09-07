@@ -46,7 +46,7 @@ export function NutritionScreen() {
         <div>
           <div className="text-2xl font-bold">
             0{" "}
-            <span className="text-[13px] font-normal text-foreground-muted">
+            <span className="text-sm font-normal text-foreground-muted">
               {targets.hasTarget ? `/ ${formatTarget(targets.calorieTarget)} kcal` : "kcal"}
             </span>
           </div>
@@ -64,8 +64,8 @@ export function NutritionScreen() {
                 stroke={5}
                 ariaLabel={`${macro.label}: 0 of ${macro.target == null ? "no" : formatTarget(macro.target)} g`}
               />
-              <div className="mt-1 text-[11px]">{macro.label}</div>
-              <div className="text-[10px] text-foreground-muted">
+              <div className="mt-1 text-[12px]">{macro.label}</div>
+              <div className="text-[11px] text-foreground-muted">
                 {macro.target == null ? "—" : `0/${formatTarget(macro.target)}g`}
               </div>
             </div>

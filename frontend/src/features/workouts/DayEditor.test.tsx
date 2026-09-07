@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Providers } from "../../app/providers";
 import { DayEditor } from "./DayEditor";
@@ -185,13 +185,12 @@ describe("DayEditor", () => {
     expect((put!.body as { focusMuscleIds: number[] }).focusMuscleIds).toEqual([2]);
   });
 
-  it("asks before discarding unsaved changes", async () => {
+  it("reverts unsaved changes back to the saved day, after confirming", async () => {
     installFetch();
-    const onClose = vi.fn();
     const user = userEvent.setup();
     render(
       <Providers>
-        <DayEditor dayId="d1" programId="p1" onClose={onClose} />
+        <DayEditor dayId="d1" programId="p1" onClose={() => {}} onSaved={() => {}} />
       </Providers>,
     );
 
@@ -199,12 +198,17 @@ describe("DayEditor", () => {
     const firstWeight = screen.getByDisplayValue("100");
     await user.clear(firstWeight);
     await user.type(firstWeight, "105");
+    expect(await screen.findByText("Unsaved changes")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Close" }));
-    expect(onClose).not.toHaveBeenCalled();
-    const bar = screen.getByText(/Discard your unsaved changes/i).closest("div")!;
-    await user.click(within(bar).getByRole("button", { name: "Discard" }));
-    expect(onClose).toHaveBeenCalled();
+    // "Revert" only shows while dirty; it asks first.
+    await user.click(screen.getByRole("button", { name: "Revert" }));
+    const bar = screen.getByText(/Revert your unsaved changes/i).closest("div")!;
+    await user.click(within(bar).getByRole("button", { name: "Revert" }));
+
+    // Re-seeded from the server: no longer dirty, weight back to 100.
+    await waitFor(() => expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument());
+    await expandExercise(user, "Back Squat");
+    expect(screen.getByDisplayValue("100")).toBeInTheDocument();
   });
 
   it("renames the day from the ⋯ menu and saves the new name", async () => {

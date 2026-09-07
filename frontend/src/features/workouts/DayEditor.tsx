@@ -384,9 +384,15 @@ export function DayEditor({
     }
   }
 
+  // "Revert" in the always-open inline editor: drop the working state and re-seed from the
+  // server (clearing loadedFrom re-runs the seed-on-arrival block). Confirmed first while dirty.
   const requestClose = () => {
     if (dirty) setConfirmingDiscard(true);
     else onClose();
+  };
+  const discardEdits = () => {
+    setConfirmingDiscard(false);
+    setLoadedFrom(null);
   };
 
   const groupLabel = (key: string) => `Superset ${state.supersets.findIndex((g) => g.key === key) + 1}`;
@@ -423,7 +429,7 @@ export function DayEditor({
               <span className="absolute left-0 top-full z-10 mt-1 flex min-w-[160px] flex-col rounded-control border border-border bg-surface p-1 shadow-lg">
                 <button
                   type="button"
-                  className="rounded-[6px] px-2 py-1.5 text-left text-[13px] hover:bg-surface-subtle"
+                  className="rounded-[6px] px-2 py-1.5 text-left text-sm hover:bg-surface-subtle"
                   onClick={() => {
                     setMenuOpen(false);
                     setRenaming(true);
@@ -434,7 +440,7 @@ export function DayEditor({
                 {onDuplicateDay && (
                   <button
                     type="button"
-                    className="rounded-[6px] px-2 py-1.5 text-left text-[13px] hover:bg-surface-subtle"
+                    className="rounded-[6px] px-2 py-1.5 text-left text-sm hover:bg-surface-subtle"
                     onClick={() => {
                       setMenuOpen(false);
                       onDuplicateDay();
@@ -446,7 +452,7 @@ export function DayEditor({
                 {onDeleteDay && (
                   <button
                     type="button"
-                    className="rounded-[6px] px-2 py-1.5 text-left text-[13px] text-danger hover:bg-danger-soft"
+                    className="rounded-[6px] px-2 py-1.5 text-left text-sm text-danger hover:bg-danger-soft"
                     onClick={() => {
                       setMenuOpen(false);
                       onDeleteDay();
@@ -460,9 +466,11 @@ export function DayEditor({
           </span>
         </div>
         <div className="flex gap-2">
-          <Button variant="ghost" onClick={requestClose}>
-            {dirty ? "Close" : "Cancel"}
-          </Button>
+          {dirty && (
+            <Button variant="ghost" onClick={requestClose}>
+              Revert
+            </Button>
+          )}
           <Button variant="primary" onClick={save} disabled={update.isPending}>
             {update.isPending ? "Saving…" : "Save day"}
           </Button>
@@ -471,13 +479,13 @@ export function DayEditor({
 
       {confirmingDiscard && (
         <div className="flex items-center justify-between gap-3 rounded-control border border-warning/40 bg-warning-soft px-3 py-2 text-sm">
-          <span>Discard your unsaved changes to this day?</span>
+          <span>Revert your unsaved changes to this day?</span>
           <span className="flex gap-2">
             <Button variant="ghost" size="sm" onClick={() => setConfirmingDiscard(false)}>
               Keep editing
             </Button>
-            <Button variant="danger" size="sm" onClick={onClose}>
-              Discard
+            <Button variant="danger" size="sm" onClick={discardEdits}>
+              Revert
             </Button>
           </span>
         </div>
@@ -507,7 +515,7 @@ export function DayEditor({
                 disabled={!muscles}
                 onClick={() => toggleFocusGroup(g.key)}
                 className={cn(
-                  "rounded-full border px-2.5 py-1 text-[12px]",
+                  "rounded-full border px-2.5 py-1 text-[13px]",
                   on
                     ? "border-primary bg-primary-soft font-semibold text-primary-pressed"
                     : "border-border text-foreground-muted hover:border-border-strong",
@@ -521,7 +529,7 @@ export function DayEditor({
       </div>
 
       {offFocusNote && (
-        <div className="flex flex-wrap items-center gap-2 rounded-control border border-info/40 bg-info-soft px-3 py-2 text-[13px]">
+        <div className="flex flex-wrap items-center gap-2 rounded-control border border-info/40 bg-info-soft px-3 py-2 text-sm">
           <span>
             Added <strong>{offFocusNote.name}</strong> — {offFocusNote.muscles.join(", ")}, outside this day's focus.
           </span>
@@ -634,7 +642,7 @@ export function DayEditor({
               </div>
             ) : (
             <div className="mt-3 flex flex-col gap-2">
-              <div className="grid grid-cols-[auto_1fr_1fr_1fr_1fr_auto] items-center gap-2 text-[11px] text-foreground-muted">
+              <div className="grid grid-cols-[auto_1fr_1fr_1fr_1fr_auto] items-center gap-2 text-[12px] text-foreground-muted">
                 <span>#</span>
                 <span>Kind</span>
                 <span>Reps min–max</span>
@@ -714,7 +722,7 @@ export function DayEditor({
                   <label className="flex items-center gap-2 text-xs text-foreground-muted">
                     Superset
                     <select
-                      className="min-h-[34px] rounded-control border border-border bg-surface px-2 text-[13px] text-foreground"
+                      className="min-h-[34px] rounded-control border border-border bg-surface px-2 text-sm text-foreground"
                       value={e.supersetKey ?? ""}
                       onChange={(ev) => patchExercise(e.key, { supersetKey: ev.target.value === "" ? null : ev.target.value })}
                     >
@@ -755,7 +763,7 @@ export function DayEditor({
       <button
         type="button"
         onClick={() => setPicking(true)}
-        className="flex items-center justify-center gap-2 rounded-control border border-dashed border-border-strong px-3 py-5 text-[13px] text-primary hover:border-primary hover:bg-primary-soft/40"
+        className="flex items-center justify-center gap-2 rounded-control border border-dashed border-border-strong px-3 py-5 text-sm text-primary hover:border-primary hover:bg-primary-soft/40"
       >
         <Plus size={15} aria-hidden />
         Add exercise
@@ -798,7 +806,7 @@ function BulkTargetMenu({
             <button
               key={t.id}
               type="button"
-              className="rounded-[6px] px-2 py-1.5 text-left text-[13px] hover:bg-surface-subtle"
+              className="rounded-[6px] px-2 py-1.5 text-left text-sm hover:bg-surface-subtle"
               onClick={() => {
                 setOpen(false);
                 onPick(t.id);

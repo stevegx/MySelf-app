@@ -64,7 +64,7 @@ export function LogWeightDialog({ onClose }: { onClose: () => void }) {
           <Input type="date" max={today()} value={date} onChange={(e) => setDate(e.target.value)} />
         </label>
 
-        {error && <p className="m-0 mb-3 text-[13px] text-danger">{error}</p>}
+        {error && <p className="m-0 mb-3 text-sm text-danger">{error}</p>}
 
         <div className="flex justify-end gap-2">
           <Button variant="ghost" size="sm" onClick={onClose}>

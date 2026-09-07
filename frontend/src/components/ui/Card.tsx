@@ -23,7 +23,7 @@ export function Card({ elevated = true, className, children, ...rest }: CardProp
 
 export function CardKicker({ children }: { children: ReactNode }) {
   return (
-    <div className="text-[10px] tracking-[0.1em] uppercase text-primary">{children}</div>
+    <div className="text-[11px] tracking-[0.1em] uppercase text-primary">{children}</div>
   );
 }
 
@@ -43,6 +43,6 @@ export function CardBody({
   className?: string;
 }) {
   return (
-    <p className={cn("m-0 text-[13px] text-foreground-muted flex-1", className)}>{children}</p>
+    <p className={cn("m-0 text-sm text-foreground-muted flex-1", className)}>{children}</p>
   );
 }

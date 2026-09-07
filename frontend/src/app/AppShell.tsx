@@ -40,7 +40,7 @@ function ThemeToggle() {
       type="button"
       onClick={() => setMode(NEXT_MODE[mode])}
       aria-label={`Theme: ${MODE_LABEL[mode]}. Switch to ${MODE_LABEL[NEXT_MODE[mode]]}.`}
-      className="inline-flex min-h-[34px] items-center gap-1.5 rounded-control border border-border-strong px-3 text-[13px] font-semibold hover:bg-surface-subtle"
+      className="inline-flex min-h-[34px] items-center gap-1.5 rounded-control border border-border-strong px-3 text-sm font-semibold hover:bg-surface-subtle"
     >
       <Icon size={15} aria-hidden />
       {MODE_LABEL[mode]}
@@ -66,8 +66,8 @@ function AccountSummary() {
         {user.username.charAt(0).toUpperCase()}
       </div>
       <div className="min-w-0">
-        <div className="truncate text-[13px] font-bold">{user.username}</div>
-        <div className="truncate text-[11px] text-foreground-muted">{user.email}</div>
+        <div className="truncate text-sm font-bold">{user.username}</div>
+        <div className="truncate text-[12px] text-foreground-muted">{user.email}</div>
       </div>
     </div>
   );
@@ -115,7 +115,7 @@ export function AppShell() {
           <NavLink
             key={to}
             to={to}
-            className="flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] text-foreground-muted no-underline aria-[current=page]:text-primary-pressed"
+            className="flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] text-foreground-muted no-underline aria-[current=page]:text-primary-pressed"
           >
             <Icon size={20} aria-hidden />
             {label}

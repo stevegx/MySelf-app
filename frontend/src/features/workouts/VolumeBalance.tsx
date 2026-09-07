@@ -45,7 +45,7 @@ export function VolumeBalance({ recent }: { recent: RecentVolume }) {
   return (
     <Card className="gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-[13px] text-foreground-muted">
+        <div className="text-sm text-foreground-muted">
           <span className="font-semibold text-foreground">Volume balance</span>{" "}
           <span>
             · {recent.sessions} {recent.sessions === 1 ? "session" : "sessions"} · {total}{" "}
@@ -70,7 +70,7 @@ export function VolumeBalance({ recent }: { recent: RecentVolume }) {
           {slices.map((s) => {
             const dim = s.sets === 0;
             return (
-              <div key={s.label} className="flex items-center gap-2 text-[12px]">
+              <div key={s.label} className="flex items-center gap-2 text-[13px]">
                 <span
                   className={cn(
                     "flex w-20 shrink-0 items-center gap-1 truncate",

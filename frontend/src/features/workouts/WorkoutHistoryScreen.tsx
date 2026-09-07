@@ -28,7 +28,7 @@ function Row({ s }: { s: WorkoutSessionListItem }) {
     >
       <Card className="gap-1">
         <div className="flex items-center justify-between">
-          <span className="font-bold">{s.dayName ?? "Ad-hoc workout"}</span>
+          <span className="font-bold">{s.dayName ?? "Quick workout"}</span>
           <span className="text-xs text-foreground-muted">{formatDate(s.performedOnLocalDate)}</span>
         </div>
         {s.programName && <span className="text-xs text-foreground-muted">{s.programName}</span>}

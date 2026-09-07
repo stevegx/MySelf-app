@@ -46,7 +46,7 @@ function Sparkline({ values }: { values: number[] }) {
 
 function SessionRow({ e }: { e: ExerciseHistoryEntry }) {
   return (
-    <div className="flex items-center justify-between border-t border-border py-2 text-[13px] first:border-t-0">
+    <div className="flex items-center justify-between border-t border-border py-2 text-sm first:border-t-0">
       <span className="text-foreground-muted">{new Date(`${e.performedOn}T00:00:00`).toLocaleDateString()}</span>
       <span>
         {e.topSetWeightKg != null ? `${e.topSetWeightKg} kg × ${e.topSetReps}` : `${e.completedSets} sets`}
@@ -76,7 +76,7 @@ function StrengthTab() {
               <button
                 type="button"
                 onClick={() => setExerciseId(ex.id)}
-                className="w-full rounded-control border border-border bg-surface px-3 py-2 text-left text-[13px] hover:border-border-strong"
+                className="w-full rounded-control border border-border bg-surface px-3 py-2 text-left text-sm hover:border-border-strong"
               >
                 {ex.name}
               </button>
@@ -105,14 +105,14 @@ function StrengthTab() {
 
   return (
     <div className="flex flex-col gap-4">
-      <button className="self-start text-[13px] text-primary underline" onClick={() => setExerciseId(null)}>
+      <button className="self-start text-sm text-primary underline" onClick={() => setExerciseId(null)}>
         ← Pick a different exercise
       </button>
 
       <Card className="gap-2">
         <CardKicker>{history.exerciseName} — personal records</CardKicker>
         {history.personalRecords.length === 0 ? (
-          <p className="m-0 text-[13px] text-foreground-muted">
+          <p className="m-0 text-sm text-foreground-muted">
             No records yet — complete a weight-and-reps workout with this exercise.
           </p>
         ) : (
@@ -136,7 +136,7 @@ function StrengthTab() {
       <Card className="gap-1">
         <CardKicker>Recent sessions</CardKicker>
         {history.sessions.length === 0 ? (
-          <p className="m-0 text-[13px] text-foreground-muted">No completed sessions with this exercise yet.</p>
+          <p className="m-0 text-sm text-foreground-muted">No completed sessions with this exercise yet.</p>
         ) : (
           history.sessions.map((s) => <SessionRow key={s.sessionId} e={s} />)
         )}
@@ -208,7 +208,7 @@ function WeightTab() {
         </Card>
       ) : points.length === 0 ? (
         <Card>
-          <p className="m-0 text-[13px] text-foreground-muted">
+          <p className="m-0 text-sm text-foreground-muted">
             No weight logged yet. Log a reading to start a trend line — the chart uses each day's
             average and a 7-day rolling average.
           </p>
@@ -221,7 +221,7 @@ function WeightTab() {
               {change != null && (
                 <span
                   className={
-                    change < 0 ? "text-[13px] text-success" : change > 0 ? "text-[13px] text-warning" : "text-[13px] text-foreground-muted"
+                    change < 0 ? "text-sm text-success" : change > 0 ? "text-sm text-warning" : "text-sm text-foreground-muted"
                   }
                 >
                   {change > 0 ? "▲" : change < 0 ? "▼" : "→"} {Math.abs(change).toFixed(1)} kg / 7 days
@@ -229,7 +229,7 @@ function WeightTab() {
               )}
             </div>
             <WeightTrendChart points={points} />
-            <div className="flex gap-3 text-[11px] text-foreground-muted">
+            <div className="flex gap-3 text-[12px] text-foreground-muted">
               <span className="flex items-center gap-1">
                 <span className="inline-block h-0.5 w-4 bg-foreground-subtle" /> daily average
               </span>
@@ -244,7 +244,7 @@ function WeightTab() {
             {(list.data ?? []).map((m) => (
               <div
                 key={m.id}
-                className="flex items-center justify-between border-t border-border py-2 text-[13px] first:border-t-0"
+                className="flex items-center justify-between border-t border-border py-2 text-sm first:border-t-0"
               >
                 <span className="text-foreground-muted">
                   {new Date(`${m.localDate}T00:00:00`).toLocaleDateString()}
@@ -297,7 +297,7 @@ export function ProgressScreen() {
       ) : (
         <Card>
           <CardKicker>Measurements</CardKicker>
-          <p className="m-0 text-[13px] text-foreground-muted">Coming in a later phase.</p>
+          <p className="m-0 text-sm text-foreground-muted">Coming in a later phase.</p>
         </Card>
       )}
     </>

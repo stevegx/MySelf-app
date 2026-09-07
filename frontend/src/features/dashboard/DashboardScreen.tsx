@@ -137,7 +137,7 @@ export function DashboardScreen() {
                   {targets.hasTarget ? `/ ${formatTarget(targets.calorieTarget)} kcal` : "kcal"}
                 </span>
               </div>
-              <div className="text-[13px] text-foreground-muted">
+              <div className="text-sm text-foreground-muted">
                 {targets.hasTarget
                   ? "Nothing logged yet today"
                   : "No calorie target — set one in Settings"}
@@ -152,7 +152,7 @@ export function DashboardScreen() {
                     ariaLabel={`${macro.label}: 0 of ${macro.target == null ? "no" : formatTarget(macro.target)} g`}
                   />
                   <div className="mt-1 text-xs">{macro.label}</div>
-                  <div className="text-[11px] text-foreground-muted">
+                  <div className="text-[12px] text-foreground-muted">
                     {macro.target == null ? "—" : `0 / ${formatTarget(macro.target)}g`}
                   </div>
                 </div>
@@ -185,13 +185,13 @@ export function DashboardScreen() {
                     style={{ height: freq.perDay[i] > 0 ? `${(freq.perDay[i] / freq.max) * 100}%` : "4px" }}
                   />
                 </div>
-                <div className={cn("text-[10px]", i === freq.todayIndex ? "font-bold text-primary" : "text-foreground-muted")}>
+                <div className={cn("text-[11px]", i === freq.todayIndex ? "font-bold text-primary" : "text-foreground-muted")}>
                   {day}
                 </div>
               </div>
             ))}
           </div>
-          <p className="m-0 mb-2 flex-1 text-[13px] text-foreground-muted">
+          <p className="m-0 mb-2 flex-1 text-sm text-foreground-muted">
             {freq.thisWeek === 0
               ? "No completed workouts this week yet."
               : `${freq.thisWeek} this week · ${freq.thisMonth} this month`}
@@ -212,7 +212,7 @@ export function DashboardScreen() {
                 {weight.sevenDayChangeKg != null && (
                   <span
                     className={cn(
-                      "text-[13px]",
+                      "text-sm",
                       weight.sevenDayChangeKg < 0
                         ? "text-success"
                         : weight.sevenDayChangeKg > 0
@@ -234,7 +234,7 @@ export function DashboardScreen() {
             </>
           ) : (
             <>
-              <p className="m-0 mb-2 flex-1 text-[13px] text-foreground-muted">
+              <p className="m-0 mb-2 flex-1 text-sm text-foreground-muted">
                 No weight logs yet — log your weight to start a trend line.
               </p>
               <Button variant="secondary" block onClick={() => setLogging(true)}>

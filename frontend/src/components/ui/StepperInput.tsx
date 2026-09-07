@@ -34,7 +34,7 @@ export function StepperInput({
 
   return (
     <label className={cn("flex flex-col gap-1", className)}>
-      {label && <span className="text-[11px] text-foreground-muted">{label}</span>}
+      {label && <span className="text-[12px] text-foreground-muted">{label}</span>}
       <span className="flex items-stretch">
         <button
           type="button"
@@ -48,9 +48,17 @@ export function StepperInput({
           ref={inputRef}
           type="number"
           inputMode="decimal"
+          min={min}
           aria-label={ariaLabel}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "-" || e.key === "+" || e.key === "e" || e.key === "E") e.preventDefault();
+          }}
+          onChange={(e) => {
+            const v = e.target.value;
+            const n = Number(v);
+            onChange(v !== "" && Number.isFinite(n) && n < min ? String(min) : v);
+          }}
           className="w-16 min-w-0 border-y border-border-strong bg-surface px-1 text-center text-[15px] font-semibold tabular-nums outline-none focus-visible:border-ring"
         />
         <button

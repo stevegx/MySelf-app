@@ -30,7 +30,7 @@ function StatCard({ label, value, hint }: { label: string; value: string; hint?:
     <Card className="gap-1">
       <CardKicker>{label}</CardKicker>
       <div className="text-[22px] font-bold leading-tight">{value}</div>
-      {hint && <div className="text-[12px] text-foreground-muted">{hint}</div>}
+      {hint && <div className="text-[13px] text-foreground-muted">{hint}</div>}
     </Card>
   );
 }
@@ -75,7 +75,7 @@ function ProgramMiniCalendar({ programId }: { programId: string }) {
           >
             <ChevronLeft size={15} aria-hidden />
           </Button>
-          <span className="min-w-[120px] text-center text-[13px] font-semibold">{monthLabel}</span>
+          <span className="min-w-[120px] text-center text-sm font-semibold">{monthLabel}</span>
           <Button
             variant="ghost"
             size="sm"
@@ -88,7 +88,7 @@ function ProgramMiniCalendar({ programId }: { programId: string }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-7 gap-1 text-center text-[10px] text-foreground-muted">
+      <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-foreground-muted">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
           <div key={d}>{d}</div>
         ))}
@@ -103,7 +103,7 @@ function ProgramMiniCalendar({ programId }: { programId: string }) {
             <div
               key={key}
               className={cn(
-                "flex min-h-[40px] flex-col items-center rounded-control border p-1 text-[11px]",
+                "flex min-h-[40px] flex-col items-center rounded-control border p-1 text-[12px]",
                 inMonth ? "border-border" : "border-transparent text-foreground-muted",
                 n > 0 ? "bg-primary-soft font-semibold" : "",
               )}
@@ -148,14 +148,14 @@ function MuscleCoverage({ rows }: { rows: { muscle: string; setsPerWeek: number 
   return (
     <Card className="gap-2">
       <CardKicker>Muscle coverage — completed sets / week</CardKicker>
-      <p className="m-0 text-[12px] text-foreground-muted">
+      <p className="m-0 text-[13px] text-foreground-muted">
         ~10+ sets/week per muscle is a common target. Lowest first.
       </p>
       <div className="flex flex-col gap-1.5">
         {rows.map((r) => {
           const low = r.setsPerWeek < 6;
           return (
-            <div key={r.muscle} className="flex items-center gap-2 text-[13px]">
+            <div key={r.muscle} className="flex items-center gap-2 text-sm">
               <span className={cn("w-24 shrink-0", low && "font-semibold text-warning")}>{r.muscle}</span>
               <span className="h-2 flex-1 overflow-hidden rounded-full bg-viz-track">
                 <span
@@ -235,11 +235,11 @@ export function ProgramOverview({ programId }: { programId: string }) {
       <Card className="gap-2">
         <CardKicker>By day</CardKicker>
         {stats.perDay.length === 0 ? (
-          <p className="m-0 text-[13px] text-foreground-muted">This program has no days.</p>
+          <p className="m-0 text-sm text-foreground-muted">This program has no days.</p>
         ) : (
           <div className="flex flex-col gap-1">
             {stats.perDay.map((d) => (
-              <div key={d.dayId} className="flex items-center justify-between border-b border-border py-1.5 text-[13px] last:border-b-0">
+              <div key={d.dayId} className="flex items-center justify-between border-b border-border py-1.5 text-sm last:border-b-0">
                 <span className="font-semibold">{d.dayName}</span>
                 <span className="flex items-center gap-3 text-foreground-muted">
                   <span>
@@ -262,7 +262,7 @@ export function ProgramOverview({ programId }: { programId: string }) {
           <CardKicker>Personal records set here</CardKicker>
           <div className="flex flex-col gap-1.5">
             {stats.personalRecords.map((pr, i) => (
-              <div key={i} className="flex flex-wrap items-center gap-2 text-[13px]">
+              <div key={i} className="flex flex-wrap items-center gap-2 text-sm">
                 <Tag tone="success">PR</Tag>
                 <span className="font-semibold">{pr.exerciseName}</span>
                 <span className="text-foreground-muted">

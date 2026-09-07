@@ -178,7 +178,7 @@ export function SessionEditScreen() {
   return (
     <>
       <PageHeader
-        title={session.dayName ?? "Ad-hoc workout"}
+        title={session.dayName ?? "Quick workout"}
         subtitle={fmtDate(session.performedOnLocalDate)}
         actions={
           <>
@@ -190,7 +190,7 @@ export function SessionEditScreen() {
         }
       />
 
-      <p className="mb-3 text-[13px] text-foreground-muted">
+      <p className="mb-3 text-sm text-foreground-muted">
         Fix a number you mistyped, or skip a set you didn't really do. Changes save one at a time and
         recompute this workout's totals and PRs.
       </p>

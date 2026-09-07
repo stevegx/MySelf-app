@@ -138,6 +138,13 @@
   /* Display face for page + card titles. */
   --font-display: "Caprasimo", Georgia, "Times New Roman", serif;
 
+  /* A notch up from Tailwind's defaults — the UI was reading small. */
+  --text-xs: 0.8125rem; /* 13px (was 12) */
+  --text-xs--line-height: 1.45;
+  --text-sm: 0.9375rem; /* 15px (was 14) */
+  --text-sm--line-height: 1.5;
+  --text-base: 1rem; /* 16px */
+
   --breakpoint-nav: 45rem;
 }
 
@@ -152,10 +159,21 @@
     background: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
-    font-size: 15px;
+    font-size: 16px;
     line-height: 1.55;
     -webkit-font-smoothing: antialiased;
     transition: background 0.2s ease, color 0.2s ease;
+  }
+
+  /* Anything interactive gets the hand cursor — Buttons already do, this covers
+     bare <button>s, NavLinks, summary toggles and radio/checkbox labels. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  summary,
+  a[href],
+  label:has(> input[type="radio"]),
+  label:has(> input[type="checkbox"]) {
+    cursor: pointer;
   }
 
   h1,

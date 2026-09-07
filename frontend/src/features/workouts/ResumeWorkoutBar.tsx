@@ -25,8 +25,8 @@ export function ResumeWorkoutBar() {
     >
       <Dumbbell size={16} aria-hidden />
       <span className="text-sm font-semibold">Resume workout</span>
-      <span className="ml-auto text-[13px] opacity-90">
-        {session.dayName ?? "Ad-hoc"} · {done}/{total}
+      <span className="ml-auto text-sm opacity-90">
+        {session.dayName ?? "Quick workout"} · {done}/{total}
       </span>
     </Link>
   );

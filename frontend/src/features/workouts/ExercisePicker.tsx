@@ -102,13 +102,13 @@ export function ExercisePicker({
                   type="button"
                   disabled={added}
                   onClick={() => onPick(ex)}
-                  className="flex w-full items-center gap-3 rounded-control border border-border bg-surface px-3 py-2 text-left text-[13px] hover:border-border-strong disabled:opacity-50"
+                  className="flex w-full items-center gap-3 rounded-control border border-border bg-surface px-3 py-2 text-left text-sm hover:border-border-strong disabled:opacity-50"
                 >
                   <span className="min-w-0 flex-1">
                     <span className="font-semibold">{ex.name}</span>
                     <span className="ml-2 text-xs text-foreground-muted">{ex.category}</span>
                     {((ex.primaryMuscles?.length ?? 0) > 0 || (ex.equipment?.length ?? 0) > 0) && (
-                      <span className="mt-0.5 block truncate text-[11px] text-foreground-subtle">
+                      <span className="mt-0.5 block truncate text-[12px] text-foreground-subtle">
                         {(ex.primaryMuscles ?? []).join(", ")}
                         {(ex.secondaryMuscles?.length ?? 0) > 0 && (
                           <span className="text-foreground-subtle"> · +{ex.secondaryMuscles.join(", ")}</span>
@@ -169,7 +169,7 @@ function FilterPill({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "rounded-pill border px-2.5 py-1 text-[12px] font-medium",
+        "rounded-pill border px-2.5 py-1 text-[13px] font-medium",
         active
           ? "border-primary bg-primary-soft text-primary-pressed"
           : "border-border text-foreground-muted hover:border-border-strong",

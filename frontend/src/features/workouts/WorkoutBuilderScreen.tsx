@@ -96,7 +96,7 @@ function DayCard({
           <div className="flex items-center gap-2">
             <span className="font-bold">{name}</span>
             {upNext && (
-              <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary-pressed">
+              <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[12px] font-semibold text-primary-pressed">
                 Up next
               </span>
             )}
@@ -110,14 +110,14 @@ function DayCard({
           Start
         </Button>
       </div>
-      <div className="flex items-center gap-2 text-[12px] text-foreground-muted">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-foreground-muted">
         <span className={cn("inline-flex items-center gap-1", last.stale && "text-warning")}>
           {last.stale && <TriangleAlert size={12} aria-hidden />}
           {last.label}
         </span>
         <span aria-hidden>·</span>
         <span>
-          done {sessions}
+          {sessions}
           {"×"} this block
         </span>
         <button
@@ -176,7 +176,7 @@ function WorkoutsHome({
         <>
           <Button variant="secondary" onClick={() => startWorkout(null)}>
             <Play size={14} aria-hidden />
-            Ad-hoc workout
+            Quick workout
           </Button>
           <Button variant="ghost" onClick={onManage}>
             <Settings2 size={15} aria-hidden />
@@ -211,7 +211,7 @@ function WorkoutsHome({
           <p className="m-0 text-sm text-foreground-muted">
             {programs && programs.length > 0
               ? "You have programs but none is active. Activate one to train from it."
-              : "Create a program to give your workouts some structure — or just start an ad-hoc workout."}
+              : "Create a program to give your workouts some structure — or just start a quick workout."}
           </p>
           <Button variant="primary" className="self-start" onClick={onManage}>
             {programs && programs.length > 0 ? "Choose active program" : "Create a program"}
@@ -235,25 +235,27 @@ function WorkoutsHome({
           </Button>
         </Card>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-4">
           {stats?.recentVolume && stats.recentVolume.sessions > 0 && (
             <VolumeBalance recent={stats.recentVolume} />
           )}
-          {orderedDays.map((d) => {
-            const st = statByDay.get(d.id);
-            return (
-              <DayCard
-                key={d.id}
-                name={d.name}
-                exerciseCount={d.exerciseCount}
-                sessions={st?.sessions ?? 0}
-                lastPerformedOn={st?.lastPerformedOn ?? null}
-                upNext={d.id === upNextDayId}
-                onStart={() => startWorkout(d.id)}
-                onEdit={() => onOpenProgram(active.id)}
-              />
-            );
-          })}
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {orderedDays.map((d) => {
+              const st = statByDay.get(d.id);
+              return (
+                <DayCard
+                  key={d.id}
+                  name={d.name}
+                  exerciseCount={d.exerciseCount}
+                  sessions={st?.sessions ?? 0}
+                  lastPerformedOn={st?.lastPerformedOn ?? null}
+                  upNext={d.id === upNextDayId}
+                  onStart={() => startWorkout(d.id)}
+                  onEdit={() => onOpenProgram(active.id)}
+                />
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -261,7 +263,7 @@ function WorkoutsHome({
         <button
           type="button"
           onClick={onManage}
-          className="mt-4 text-[13px] text-foreground-muted underline underline-offset-2 hover:text-foreground"
+          className="mt-4 text-sm text-foreground-muted underline underline-offset-2 hover:text-foreground"
         >
           {programs.length - 1} other {programs.length - 1 === 1 ? "program" : "programs"} · manage
         </button>
@@ -282,7 +284,7 @@ function errMsg(error: unknown): string | null {
 function InlineError({ error }: { error: unknown }) {
   const message = errMsg(error);
   return message ? (
-    <p role="alert" className="m-0 text-[13px] text-danger">
+    <p role="alert" className="m-0 text-sm text-danger">
       {message}
     </p>
   ) : null;
@@ -391,14 +393,14 @@ function ProgramList({ onOpen, onBack }: { onOpen: (id: string) => void; onBack?
             )}
             <Button variant="secondary" onClick={() => startWorkout(null)}>
               <Play size={14} aria-hidden />
-              Start ad-hoc workout
+              Start a quick workout
             </Button>
           </>
         }
       />
 
       {selecting && selected.size > 0 && (
-        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-control border border-border bg-surface-subtle px-3 py-2 text-[13px]">
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-control border border-border bg-surface-subtle px-3 py-2 text-sm">
           <span className="font-semibold">{selected.size} selected</span>
           <Button variant="secondary" size="sm" onClick={duplicateSelected} disabled={busy}>
             Duplicate
@@ -433,7 +435,7 @@ function ProgramList({ onOpen, onBack }: { onOpen: (id: string) => void; onBack?
               aria-pressed={filter === f}
               onClick={() => setFilter(f)}
               className={cn(
-                "rounded-pill border px-3 py-1 text-[12px] font-medium capitalize",
+                "rounded-pill border px-3 py-1 text-[13px] font-medium capitalize",
                 filter === f
                   ? "border-primary bg-primary-soft text-primary-pressed"
                   : "border-border text-foreground-muted hover:border-border-strong",
@@ -566,7 +568,7 @@ function ArchivedPrograms() {
                 key={p.id}
                 className="flex items-center justify-between rounded-card border border-border bg-surface-subtle px-4 py-3"
               >
-                <span className="text-[13px]">
+                <span className="text-sm">
                   <span className="font-semibold">{p.name}</span>
                   <span className="ml-2 text-xs text-foreground-muted">
                     {p.dayCount} days · {p.exerciseCount} exercises
@@ -735,7 +737,7 @@ function ProgramDetail({
               {(d, dayHandle) => (
                 <div
                   className={cn(
-                    "flex items-center gap-2 rounded-card border px-3 py-2.5 text-[13px]",
+                    "flex items-center gap-2 rounded-card border px-3 py-2.5 text-sm",
                     selectedDay?.id === d.id ? "border-primary bg-primary-soft" : "border-border bg-surface",
                   )}
                 >

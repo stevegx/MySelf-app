@@ -132,7 +132,7 @@ function SetRow({
       <span className="w-10 shrink-0 self-center text-xs font-semibold text-foreground-muted">#{index + 1}</span>
 
       {skipped ? (
-        <span className="self-center text-[13px] text-warning">Skipped{set.skippedReason ? ` · ${set.skippedReason}` : ""}</span>
+        <span className="self-center text-sm text-warning">Skipped{set.skippedReason ? ` · ${set.skippedReason}` : ""}</span>
       ) : (
         <>
           {fields.map((f, i) => (
@@ -249,7 +249,7 @@ function ExercisePanel({
         <div className="flex flex-col gap-2">
           {exercise.sets.map((set, i) => (
             <div key={set.id} className="flex flex-col gap-0.5">
-              <span className="pl-11 text-[11px] text-foreground-muted">Target {targetLabel(set)}</span>
+              <span className="pl-11 text-[12px] text-foreground-muted">Target {targetLabel(set)}</span>
               <SetRow
                 sessionId={sessionId}
                 set={set}
@@ -290,7 +290,7 @@ function ExercisePanel({
         )}
 
         {replacing && (
-          <div className="rounded-control border border-border p-3 text-[13px]">
+          <div className="rounded-control border border-border p-3 text-sm">
             <p className="m-0 mb-2">
               Replace <strong>{exercise.exerciseName}</strong> with <strong>{replacing.name}</strong>?
             </p>
@@ -436,7 +436,7 @@ function RunningSession({
     <>
       {dialog}
       <PageHeader
-        title={session.dayName ?? "Ad-hoc workout"}
+        title={session.dayName ?? "Quick workout"}
         subtitle={session.programName ?? "No source program"}
         actions={
           <>
@@ -475,7 +475,7 @@ function RunningSession({
           <div className="h-1.5 overflow-hidden rounded-full bg-viz-track">
             <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${(actedSets / totalSets) * 100}%` }} />
           </div>
-          <p className="mt-1 text-[12px] text-foreground-muted">
+          <p className="mt-1 text-[13px] text-foreground-muted">
             {actedSets} of {totalSets} sets{actedSets === 0 && " — log or skip one to finish"}
           </p>
         </div>
@@ -537,7 +537,7 @@ function SessionComplete({ session, onDone }: { session: WorkoutSessionDetail; o
 
   return (
     <>
-      <PageHeader title="Workout complete" subtitle={session.dayName ?? "Ad-hoc workout"} />
+      <PageHeader title="Workout complete" subtitle={session.dayName ?? "Quick workout"} />
       <Card className="mb-4 gap-2">
         <CardKicker>Summary</CardKicker>
         <div className="flex flex-wrap gap-2">
@@ -554,7 +554,7 @@ function SessionComplete({ session, onDone }: { session: WorkoutSessionDetail; o
           <CardKicker>Personal records</CardKicker>
           <div className="flex flex-col gap-1.5">
             {session.newPersonalRecords.map((pr, i) => (
-              <div key={i} className="flex items-center gap-2 text-[13px]">
+              <div key={i} className="flex items-center gap-2 text-sm">
                 <Tag tone="success">PR</Tag>
                 <span>
                   {PR_LABEL[pr.type] ?? pr.type}:{" "}

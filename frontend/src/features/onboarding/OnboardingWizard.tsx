@@ -129,7 +129,7 @@ function ProgressBars({ filled }: { filled: number }) {
 function StepHeader({ step, title, subtitle }: { step: number; title: string; subtitle: string }) {
   return (
     <div>
-      <div className="mb-1.5 text-[11px] uppercase tracking-[0.08em] text-foreground-muted">
+      <div className="mb-1.5 text-[12px] uppercase tracking-[0.08em] text-foreground-muted">
         Step {step} of 4
       </div>
       <h2 className="mb-1">{title}</h2>
@@ -614,7 +614,7 @@ export function OnboardingWizard() {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between border-b border-border px-4 py-3">
-      <span className="text-[13px] text-foreground-muted">{label}</span>
+      <span className="text-sm text-foreground-muted">{label}</span>
       <span className="text-sm">{value}</span>
     </div>
   );
