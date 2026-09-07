@@ -178,6 +178,7 @@ app.MapFoodsEndpoints();
 app.MapAuthEndpoints();
 app.MapPasswordResetEndpoints();
 app.MapMeEndpoints();
+app.MapBodyMeasurementEndpoints();
 app.MapNutritionEstimateEndpoints();
 app.MapOnboardingEndpoints();
 app.MapExerciseEndpoints();

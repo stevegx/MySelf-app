@@ -32,6 +32,7 @@ public class MySelfDbContext(DbContextOptions<MySelfDbContext> options)
     public DbSet<UserProfile> UserProfiles => Set<UserProfile>();
     public DbSet<UserGoal> UserGoals => Set<UserGoal>();
     public DbSet<NutritionEstimateSnapshot> NutritionEstimateSnapshots => Set<NutritionEstimateSnapshot>();
+    public DbSet<BodyMeasurement> BodyMeasurements => Set<BodyMeasurement>();
 
     public DbSet<WorkoutProgram> WorkoutPrograms => Set<WorkoutProgram>();
     public DbSet<WorkoutDay> WorkoutDays => Set<WorkoutDay>();
