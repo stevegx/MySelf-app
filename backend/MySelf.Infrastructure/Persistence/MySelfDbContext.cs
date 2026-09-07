@@ -28,6 +28,8 @@ public class MySelfDbContext(DbContextOptions<MySelfDbContext> options)
     public DbSet<Equipment> Equipment => Set<Equipment>();
 
     public DbSet<FoodCacheEntry> FoodCacheEntries => Set<FoodCacheEntry>();
+    public DbSet<MealLog> MealLogs => Set<MealLog>();
+    public DbSet<MealLogItem> MealLogItems => Set<MealLogItem>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<UserProfile> UserProfiles => Set<UserProfile>();
     public DbSet<UserGoal> UserGoals => Set<UserGoal>();
