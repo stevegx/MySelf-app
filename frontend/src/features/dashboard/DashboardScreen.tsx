@@ -5,6 +5,7 @@ import { Button, Card, CardKicker, PageHeader, Ring, Skeleton } from "../../comp
 import { cn } from "../../lib/cn";
 import { useAuth } from "../auth/auth";
 import { useMe } from "../auth/useMe";
+import { useNutritionDay } from "../nutrition/api";
 import { formatTarget, useNutritionTargets } from "../nutrition/useNutritionTargets";
 import { useActiveSession, useSessionHistory } from "../workouts/api";
 import { useWeightTrend } from "../progress/api";
@@ -74,18 +75,25 @@ export function DashboardScreen() {
   const { data: active } = useActiveSession();
   const freq = useWorkoutFrequency();
   const { data: weight } = useWeightTrend();
+  const { data: nutritionDay } = useNutritionDay(new Date().toISOString().slice(0, 10));
   const [logging, setLogging] = useState(false);
 
   const startWorkout = () => navigate(active ? "/workouts/active" : "/workouts/builder");
 
+  const logged = nutritionDay?.totals ?? { kcal: 0, proteinG: 0, carbG: 0, fatG: 0 };
+  const loggedKcal = Math.round(logged.kcal);
+  const hasLoggedFood = (nutritionDay?.meals ?? []).some((m) => m.items.length > 0);
+  const ratio = (value: number, target: number | null) =>
+    target != null && target > 0 ? value / target : 0;
+
   const macros = [
-    { label: "Protein", target: targets.proteinGrams },
-    { label: "Carbs", target: targets.carbGrams },
-    { label: "Fat", target: targets.fatGrams },
+    { label: "Protein", target: targets.proteinGrams, logged: Math.round(logged.proteinG) },
+    { label: "Carbs", target: targets.carbGrams, logged: Math.round(logged.carbG) },
+    { label: "Fat", target: targets.fatGrams, logged: Math.round(logged.fatG) },
   ];
   const calorieLabel = targets.hasTarget
-    ? `Calories: 0 of ${formatTarget(targets.calorieTarget)} kcal`
-    : "Calories logged today: 0 kcal";
+    ? `Calories: ${loggedKcal} of ${formatTarget(targets.calorieTarget)} kcal`
+    : `Calories logged today: ${loggedKcal} kcal`;
 
   const todayLabel = new Date().toLocaleDateString(undefined, {
     weekday: "long",
@@ -122,18 +130,25 @@ export function DashboardScreen() {
         <Card className="col-span-2">
           <CardKicker>Nutrition today</CardKicker>
           <div className="flex flex-wrap items-center gap-7 py-1">
-            <Ring size={112} stroke={10} ariaLabel={calorieLabel} />
+            <Ring
+              size={112}
+              stroke={10}
+              value={ratio(logged.kcal, targets.calorieTarget)}
+              ariaLabel={calorieLabel}
+            />
             <div className="flex flex-col gap-0.5">
               <div className="text-[26px] font-bold">
-                0{" "}
+                {loggedKcal}{" "}
                 <span className="text-sm font-normal text-foreground-muted">
                   {targets.hasTarget ? `/ ${formatTarget(targets.calorieTarget)} kcal` : "kcal"}
                 </span>
               </div>
               <div className="text-sm text-foreground-muted">
-                {targets.hasTarget
-                  ? "Nothing logged yet today"
-                  : "No calorie target — set one in Settings"}
+                {!targets.hasTarget
+                  ? "No calorie target — set one in Settings"
+                  : hasLoggedFood
+                    ? `${formatTarget(Math.max(0, (targets.calorieTarget ?? 0) - loggedKcal))} kcal left`
+                    : "Nothing logged yet today"}
               </div>
             </div>
             <div className="ml-auto flex gap-[18px]">
@@ -142,18 +157,19 @@ export function DashboardScreen() {
                   <Ring
                     size={52}
                     stroke={6}
-                    ariaLabel={`${macro.label}: 0 of ${macro.target == null ? "no" : formatTarget(macro.target)} g`}
+                    value={ratio(macro.logged, macro.target)}
+                    ariaLabel={`${macro.label}: ${macro.logged} of ${macro.target == null ? "no" : formatTarget(macro.target)} g`}
                   />
                   <div className="mt-1 text-xs">{macro.label}</div>
                   <div className="text-[12px] text-foreground-muted">
-                    {macro.target == null ? "—" : `0 / ${formatTarget(macro.target)}g`}
+                    {macro.target == null ? `${macro.logged} g` : `${macro.logged} / ${formatTarget(macro.target)}g`}
                   </div>
                 </div>
               ))}
             </div>
           </div>
           <Button variant="primary" className="self-start" onClick={() => navigate("/nutrition")}>
-            Log your first meal
+            {hasLoggedFood ? "Log another meal" : "Log your first meal"}
           </Button>
         </Card>
 

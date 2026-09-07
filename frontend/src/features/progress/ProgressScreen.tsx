@@ -3,11 +3,11 @@ import { Trash2 } from "lucide-react";
 import { Button, Card, CardKicker, Input, PageHeader, Segmented, Skeleton, Tag } from "../../components/ui";
 import { useExerciseHistory, useExerciseSearch } from "../workouts/api";
 import type { ExerciseHistoryEntry, PersonalRecordDetail } from "../workouts/api";
-import { useBodyMeasurements, useDeleteWeight, useWeightTrend } from "./api";
-import type { WeightTrendPoint } from "./api";
+import { useBodyMeasurements, useDeleteWeight, useNutritionAnalytics, useWeightTrend } from "./api";
+import type { NutritionAnalytics, WeightTrendPoint } from "./api";
 import { LogWeightDialog } from "./LogWeightDialog";
 
-type ProgressTab = "strength" | "weight" | "measurements";
+type ProgressTab = "strength" | "weight" | "nutrition" | "measurements";
 
 const PR_LABEL: Record<PersonalRecordDetail["type"], string> = {
   HeaviestWeight: "Heaviest weight",
@@ -269,6 +269,101 @@ function WeightTab() {
   );
 }
 
+const rnd = (n: number) => Math.round(n);
+
+/** One bar per logged day (calories), with a dashed line at the target. No chart library. */
+function KcalBars({ days, target }: { days: NutritionAnalytics["days"]; target: number | null }) {
+  const max = Math.max(target ?? 0, ...days.map((d) => d.kcal), 1);
+  return (
+    <div className="flex h-32 items-end gap-1">
+      {days.map((d) => {
+        const over = target != null && d.kcal > target * 1.05;
+        return (
+          <div
+            key={d.date}
+            className="min-w-0 flex-1"
+            title={`${d.date}: ${rnd(d.kcal)} kcal`}
+            style={{ height: "100%" }}
+          >
+            <div className="flex h-full items-end">
+              <div
+                className={over ? "w-full rounded-t bg-warning" : "w-full rounded-t bg-primary"}
+                style={{ height: `${(d.kcal / max) * 100}%` }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function NutritionTab() {
+  const { data, isLoading } = useNutritionAnalytics();
+
+  if (isLoading) {
+    return (
+      <Card className="gap-3">
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-32" />
+      </Card>
+    );
+  }
+  if (!data || data.daysLogged === 0) {
+    return (
+      <Card>
+        <p className="m-0 text-sm text-foreground-muted">
+          No meals logged in the last two weeks. Log food on the Nutrition screen and your
+          calorie/macro adherence shows up here.
+        </p>
+      </Card>
+    );
+  }
+
+  const t = data.targets;
+  const macro = (label: string, avg: number, target: number | null) => (
+    <div key={label} className="text-center">
+      <div className="text-lg font-bold">{rnd(avg)} g</div>
+      <div className="text-xs text-foreground-muted">
+        {label}
+        {target != null ? ` · target ${target}` : ""}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card className="gap-2">
+        <CardKicker>Calories · last {data.days.length} logged days</CardKicker>
+        <KcalBars days={data.days} target={t.kcal} />
+        <div className="flex items-baseline justify-between text-sm">
+          <span className="text-foreground-muted">
+            Avg <span className="font-bold text-foreground">{rnd(data.average.kcal)}</span> kcal / day
+          </span>
+          {t.kcal != null && (
+            <span className="text-foreground-muted">
+              target {t.kcal} ·{" "}
+              <span className={data.average.kcal > t.kcal ? "text-warning" : "text-success"}>
+                {data.average.kcal > t.kcal ? "+" : ""}
+                {rnd(data.average.kcal - t.kcal)}
+              </span>
+            </span>
+          )}
+        </div>
+      </Card>
+
+      <Card className="gap-3">
+        <CardKicker>Average macros / day</CardKicker>
+        <div className="flex justify-around">
+          {macro("Protein", data.average.proteinG, t.proteinG)}
+          {macro("Carbs", data.average.carbG, t.carbG)}
+          {macro("Fat", data.average.fatG, t.fatG)}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 export function ProgressScreen() {
   const [tab, setTab] = useState<ProgressTab>("strength");
 
@@ -284,6 +379,7 @@ export function ProgressScreen() {
             options={[
               { value: "strength", label: "Strength" },
               { value: "weight", label: "Body weight" },
+              { value: "nutrition", label: "Nutrition" },
               { value: "measurements", label: "Measurements" },
             ]}
           />
@@ -294,6 +390,8 @@ export function ProgressScreen() {
         <StrengthTab />
       ) : tab === "weight" ? (
         <WeightTab />
+      ) : tab === "nutrition" ? (
+        <NutritionTab />
       ) : (
         <Card>
           <CardKicker>Measurements</CardKicker>

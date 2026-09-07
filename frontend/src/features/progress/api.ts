@@ -75,3 +75,25 @@ export function useDeleteWeight() {
     onSuccess: invalidate,
   });
 }
+
+// --- nutrition adherence ---
+
+export type NutrientTotals = { kcal: number; proteinG: number; carbG: number; fatG: number };
+
+export type NutritionAnalytics = {
+  from: string;
+  to: string;
+  targets: { kcal: number | null; proteinG: number | null; carbG: number | null; fatG: number | null };
+  daysLogged: number;
+  average: NutrientTotals;
+  days: ({ date: string } & NutrientTotals)[];
+};
+
+export function useNutritionAnalytics() {
+  const accessToken = useToken();
+  return useQuery({
+    queryKey: ["nutrition-analytics"],
+    queryFn: () => apiFetch<NutritionAnalytics>("/api/v1/analytics/nutrition", { accessToken }),
+    enabled: accessToken != null,
+  });
+}

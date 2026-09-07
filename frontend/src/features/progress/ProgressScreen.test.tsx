@@ -138,3 +138,55 @@ describe("ProgressScreen body-weight tab", () => {
     );
   });
 });
+
+function installNutritionFetch(body: unknown) {
+  const spy = vi.fn<typeof fetch>((input) => {
+    const url = String(input);
+    const json = (b: unknown) =>
+      Promise.resolve(new Response(JSON.stringify(b), { status: 200, headers: { "content-type": "application/json" } }));
+    if (url.includes("/auth/refresh")) return json(AUTH);
+    if (url.includes("/api/v1/analytics/nutrition")) return json(body);
+    return Promise.resolve(new Response(null, { status: 404 }));
+  });
+  vi.stubGlobal("fetch", spy);
+}
+
+describe("ProgressScreen nutrition tab", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("shows the empty state when nothing is logged", async () => {
+    installNutritionFetch({
+      from: "2026-08-25", to: "2026-09-07",
+      targets: { kcal: null, proteinG: null, carbG: null, fatG: null },
+      daysLogged: 0,
+      average: { kcal: 0, proteinG: 0, carbG: 0, fatG: 0 },
+      days: [],
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("radio", { name: "Nutrition" }));
+    expect(await screen.findByText(/No meals logged in the last two weeks/i)).toBeInTheDocument();
+  });
+
+  it("shows the calorie average vs target and macro averages", async () => {
+    installNutritionFetch({
+      from: "2026-08-25", to: "2026-09-07",
+      targets: { kcal: 2000, proteinG: 150, carbG: 200, fatG: 60 },
+      daysLogged: 2,
+      average: { kcal: 2200, proteinG: 140, carbG: 210, fatG: 70 },
+      days: [
+        { date: "2026-09-06", kcal: 2000, proteinG: 130, carbG: 200, fatG: 65 },
+        { date: "2026-09-07", kcal: 2400, proteinG: 150, carbG: 220, fatG: 75 },
+      ],
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("radio", { name: "Nutrition" }));
+    expect(await screen.findByText("2200")).toBeInTheDocument();
+    expect(screen.getByText(/target 2000/)).toBeInTheDocument();
+    expect(screen.getByText("+200")).toBeInTheDocument();
+    expect(screen.getByText("140 g")).toBeInTheDocument();
+  });
+});
