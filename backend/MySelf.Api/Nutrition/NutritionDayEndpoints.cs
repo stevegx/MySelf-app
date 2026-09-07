@@ -232,7 +232,7 @@ public static class NutritionDayEndpoints
 
     // --- helpers ---
 
-    private static async Task<NutritionDayResponse> BuildDayAsync(
+    internal static async Task<NutritionDayResponse> BuildDayAsync(
         MySelfDbContext db, Guid userId, DateOnly day, CancellationToken ct)
     {
         var logs = await db.MealLogs
@@ -254,7 +254,8 @@ public static class NutritionDayEndpoints
                 .OrderBy(i => i.SortOrder)
                 .Select(i => new MealItemResponse(
                     i.Id, i.SortOrder, i.Name, i.ServingBasis.ToString(), i.ServingSizeGrams, i.Amount,
-                    i.Unit.ToString(), i.Kcal, i.ProteinG, i.CarbG, i.FatG))
+                    i.Unit.ToString(), i.Kcal, i.ProteinG, i.CarbG, i.FatG,
+                    i.BasisKcal, i.BasisProteinG, i.BasisCarbG, i.BasisFatG))
                 .ToList();
 
             var subtotal = new NutrientTotals(

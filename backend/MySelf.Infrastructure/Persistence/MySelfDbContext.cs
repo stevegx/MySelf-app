@@ -31,6 +31,8 @@ public class MySelfDbContext(DbContextOptions<MySelfDbContext> options)
     public DbSet<MealLog> MealLogs => Set<MealLog>();
     public DbSet<MealLogItem> MealLogItems => Set<MealLogItem>();
     public DbSet<CustomFood> CustomFoods => Set<CustomFood>();
+    public DbSet<SavedMeal> SavedMeals => Set<SavedMeal>();
+    public DbSet<SavedMealItem> SavedMealItems => Set<SavedMealItem>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<UserProfile> UserProfiles => Set<UserProfile>();
     public DbSet<UserGoal> UserGoals => Set<UserGoal>();

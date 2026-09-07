@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { Button, Card, CardTitle, Input, PageHeader, Ring, Skeleton } from "../../components/ui";
 import { AddFoodDialog } from "./AddFoodDialog";
+import { SaveMealDialog, SavedMealsBar } from "./SavedMeals";
 import { useDeleteMealItem, useNutritionDay, useUpdateMealItem } from "./api";
 import type { MealCategory, MealItem } from "./api";
 
@@ -90,6 +91,7 @@ function ItemRow({ date, item }: { date: string; item: MealItem }) {
 export function NutritionScreen() {
   const [date, setDate] = useState(todayIso());
   const [adding, setAdding] = useState<MealCategory | null>(null);
+  const [savingMeal, setSavingMeal] = useState<{ category: MealCategory; items: MealItem[] } | null>(null);
   const { data: day, isLoading } = useNutritionDay(date);
 
   const targets = day?.targets;
@@ -100,6 +102,13 @@ export function NutritionScreen() {
   return (
     <>
       {adding && <AddFoodDialog date={date} category={adding} onClose={() => setAdding(null)} />}
+      {savingMeal && (
+        <SaveMealDialog
+          category={savingMeal.category}
+          items={savingMeal.items}
+          onClose={() => setSavingMeal(null)}
+        />
+      )}
 
       <PageHeader
         title="Nutrition"
@@ -165,6 +174,8 @@ export function NutritionScreen() {
             </div>
           </Card>
 
+          <SavedMealsBar date={date} />
+
           <div className="flex flex-col gap-3">
             {(day?.meals ?? []).map((meal) => (
               <Card key={meal.category}>
@@ -177,16 +188,26 @@ export function NutritionScreen() {
                   <ItemRow key={item.id} date={date} item={item} />
                 ))}
 
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="mt-1 self-start"
-                  aria-label={`Add food to ${meal.category}`}
-                  onClick={() => setAdding(meal.category)}
-                >
-                  <Plus size={14} aria-hidden />
-                  Add food
-                </Button>
+                <div className="mt-1 flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Add food to ${meal.category}`}
+                    onClick={() => setAdding(meal.category)}
+                  >
+                    <Plus size={14} aria-hidden />
+                    Add food
+                  </Button>
+                  {meal.items.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSavingMeal({ category: meal.category, items: meal.items })}
+                    >
+                      Save as meal
+                    </Button>
+                  )}
+                </div>
               </Card>
             ))}
           </div>

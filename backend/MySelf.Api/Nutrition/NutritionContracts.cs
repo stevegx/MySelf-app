@@ -31,7 +31,13 @@ public sealed record MealItemResponse(
     decimal Kcal,
     decimal ProteinG,
     decimal CarbG,
-    decimal FatG);
+    decimal FatG,
+    // The food's declared per-basis nutrients — so a logged item can be turned back into a
+    // saved-meal template without re-deriving them from the scaled values.
+    decimal BasisKcal,
+    decimal BasisProteinG,
+    decimal BasisCarbG,
+    decimal BasisFatG);
 
 /// <summary>POST /api/v1/nutrition-days/{date}/items — log one food into a meal slot. The
 /// per-basis nutrients are the food's declared values; the server scales them to the

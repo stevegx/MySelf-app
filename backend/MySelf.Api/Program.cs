@@ -176,6 +176,7 @@ app.MapHealthChecks("/health");
 
 app.MapFoodsEndpoints();
 app.MapNutritionDayEndpoints();
+app.MapSavedMealEndpoints();
 app.MapAuthEndpoints();
 app.MapPasswordResetEndpoints();
 app.MapMeEndpoints();

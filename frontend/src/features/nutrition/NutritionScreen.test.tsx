@@ -29,6 +29,7 @@ function dayWithLunchItem(date: string) {
     {
       id: "i1", sortOrder: 0, name: "Plain yogurt", servingBasis: "Per100g", servingSizeGrams: null,
       amount: 150, unit: "Grams", kcal: 78, proteinG: 5.1, carbG: 7.5, fatG: 2.6,
+      basisKcal: 52, basisProteinG: 3.4, basisCarbG: 5, basisFatG: 1.7,
     },
   ];
   lunch.subtotals = { kcal: 78, proteinG: 5.1, carbG: 7.5, fatG: 2.6 };
@@ -41,7 +42,7 @@ const SAVED_FOOD = {
   servingBasis: "Per100g", servingSizeGrams: null, kcal: 165, proteinG: 31, carbG: 0, fatG: 3.6,
 };
 
-function installFetch(day: unknown, opts: { myFoods?: unknown[] } = {}) {
+function installFetch(day: unknown, opts: { myFoods?: unknown[]; savedMeals?: unknown[] } = {}) {
   const calls: { url: string; method: string; body: unknown }[] = [];
   let current = day;
   const spy = vi.fn<typeof fetch>((input, init) => {
@@ -60,6 +61,12 @@ function installFetch(day: unknown, opts: { myFoods?: unknown[] } = {}) {
       });
     }
     if (url.includes("/api/v1/foods/custom") && method === "POST") return json({ ...SAVED_FOOD, id: "new" }, 201);
+    if (url.match(/\/api\/v1\/saved-meals\/[\w-]+\/add-to-day$/) && method === "POST") {
+      current = dayWithLunchItem((current as NutritionDay).date);
+      return json(current);
+    }
+    if (url.endsWith("/api/v1/saved-meals") && method === "GET") return json(opts.savedMeals ?? []);
+    if (url.endsWith("/api/v1/saved-meals") && method === "POST") return json({ id: "sm-new" }, 201);
     if (url.match(/\/api\/v1\/nutrition-days\/[\d-]+\/items$/) && method === "POST") {
       current = dayWithLunchItem((init!.body ? JSON.parse(init!.body as string).category : ""));
       return json(current);
@@ -163,6 +170,47 @@ describe("NutritionScreen", () => {
     expect(within(dialog).getByLabelText(/Calories/i)).toHaveValue(0.4);
     expect(within(dialog).getByText(/Open Food Facts · ODbL/)).toBeInTheDocument();
     expect(within(dialog).getByLabelText("Save to My Foods")).toBeChecked();
+  });
+
+  it("adds a saved meal to the day via its chip", async () => {
+    const savedMeal = {
+      id: "sm1", name: "Chicken & Rice", category: "Lunch", notes: null,
+      totals: { kcal: 525, proteinG: 66, carbG: 42, fatG: 7.6 },
+      items: [{ id: "x", sortOrder: 0, name: "Chicken", servingBasis: "Per100g", servingSizeGrams: null, perBasisKcal: 165, perBasisProteinG: 31, perBasisCarbG: 0, perBasisFatG: 3.6, defaultAmount: 200, unit: "Grams", kcal: 330, proteinG: 62, carbG: 0, fatG: 7.2 }],
+    };
+    const calls = installFetch(emptyDay("2026-09-08"), { savedMeals: [savedMeal] });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: "Chicken & Rice" }));
+    const dialog = await screen.findByRole("dialog", { name: /Add Chicken & Rice/i });
+    await user.click(within(dialog).getByRole("button", { name: "0.5×" }));
+    await user.click(within(dialog).getByRole("button", { name: "Add to day" }));
+
+    await waitFor(() => {
+      const post = calls.find((c) => c.method === "POST" && c.url.endsWith("/saved-meals/sm1/add-to-day"));
+      expect(post).toBeTruthy();
+      expect(post!.body).toMatchObject({ multiplier: 0.5, category: "Lunch" });
+    });
+  });
+
+  it("saves a populated meal as a template", async () => {
+    const calls = installFetch(dayWithLunchItem("2026-09-08"));
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: "Save as meal" }));
+    const dialog = await screen.findByRole("dialog", { name: /Save Lunch as a meal/i });
+    await user.type(within(dialog).getByLabelText("Name"), "Yogurt bowl");
+    await user.click(within(dialog).getByRole("button", { name: "Save meal" }));
+
+    await waitFor(() => {
+      const post = calls.find((c) => c.method === "POST" && c.url.endsWith("/saved-meals"));
+      expect(post).toBeTruthy();
+      const body = post!.body as { name: string; category: string; items: { name: string; perBasisKcal: number; defaultAmount: number }[] };
+      expect(body).toMatchObject({ name: "Yogurt bowl", category: "Lunch" });
+      expect(body.items[0]).toMatchObject({ name: "Plain yogurt", perBasisKcal: 52, defaultAmount: 150 });
+    });
   });
 
   it("removes a logged item", async () => {

@@ -27,6 +27,10 @@ export type MealItem = {
   servingSizeGrams: number | null;
   amount: number;
   unit: MealAmountUnit;
+  basisKcal: number;
+  basisProteinG: number;
+  basisCarbG: number;
+  basisFatG: number;
 } & Nutrients;
 
 export type Meal = {
@@ -175,5 +179,84 @@ export function useBarcodeLookup() {
   return useMutation({
     mutationFn: (code: string) =>
       apiFetch<BarcodeFood>(`/api/v1/foods/barcode/${encodeURIComponent(code)}`, { accessToken }),
+  });
+}
+
+// --- Saved Meals ---
+
+export type SavedMealItem = {
+  id: string;
+  sortOrder: number;
+  name: string;
+  servingBasis: ServingBasis;
+  servingSizeGrams: number | null;
+  perBasisKcal: number;
+  perBasisProteinG: number;
+  perBasisCarbG: number;
+  perBasisFatG: number;
+  defaultAmount: number;
+  unit: MealAmountUnit;
+} & Nutrients;
+
+export type SavedMeal = {
+  id: string;
+  name: string;
+  category: MealCategory;
+  notes: string | null;
+  totals: Nutrients;
+  items: SavedMealItem[];
+};
+
+export type SaveMealItemInput = {
+  name: string;
+  servingBasis: ServingBasis;
+  servingSizeGrams: number | null;
+  perBasisKcal: number;
+  perBasisProteinG: number;
+  perBasisCarbG: number;
+  perBasisFatG: number;
+  defaultAmount: number;
+  unit: MealAmountUnit;
+};
+
+export function useSavedMeals() {
+  const accessToken = useToken();
+  return useQuery({
+    queryKey: ["saved-meals"],
+    queryFn: () => apiFetch<SavedMeal[]>("/api/v1/saved-meals", { accessToken }),
+    enabled: accessToken != null,
+  });
+}
+
+export function useCreateSavedMeal() {
+  const accessToken = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; category: MealCategory; notes?: string | null; items: SaveMealItemInput[] }) =>
+      apiFetch<SavedMeal>("/api/v1/saved-meals", { method: "POST", body, accessToken }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["saved-meals"] }),
+  });
+}
+
+export function useDeleteSavedMeal() {
+  const accessToken = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiFetch<void>(`/api/v1/saved-meals/${id}`, { method: "DELETE", accessToken }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["saved-meals"] }),
+  });
+}
+
+export function useAddSavedMealToDay(date: string) {
+  const accessToken = useToken();
+  const invalidate = useInvalidateDay(date);
+  return useMutation({
+    mutationFn: ({ id, category, multiplier }: { id: string; category?: MealCategory; multiplier: number }) =>
+      apiFetch<NutritionDay>(`/api/v1/saved-meals/${id}/add-to-day`, {
+        method: "POST",
+        body: { date, category: category ?? null, multiplier },
+        accessToken,
+      }),
+    onSuccess: invalidate,
   });
 }
