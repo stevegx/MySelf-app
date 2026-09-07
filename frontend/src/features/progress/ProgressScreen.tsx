@@ -1,7 +1,11 @@
 import { useState } from "react";
-import { Card, CardKicker, Input, PageHeader, Segmented, Skeleton, Tag } from "../../components/ui";
+import { Trash2 } from "lucide-react";
+import { Button, Card, CardKicker, Input, PageHeader, Segmented, Skeleton, Tag } from "../../components/ui";
 import { useExerciseHistory, useExerciseSearch } from "../workouts/api";
 import type { ExerciseHistoryEntry, PersonalRecordDetail } from "../workouts/api";
+import { useBodyMeasurements, useDeleteWeight, useWeightTrend } from "./api";
+import type { WeightTrendPoint } from "./api";
+import { LogWeightDialog } from "./LogWeightDialog";
 
 type ProgressTab = "strength" | "weight" | "measurements";
 
@@ -141,6 +145,130 @@ function StrengthTab() {
   );
 }
 
+/** Two lines over one date axis: the faint daily average and the bold 7-day rolling average. */
+function WeightTrendChart({ points }: { points: WeightTrendPoint[] }) {
+  if (points.length < 2) return null;
+
+  const values = points.flatMap((p) => [p.average, p.rollingAverage]);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const x = (i: number) => (i / (points.length - 1)) * 100;
+  const y = (v: number) => 32 - ((v - min) / span) * 30 - 1;
+  const line = (get: (p: WeightTrendPoint) => number) =>
+    points.map((p, i) => `${x(i)},${y(get(p))}`).join(" ");
+
+  return (
+    <svg viewBox="0 0 100 32" preserveAspectRatio="none" className="h-28 w-full" aria-hidden>
+      <polyline
+        points={line((p) => p.average)}
+        fill="none"
+        stroke="var(--color-foreground-subtle)"
+        strokeWidth="1"
+        vectorEffect="non-scaling-stroke"
+      />
+      <polyline
+        points={line((p) => p.rollingAverage)}
+        fill="none"
+        stroke="var(--color-primary)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  );
+}
+
+function WeightTab() {
+  const trend = useWeightTrend();
+  const list = useBodyMeasurements();
+  const del = useDeleteWeight();
+  const [logging, setLogging] = useState(false);
+
+  const points = trend.data?.points ?? [];
+  const latest = trend.data?.latest ?? null;
+  const change = trend.data?.sevenDayChangeKg ?? null;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {logging && <LogWeightDialog onClose={() => setLogging(false)} />}
+
+      <div className="flex items-center justify-between">
+        <h3 className="m-0 text-base font-bold">Body weight</h3>
+        <Button variant="primary" size="sm" onClick={() => setLogging(true)}>
+          Log weight
+        </Button>
+      </div>
+
+      {trend.isLoading ? (
+        <Card className="gap-3">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-28" />
+        </Card>
+      ) : points.length === 0 ? (
+        <Card>
+          <p className="m-0 text-[13px] text-foreground-muted">
+            No weight logged yet. Log a reading to start a trend line — the chart uses each day's
+            average and a 7-day rolling average.
+          </p>
+        </Card>
+      ) : (
+        <>
+          <Card className="gap-2">
+            <div className="flex items-baseline gap-3">
+              <span className="text-[26px] font-bold">{latest?.toFixed(1)} kg</span>
+              {change != null && (
+                <span
+                  className={
+                    change < 0 ? "text-[13px] text-success" : change > 0 ? "text-[13px] text-warning" : "text-[13px] text-foreground-muted"
+                  }
+                >
+                  {change > 0 ? "▲" : change < 0 ? "▼" : "→"} {Math.abs(change).toFixed(1)} kg / 7 days
+                </span>
+              )}
+            </div>
+            <WeightTrendChart points={points} />
+            <div className="flex gap-3 text-[11px] text-foreground-muted">
+              <span className="flex items-center gap-1">
+                <span className="inline-block h-0.5 w-4 bg-foreground-subtle" /> daily average
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="inline-block h-[3px] w-4 rounded-full bg-primary" /> 7-day rolling
+              </span>
+            </div>
+          </Card>
+
+          <Card className="gap-1">
+            <CardKicker>Recent readings</CardKicker>
+            {(list.data ?? []).map((m) => (
+              <div
+                key={m.id}
+                className="flex items-center justify-between border-t border-border py-2 text-[13px] first:border-t-0"
+              >
+                <span className="text-foreground-muted">
+                  {new Date(`${m.localDate}T00:00:00`).toLocaleDateString()}
+                </span>
+                <span className="font-semibold">{m.weightKg.toFixed(1)} kg</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  iconOnly
+                  aria-label={`Delete reading from ${m.localDate}`}
+                  disabled={del.isPending}
+                  onClick={() => del.mutate(m.id)}
+                >
+                  <Trash2 size={13} aria-hidden />
+                </Button>
+              </div>
+            ))}
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function ProgressScreen() {
   const [tab, setTab] = useState<ProgressTab>("strength");
 
@@ -164,9 +292,11 @@ export function ProgressScreen() {
 
       {tab === "strength" ? (
         <StrengthTab />
+      ) : tab === "weight" ? (
+        <WeightTab />
       ) : (
         <Card>
-          <CardKicker>{tab === "weight" ? "Body weight trend" : "Measurements"}</CardKicker>
+          <CardKicker>Measurements</CardKicker>
           <p className="m-0 text-[13px] text-foreground-muted">Coming in a later phase.</p>
         </Card>
       )}

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ChevronRight, Circle, Dumbbell, Scale, Utensils } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Button, Card, CardKicker, PageHeader, Ring, Skeleton } from "../../components/ui";
@@ -6,8 +7,26 @@ import { useAuth } from "../auth/auth";
 import { useMe } from "../auth/useMe";
 import { formatTarget, useNutritionTargets } from "../nutrition/useNutritionTargets";
 import { useActiveSession, useSessionHistory } from "../workouts/api";
+import { useWeightTrend } from "../progress/api";
+import { LogWeightDialog } from "../progress/LogWeightDialog";
 
 const WEEK_DAYS = ["M", "T", "W", "T", "F", "S", "S"];
+
+/** A tiny inline sparkline for the body-weight rolling average — no chart library. */
+function DashboardSparkline({ values }: { values: number[] }) {
+  if (values.length < 2) return null;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const pts = values
+    .map((v, i) => `${(i / (values.length - 1)) * 100},${20 - ((v - min) / span) * 18 - 1}`)
+    .join(" ");
+  return (
+    <svg viewBox="0 0 100 20" preserveAspectRatio="none" className="h-8 w-full text-primary" aria-hidden>
+      <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
 
 /** Monday-based index (0 = Mon … 6 = Sun). */
 function mondayIndex(d: Date) {
@@ -61,6 +80,8 @@ export function DashboardScreen() {
   const targets = useNutritionTargets();
   const { data: active } = useActiveSession();
   const freq = useWorkoutFrequency();
+  const { data: weight } = useWeightTrend();
+  const [logging, setLogging] = useState(false);
 
   const startWorkout = () => navigate(active ? "/workouts/active" : "/workouts/builder");
 
@@ -94,13 +115,15 @@ export function DashboardScreen() {
               <Dumbbell size={15} aria-hidden />
               {active ? "Resume workout" : "Start workout"}
             </Button>
-            <Button variant="primary" onClick={() => navigate("/progress")}>
+            <Button variant="primary" onClick={() => setLogging(true)}>
               <Scale size={15} aria-hidden />
               Log weight
             </Button>
           </>
         }
       />
+
+      {logging && <LogWeightDialog onClose={() => setLogging(false)} />}
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-4">
         <Card className="col-span-2">
@@ -182,12 +205,43 @@ export function DashboardScreen() {
 
         <Card>
           <CardKicker>Body weight</CardKicker>
-          <p className="m-0 mb-2 flex-1 text-[13px] text-foreground-muted">
-            No weight logs yet — log your weight to start a trend line.
-          </p>
-          <Button variant="secondary" block onClick={() => navigate("/progress")}>
-            Log your weight
-          </Button>
+          {weight?.latest != null ? (
+            <>
+              <div className="flex items-baseline gap-2 py-1">
+                <span className="text-[26px] font-bold">{weight.latest.toFixed(1)} kg</span>
+                {weight.sevenDayChangeKg != null && (
+                  <span
+                    className={cn(
+                      "text-[13px]",
+                      weight.sevenDayChangeKg < 0
+                        ? "text-success"
+                        : weight.sevenDayChangeKg > 0
+                          ? "text-warning"
+                          : "text-foreground-muted",
+                    )}
+                  >
+                    {weight.sevenDayChangeKg > 0 ? "▲" : weight.sevenDayChangeKg < 0 ? "▼" : "→"}{" "}
+                    {Math.abs(weight.sevenDayChangeKg).toFixed(1)} kg / 7 days
+                  </span>
+                )}
+              </div>
+              {weight.points.length >= 2 && (
+                <DashboardSparkline values={weight.points.map((p) => p.rollingAverage)} />
+              )}
+              <Button variant="secondary" block className="mt-1" onClick={() => setLogging(true)}>
+                Log weight
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="m-0 mb-2 flex-1 text-[13px] text-foreground-muted">
+                No weight logs yet — log your weight to start a trend line.
+              </p>
+              <Button variant="secondary" block onClick={() => setLogging(true)}>
+                Log your weight
+              </Button>
+            </>
+          )}
         </Card>
 
         <Card className="col-span-2">
