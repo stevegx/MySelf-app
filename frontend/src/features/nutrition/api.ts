@@ -113,3 +113,41 @@ export function useDeleteMealItem(date: string) {
     onSuccess: invalidate,
   });
 }
+
+// --- My Foods ---
+
+export type CustomFood = {
+  id: string;
+  name: string;
+  brand: string | null;
+  barcode: string | null;
+  servingBasis: ServingBasis;
+  servingSizeGrams: number | null;
+  kcal: number;
+  proteinG: number;
+  carbG: number;
+  fatG: number;
+};
+
+export type CreateCustomFoodBody = Omit<CustomFood, "id">;
+
+/** Search the caller's saved My Foods by name/brand (empty query lists all). */
+export function useFoodSearch(query: string) {
+  const accessToken = useToken();
+  return useQuery({
+    queryKey: ["my-foods", query],
+    queryFn: () =>
+      apiFetch<CustomFood[]>(`/api/v1/foods/search?q=${encodeURIComponent(query)}`, { accessToken }),
+    enabled: accessToken != null,
+  });
+}
+
+export function useCreateCustomFood() {
+  const accessToken = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateCustomFoodBody) =>
+      apiFetch<CustomFood>("/api/v1/foods/custom", { method: "POST", body, accessToken }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["my-foods"] }),
+  });
+}

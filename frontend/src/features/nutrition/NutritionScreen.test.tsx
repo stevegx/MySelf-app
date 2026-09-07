@@ -36,7 +36,12 @@ function dayWithLunchItem(date: string) {
   return d;
 }
 
-function installFetch(day: unknown) {
+const SAVED_FOOD = {
+  id: "f1", name: "Chicken breast", brand: "Farm", barcode: null,
+  servingBasis: "Per100g", servingSizeGrams: null, kcal: 165, proteinG: 31, carbG: 0, fatG: 3.6,
+};
+
+function installFetch(day: unknown, opts: { myFoods?: unknown[] } = {}) {
   const calls: { url: string; method: string; body: unknown }[] = [];
   let current = day;
   const spy = vi.fn<typeof fetch>((input, init) => {
@@ -47,6 +52,8 @@ function installFetch(day: unknown) {
       Promise.resolve(new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json" } }));
 
     if (url.includes("/auth/refresh")) return json(AUTH);
+    if (url.includes("/api/v1/foods/search")) return json(opts.myFoods ?? []);
+    if (url.includes("/api/v1/foods/custom") && method === "POST") return json({ ...SAVED_FOOD, id: "new" }, 201);
     if (url.match(/\/api\/v1\/nutrition-days\/[\d-]+\/items$/) && method === "POST") {
       current = dayWithLunchItem((init!.body ? JSON.parse(init!.body as string).category : ""));
       return json(current);
@@ -107,6 +114,31 @@ describe("NutritionScreen", () => {
       const post = calls.find((c) => c.method === "POST" && c.url.endsWith("/items"));
       expect(post).toBeTruthy();
       expect(post!.body).toMatchObject({ category: "Lunch", name: "Plain yogurt", perBasisKcal: 52, amount: 150 });
+    });
+  });
+
+  it("prefills the form from a saved My Food, then can re-save on add", async () => {
+    const calls = installFetch(emptyDay("2026-09-08"), { myFoods: [SAVED_FOOD] });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: "Add food to Dinner" }));
+    const dialog = await screen.findByRole("dialog", { name: /Add food to Dinner/i });
+
+    await user.type(within(dialog).getByLabelText(/Search My Foods/i), "chick");
+    await user.click(await within(dialog).findByRole("button", { name: /Chicken breast/i }));
+
+    // The manual fields are now filled from the saved food.
+    expect(within(dialog).getByLabelText("Name")).toHaveValue("Chicken breast");
+    expect(within(dialog).getByLabelText(/Calories/i)).toHaveValue(165);
+
+    await user.type(within(dialog).getByLabelText("Amount eaten"), "200");
+    await user.click(within(dialog).getByLabelText("Save to My Foods"));
+    await user.click(within(dialog).getByRole("button", { name: "Add" }));
+
+    await waitFor(() => {
+      expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/items"))).toBe(true);
+      expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/foods/custom"))).toBe(true);
     });
   });
 

@@ -1,15 +1,15 @@
 import { useState } from "react";
-import { Button, Input, Segmented } from "../../components/ui";
+import { Button, Checkbox, Input, Segmented } from "../../components/ui";
 import { ApiError } from "../../lib/api";
-import { useAddMealItem } from "./api";
-import type { MealAmountUnit, MealCategory, ServingBasis } from "./api";
+import { useAddMealItem, useCreateCustomFood, useFoodSearch } from "./api";
+import type { CustomFood, MealAmountUnit, MealCategory, ServingBasis } from "./api";
 
 const num = (s: string) => (s.trim() === "" ? NaN : Number(s));
 
 /**
- * Manual food entry (docs/03 §8.7 "Create food manually"): a name, the nutrients per 100 g
- * or per serving, and how much was eaten. Barcode / My Foods prefill this same form in
- * later slices. Mount only while open so each open starts clean.
+ * Add a food to a meal slot. Two ways in, sharing one form: pick a saved food from "My
+ * Foods" (prefills the nutrients), or type it manually and optionally tick "Save to My
+ * Foods". Barcode prefill lands here too in a later slice. Mount only while open.
  */
 export function AddFoodDialog({
   date,
@@ -21,6 +21,11 @@ export function AddFoodDialog({
   onClose: () => void;
 }) {
   const add = useAddMealItem(date);
+  const createFood = useCreateCustomFood();
+
+  const [search, setSearch] = useState("");
+  const { data: results } = useFoodSearch(search.trim());
+
   const [name, setName] = useState("");
   const [basis, setBasis] = useState<ServingBasis>("Per100g");
   const [servingSize, setServingSize] = useState("");
@@ -30,12 +35,25 @@ export function AddFoodDialog({
   const [fat, setFat] = useState("");
   const [amount, setAmount] = useState("");
   const [unit, setUnit] = useState<MealAmountUnit>("Grams");
+  const [saveFood, setSaveFood] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Per-serving foods are logged in servings by default; per-100g in grams.
   const onBasisChange = (b: ServingBasis) => {
     setBasis(b);
     setUnit(b === "PerServing" ? "Serving" : "Grams");
+  };
+
+  const applyFood = (f: CustomFood) => {
+    setName(f.name);
+    setBasis(f.servingBasis);
+    setUnit(f.servingBasis === "PerServing" ? "Serving" : "Grams");
+    setServingSize(f.servingSizeGrams != null ? String(f.servingSizeGrams) : "");
+    setKcal(String(f.kcal));
+    setProtein(String(f.proteinG));
+    setCarb(String(f.carbG));
+    setFat(String(f.fatG));
+    setSaveFood(false);
+    setSearch("");
   };
 
   const needsServingSize =
@@ -53,12 +71,14 @@ export function AddFoodDialog({
       return setError("Enter the serving size in grams for this unit.");
     }
     setError(null);
+
+    const size = needsServingSize || servingSize.trim() !== "" ? num(servingSize) : null;
     try {
       await add.mutateAsync({
         category,
         name: n,
         servingBasis: basis,
-        servingSizeGrams: needsServingSize || servingSize.trim() !== "" ? num(servingSize) : null,
+        servingSizeGrams: size,
         perBasisKcal: values.kcal,
         perBasisProteinG: values.protein,
         perBasisCarbG: values.carb,
@@ -66,6 +86,21 @@ export function AddFoodDialog({
         amount: values.amount,
         unit,
       });
+      if (saveFood) {
+        await createFood
+          .mutateAsync({
+            name: n,
+            brand: null,
+            barcode: null,
+            servingBasis: basis,
+            servingSizeGrams: size,
+            kcal: values.kcal,
+            proteinG: values.protein,
+            carbG: values.carb,
+            fatG: values.fat,
+          })
+          .catch(() => {}); // the meal item is already logged; a save failure isn't fatal
+      }
       onClose();
     } catch (e) {
       setError(
@@ -88,6 +123,32 @@ export function AddFoodDialog({
     >
       <div className="flex max-h-[92vh] w-full max-w-md flex-col gap-3 overflow-y-auto rounded-card border border-border bg-surface p-4 shadow-xl">
         <h3 className="m-0 text-base font-bold">Add food · {category}</h3>
+
+        <label className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
+          Search My Foods
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Type to find a saved food" />
+        </label>
+        {search.trim() !== "" && (results?.length ?? 0) > 0 && (
+          <ul className="m-0 flex max-h-40 list-none flex-col gap-1 overflow-y-auto p-0">
+            {results!.map((f) => (
+              <li key={f.id}>
+                <button
+                  type="button"
+                  onClick={() => applyFood(f)}
+                  className="flex w-full items-center justify-between rounded-control border border-border bg-surface-subtle px-3 py-2 text-left text-[13px] hover:border-border-strong"
+                >
+                  <span className="min-w-0 truncate">
+                    {f.name}
+                    {f.brand ? <span className="ml-1 text-foreground-muted">· {f.brand}</span> : null}
+                  </span>
+                  <span className="shrink-0 text-xs text-foreground-muted">
+                    {Math.round(f.kcal)} kcal / {f.servingBasis === "Per100g" ? "100g" : "serving"}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
 
         <label className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
           Name
@@ -158,6 +219,12 @@ export function AddFoodDialog({
             />
           </label>
         )}
+
+        <Checkbox
+          label="Save to My Foods"
+          checked={saveFood}
+          onChange={(e) => setSaveFood(e.target.checked)}
+        />
 
         {error && <p className="m-0 text-[13px] text-danger">{error}</p>}
 
