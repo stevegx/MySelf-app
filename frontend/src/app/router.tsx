@@ -17,7 +17,6 @@ import { SessionEditScreen } from "../features/workouts/SessionEditScreen";
 import { WorkoutHistoryScreen } from "../features/workouts/WorkoutHistoryScreen";
 import { WorkoutCalendarScreen } from "../features/workouts/WorkoutCalendarScreen";
 import { NutritionScreen } from "../features/nutrition/NutritionScreen";
-import { AddFoodScreen } from "../features/nutrition/AddFoodScreen";
 import { ProgressScreen } from "../features/progress/ProgressScreen";
 import { SettingsScreen } from "../features/settings/SettingsScreen";
 
@@ -68,7 +67,6 @@ export const router = createBrowserRouter([
                 ],
               },
               { path: "nutrition", element: <NutritionScreen /> },
-              { path: "nutrition/add", element: <AddFoodScreen /> },
               { path: "progress", element: <ProgressScreen /> },
               { path: "settings", element: <SettingsScreen /> },
               { path: "*", element: <Navigate to="/dashboard" replace /> },
