@@ -29,6 +29,10 @@ public sealed class WgerClient(HttpClient http)
             $"exerciseinfo/?format=json&language={EnglishLanguageId}&limit=100",
             ct);
 
+    /// <summary>The "main" illustration per exercise base (~1/3 of exercises have one).</summary>
+    public Task<List<WgerExerciseImage>> GetMainExerciseImagesAsync(CancellationToken ct) =>
+        GetAllPagesAsync<WgerExerciseImage>("exerciseimage/?format=json&is_main=true&limit=100", ct);
+
     private async Task<List<T>> GetAllPagesAsync<T>(string relativeUrl, CancellationToken ct)
     {
         var all = new List<T>();

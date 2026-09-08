@@ -9,8 +9,9 @@ namespace MySelf.IntegrationTests;
 /// key, UseNpgsql, AddDbContextCheck and MapHealthChecks all have to line up.
 /// Requires the local PostgreSQL service to be running.
 /// </summary>
-public class HealthEndpointTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+[Collection(DatabaseCollection.Name)]
+public class HealthEndpointTests(WebApplicationFactory<Program> factory, DatabaseFixture db)
+    : DatabaseTest(db), IClassFixture<WebApplicationFactory<Program>>
 {
     [Fact]
     public async Task Health_returns_200_and_Healthy_when_database_is_reachable()

@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Button, Card, CardTitle, Field, Input, Segmented } from "../../components/ui";
+import { Button, Card, CardTitle, Checkbox, Field, Input, Segmented } from "../../components/ui";
 import { useTheme } from "../../app/theme";
 import type { ThemeMode } from "../../app/theme";
 import { useAuth } from "../auth/auth";
 import { useLogout } from "../auth/useLogout";
 import { useMe } from "../auth/useMe";
+import { useUpdatePreferences } from "../workouts/api";
 
 type Units = "metric" | "imperial";
 
@@ -17,6 +18,8 @@ export function SettingsScreen() {
   const { data: me } = useMe();
   const user = me?.user ?? session?.user;
   const logoutMutation = useLogout();
+  const updatePrefs = useUpdatePreferences();
+  const warnOffFocus = me?.profile?.warnOffFocusExercises ?? true;
 
   return (
     <>
@@ -70,6 +73,14 @@ export function SettingsScreen() {
           </Field>
           <Field label="Language" htmlFor="settings-language">
             <Input id="settings-language" defaultValue="English" disabled />
+          </Field>
+          <Field label="Workouts">
+            <Checkbox
+              label="Warn when an exercise is outside a day's focus"
+              checked={warnOffFocus}
+              disabled={updatePrefs.isPending || me?.profile == null}
+              onChange={(e) => updatePrefs.mutate({ warnOffFocusExercises: e.target.checked })}
+            />
           </Field>
         </Card>
 

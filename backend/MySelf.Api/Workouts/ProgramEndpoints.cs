@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using MySelf.Domain.Exercises;
 using MySelf.Domain.Workouts;
 using MySelf.Infrastructure.Persistence;
 
@@ -194,6 +195,93 @@ public static class ProgramEndpoints
             program.Days.Select(d => (d.Id, d.Name)).ToList(),
             localToday);
 
+        // Completed working sets per primary muscle ÷ weeks in range — the coverage signal.
+        var exerciseIds = sessions.SelectMany(s => s.ExerciseLogs).Select(e => e.ExerciseId).Distinct().ToList();
+        var primaryMusclesByExercise = await db.Exercises
+            .AsNoTracking()
+            .Where(e => exerciseIds.Contains(e.Id))
+            .Select(e => new
+            {
+                e.Id,
+                Muscles = e.Muscles
+                    .Where(m => m.Role == MuscleRole.Primary)
+                    .Select(m => m.Muscle.Name)
+                    .ToList(),
+            })
+            .ToDictionaryAsync(x => x.Id, x => x.Muscles, ct);
+
+        var setsByMuscle = new Dictionary<string, int>();
+        foreach (var log in sessions.SelectMany(s => s.ExerciseLogs))
+        {
+            if (!primaryMusclesByExercise.TryGetValue(log.ExerciseId, out var muscles) || muscles.Count == 0)
+            {
+                continue;
+            }
+            var completed = log.Sets.Count(s => s.CompletedAt is not null);
+            foreach (var m in muscles)
+            {
+                setsByMuscle[m] = setsByMuscle.GetValueOrDefault(m) + completed;
+            }
+        }
+
+        var weeks = Math.Max(1, stats.WeeksInRange);
+        var muscleWeeklySets = setsByMuscle
+            .Select(kv => new MuscleWeeklySets(kv.Key, Math.Round((double)kv.Value / weeks, 1)))
+            .OrderBy(x => x.SetsPerWeek)
+            .ThenBy(x => x.Muscle)
+            .ToList();
+
+        // Recent-volume balance for the Train home: completed sets over the last 14 local
+        // days, split by source day (every program day, 0-filled) and by primary muscle.
+        var windowFrom = localToday.AddDays(-13);
+        var recentSessions = sessions
+            .Where(s => s.PerformedOnLocalDate is { } d && d >= windowFrom && d <= localToday)
+            .ToList();
+
+        static int DoneSets(IEnumerable<WorkoutSession> group) =>
+            group.SelectMany(s => s.ExerciseLogs).SelectMany(e => e.Sets).Count(x => x.CompletedAt is not null);
+
+        var dayIds = program.Days.Select(d => d.Id).ToHashSet();
+        var recentSetsByDayId = recentSessions
+            .Where(s => s.SourceDayId is { } sid && dayIds.Contains(sid))
+            .GroupBy(s => s.SourceDayId!.Value)
+            .ToDictionary(g => g.Key, DoneSets);
+
+        var byDay = program.Days
+            .Select(d => new VolumeSlice(d.Name, recentSetsByDayId.GetValueOrDefault(d.Id)))
+            .ToList();
+
+        var otherSets = DoneSets(recentSessions.Where(s => s.SourceDayId is not { } sid || !dayIds.Contains(sid)));
+        if (otherSets > 0)
+        {
+            byDay.Add(new VolumeSlice("Other", otherSets));
+        }
+
+        var recentSetsByMuscle = new Dictionary<string, int>();
+        foreach (var log in recentSessions.SelectMany(s => s.ExerciseLogs))
+        {
+            if (!primaryMusclesByExercise.TryGetValue(log.ExerciseId, out var muscles) || muscles.Count == 0)
+            {
+                continue;
+            }
+            var done = log.Sets.Count(s => s.CompletedAt is not null);
+            foreach (var m in muscles)
+            {
+                recentSetsByMuscle[m] = recentSetsByMuscle.GetValueOrDefault(m) + done;
+            }
+        }
+
+        var recentVolume = new ProgramRecentVolume(
+            windowFrom,
+            localToday,
+            recentSessions.Count,
+            DoneSets(recentSessions),
+            byDay,
+            recentSetsByMuscle
+                .Select(kv => new VolumeSlice(kv.Key, kv.Value))
+                .OrderByDescending(x => x.Sets)
+                .ToList());
+
         // PRs achieved in those sessions (docs/02 §7 PR types), newest first.
         var sessionIds = sessions.Select(s => s.Id).ToList();
         var prs = await db.PersonalRecords
@@ -225,7 +313,9 @@ public static class ProgramEndpoints
                 .ToList(),
             prs
                 .Select(x => new ProgramPrStat(x.ExerciseName, x.Type.ToString(), (double)x.Value, x.AchievedOn))
-                .ToList()));
+                .ToList(),
+            muscleWeeklySets,
+            recentVolume));
     }
 
     private static async Task<IResult> UpdateAsync(
@@ -438,7 +528,12 @@ public static class ProgramEndpoints
             statusCode: StatusCodes.Status201Created);
     }
 
-    private static WorkoutDay CloneDay(WorkoutDay source)
+    /// <summary>
+    /// Deep-copies a day's tree into detached new entities (fresh ids, shared catalogue
+    /// references). Used by program clone and by <c>POST /workout-days/{id}/duplicate</c>;
+    /// callers set <see cref="WorkoutDay.ProgramId"/> / <see cref="WorkoutDay.SortOrder"/>.
+    /// </summary>
+    internal static WorkoutDay CloneDay(WorkoutDay source)
     {
         // New superset rows, keyed by the source id so the exercises can point at the copies.
         var supersetByOldId = source.Supersets.ToDictionary(
@@ -456,6 +551,7 @@ public static class ProgramEndpoints
             Name = source.Name,
             SortOrder = source.SortOrder,
             EstimatedDurationMinutes = source.EstimatedDurationMinutes,
+            FocusMuscleIds = [.. source.FocusMuscleIds],
             Supersets = supersetByOldId.Values.ToList(),
             Exercises = source.Exercises
                 .OrderBy(e => e.SortOrder)
@@ -488,7 +584,7 @@ public static class ProgramEndpoints
         };
     }
 
-    private static string Truncate(string value, int max) =>
+    internal static string Truncate(string value, int max) =>
         value.Length <= max ? value : value[..max];
 
     private static async Task<IResult> AddDayAsync(

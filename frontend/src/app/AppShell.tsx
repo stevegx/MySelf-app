@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../features/auth/auth";
 import { useMe } from "../features/auth/useMe";
+import { ResumeWorkoutBar } from "../features/workouts/ResumeWorkoutBar";
 import { useTheme } from "./theme";
 import type { ThemeMode } from "./theme";
 
@@ -39,7 +40,7 @@ function ThemeToggle() {
       type="button"
       onClick={() => setMode(NEXT_MODE[mode])}
       aria-label={`Theme: ${MODE_LABEL[mode]}. Switch to ${MODE_LABEL[NEXT_MODE[mode]]}.`}
-      className="inline-flex min-h-[34px] items-center gap-1.5 rounded-control border border-border-strong px-3 text-[13px] font-semibold hover:bg-surface-subtle"
+      className="inline-flex min-h-[34px] items-center gap-1.5 rounded-control border border-border-strong px-3 text-sm font-semibold hover:bg-surface-subtle"
     >
       <Icon size={15} aria-hidden />
       {MODE_LABEL[mode]}
@@ -65,28 +66,28 @@ function AccountSummary() {
         {user.username.charAt(0).toUpperCase()}
       </div>
       <div className="min-w-0">
-        <div className="truncate text-[13px] font-bold">{user.username}</div>
-        <div className="truncate text-[11px] text-foreground-muted">{user.email}</div>
+        <div className="truncate text-sm font-bold">{user.username}</div>
+        <div className="truncate text-[12px] text-foreground-muted">{user.email}</div>
       </div>
     </div>
   );
 }
 
+const navLinkClass =
+  "flex min-h-11 items-center gap-2.5 rounded-control px-3 py-2.5 text-sm text-foreground no-underline hover:bg-surface-subtle aria-[current=page]:bg-primary-soft aria-[current=page]:font-semibold aria-[current=page]:text-primary-pressed";
+
 export function AppShell() {
   return (
     <div className="flex min-h-screen flex-col items-start nav:flex-row">
-      <aside className="flex w-full shrink-0 items-center gap-3 overflow-x-auto border-b border-border bg-surface p-4 nav:sticky nav:top-0 nav:h-screen nav:w-[232px] nav:flex-col nav:items-stretch nav:gap-6 nav:border-r nav:border-b-0 nav:px-4 nav:py-6">
+      <aside className="flex w-full shrink-0 items-center gap-3 border-b border-border bg-surface p-4 nav:sticky nav:top-0 nav:h-screen nav:w-[232px] nav:flex-col nav:items-stretch nav:gap-6 nav:border-r nav:border-b-0 nav:px-4 nav:py-6">
         <div className="pl-2 text-xl font-bold tracking-tight">MySelf</div>
 
-        <nav className="flex gap-0.5 nav:flex-col" aria-label="Primary">
+        {/* Desktop: the nav lives in the sidebar. Mobile: it moves to a bottom bar (below). */}
+        <nav className="hidden nav:flex nav:flex-col nav:gap-0.5" aria-label="Primary">
           {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className="flex min-h-11 items-center gap-2.5 rounded-control px-3 py-2.5 text-sm text-foreground no-underline hover:bg-surface-subtle aria-[current=page]:bg-primary-soft aria-[current=page]:font-semibold aria-[current=page]:text-primary-pressed"
-            >
+            <NavLink key={to} to={to} className={navLinkClass}>
               <Icon size={18} aria-hidden />
-              <span className="hidden nav:inline">{label}</span>
+              <span>{label}</span>
             </NavLink>
           ))}
         </nav>
@@ -97,11 +98,30 @@ export function AppShell() {
         </div>
       </aside>
 
-      <main className="scrollbar-slim min-w-0 flex-1 p-5 nav:h-screen nav:overflow-y-auto nav:p-8 nav:pb-16">
+      <main className="scrollbar-slim min-w-0 flex-1 p-5 pb-[calc(4.5rem+env(safe-area-inset-bottom))] nav:h-screen nav:overflow-y-auto nav:p-8 nav:pb-16">
         <div className="mx-auto max-w-[1120px]">
           <Outlet />
         </div>
       </main>
+
+      <ResumeWorkoutBar />
+
+      {/* Mobile bottom tab bar. */}
+      <nav
+        aria-label="Primary"
+        className="fixed inset-x-0 bottom-0 z-30 flex border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] nav:hidden"
+      >
+        {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className="flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] text-foreground-muted no-underline aria-[current=page]:text-primary-pressed"
+          >
+            <Icon size={20} aria-hidden />
+            {label}
+          </NavLink>
+        ))}
+      </nav>
     </div>
   );
 }

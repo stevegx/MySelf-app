@@ -27,6 +27,10 @@ public class ExerciseConfiguration : IEntityTypeConfiguration<Exercise>
         builder.Property(e => e.LicenseUrl).HasMaxLength(255);
         // Attribution is display metadata and can list many contributors — left as unbounded text.
 
+        builder.Property(e => e.ImageUrl).HasMaxLength(500);
+        builder.Property(e => e.ImageThumbUrl).HasMaxLength(500);
+        builder.Property(e => e.ImageAttribution).HasMaxLength(255);
+
         builder.HasIndex(e => new { e.Source, e.ExternalId }).IsUnique();
         builder.HasIndex(e => e.Name);
 

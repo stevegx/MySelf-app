@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Providers } from "../../app/providers";
 import { DayEditor } from "./DayEditor";
@@ -28,6 +28,22 @@ const day = {
     },
   ],
   supersets: [],
+  focusMuscleIds: [] as number[],
+};
+
+const MUSCLES = [
+  { id: 1, name: "Chest", isFront: true },
+  { id: 2, name: "Quads", isFront: true },
+  { id: 3, name: "Shoulders", isFront: true },
+];
+
+const ME = {
+  user: session.user,
+  profile: {
+    dateOfBirth: "1994-03-21", heightCm: 178, calculationSex: null, unitSystem: "Metric",
+    timezone: null, locale: null, onboardingCompletedAt: "2026-09-01T00:00:00Z", warnOffFocusExercises: true,
+  },
+  currentGoal: null,
 };
 
 const program = {
@@ -50,6 +66,18 @@ function installFetch() {
       Promise.resolve(new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } }));
 
     if (url.includes("/auth/refresh")) return json(session);
+    if (url.endsWith("/api/v1/me")) return json(ME);
+    if (url.endsWith("/api/v1/muscles")) return json(MUSCLES);
+    if (url.endsWith("/api/v1/me/preferences") && method === "PUT") return json({ ...ME.profile, warnOffFocusExercises: false });
+    if (url.includes("/api/v1/exercises?")) {
+      return json({
+        items: [
+          { id: "sq", name: "Back Squat", category: "Legs", defaultTrackingMode: "WeightAndReps", primaryMuscles: ["Quads"], secondaryMuscles: ["Glutes"], equipment: ["Barbell"], imageThumbUrl: "https://wger.de/media/x.png", imageUrl: "https://wger.de/media/x-full.png", imageAttribution: "wger.de (CC BY-SA)" },
+          { id: "ohp", name: "Overhead Press", category: "Shoulders", defaultTrackingMode: "WeightAndReps", primaryMuscles: ["Shoulders"], secondaryMuscles: ["Triceps"], equipment: ["Barbell"], imageThumbUrl: null, imageUrl: null, imageAttribution: null },
+        ],
+        page: 1, pageSize: 25, total: 2,
+      });
+    }
     if (url.includes("/api/v1/workout-days/d1") && method === "GET") return json(day);
     if (url.includes("/api/v1/workout-days/d1") && method === "PUT") return json(day);
     if (url.includes("/api/v1/programs/p1")) return json(program);
@@ -59,18 +87,26 @@ function installFetch() {
   return calls;
 }
 
+type U = ReturnType<typeof userEvent.setup>;
+
+/** Exercise rows start collapsed (summary tags); click the name to reveal the set editor. */
+async function expandExercise(user: U, name: string) {
+  await user.click((await screen.findByText(name)).closest("button")!);
+}
+
 describe("DayEditor", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("shows every prescribed set instead of flattening them", async () => {
     installFetch();
+    const user = userEvent.setup();
     render(
       <Providers>
         <DayEditor dayId="d1" programId="p1" onClose={() => {}} />
       </Providers>,
     );
 
-    await screen.findByText("Back Squat");
+    await expandExercise(user, "Back Squat");
     // Two distinct set rows: one Standard, one Drop.
     expect(screen.getByDisplayValue("100")).toBeInTheDocument(); // set 1 weight
     expect(screen.getByDisplayValue("80")).toBeInTheDocument(); // set 2 weight
@@ -107,7 +143,7 @@ describe("DayEditor", () => {
       </Providers>,
     );
 
-    await screen.findByText("Back Squat");
+    await expandExercise(user, "Back Squat");
     expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
 
     const firstWeight = screen.getByDisplayValue("100");
@@ -117,25 +153,131 @@ describe("DayEditor", () => {
     expect(await screen.findByText("Unsaved changes")).toBeInTheDocument();
   });
 
-  it("asks before discarding unsaved changes", async () => {
-    installFetch();
-    const onClose = vi.fn();
+  it("sets a day focus, filters the picker to it, and warns on an off-focus add", async () => {
+    const calls = installFetch();
     const user = userEvent.setup();
     render(
       <Providers>
-        <DayEditor dayId="d1" programId="p1" onClose={onClose} />
+        <DayEditor dayId="d1" programId="p1" onClose={() => {}} />
       </Providers>,
     );
 
     await screen.findByText("Back Squat");
+
+    // Pick the "Legs" group as this day's focus (it expands to Quads + co.).
+    await user.click(await screen.findByRole("button", { name: "Legs", pressed: false }));
+
+    // Open the picker — it opens with the day's focus group pre-selected.
+    await user.click(screen.getByRole("button", { name: /add exercise/i }));
+    const picker = await screen.findByRole("dialog", { name: "Add exercise" });
+    expect(within(picker).getByRole("button", { name: "Legs", pressed: true })).toBeInTheDocument();
+    // The off-focus exercise is filtered out until we widen the filter.
+    expect(within(picker).queryByRole("button", { name: /Overhead Press/ })).not.toBeInTheDocument();
+
+    // Switch to "All", then add the off-focus one -> inline note in the editor.
+    await user.click(within(picker).getByRole("button", { name: "All" }));
+    await user.click(await within(picker).findByRole("button", { name: /Overhead Press/ }));
+    expect(await screen.findByText(/outside this day's focus/i)).toBeInTheDocument();
+
+    // Focus id rides along on save.
+    await user.click(screen.getByRole("button", { name: /Save day/i }));
+    const put = calls.find((c) => c.method === "PUT" && c.url.includes("/workout-days/d1"));
+    expect((put!.body as { focusMuscleIds: number[] }).focusMuscleIds).toEqual([2]);
+  });
+
+  it("reverts unsaved changes back to the saved day, after confirming", async () => {
+    installFetch();
+    const user = userEvent.setup();
+    render(
+      <Providers>
+        <DayEditor dayId="d1" programId="p1" onClose={() => {}} onSaved={() => {}} />
+      </Providers>,
+    );
+
+    await expandExercise(user, "Back Squat");
     const firstWeight = screen.getByDisplayValue("100");
     await user.clear(firstWeight);
     await user.type(firstWeight, "105");
+    expect(await screen.findByText("Unsaved changes")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Close" }));
-    expect(onClose).not.toHaveBeenCalled();
-    const bar = screen.getByText(/Discard your unsaved changes/i).closest("div")!;
-    await user.click(within(bar).getByRole("button", { name: "Discard" }));
-    expect(onClose).toHaveBeenCalled();
+    // "Revert" only shows while dirty; it asks first.
+    await user.click(screen.getByRole("button", { name: "Revert" }));
+    const bar = screen.getByText(/Revert your unsaved changes/i).closest("div")!;
+    await user.click(within(bar).getByRole("button", { name: "Revert" }));
+
+    // Re-seeded from the server: no longer dirty, weight back to 100.
+    await waitFor(() => expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument());
+    await expandExercise(user, "Back Squat");
+    expect(screen.getByDisplayValue("100")).toBeInTheDocument();
+  });
+
+  it("renames the day from the ⋯ menu and saves the new name", async () => {
+    const calls = installFetch();
+    const user = userEvent.setup();
+    render(
+      <Providers>
+        <DayEditor dayId="d1" programId="p1" onClose={() => {}} />
+      </Providers>,
+    );
+
+    await screen.findByText("Back Squat");
+    await user.click(screen.getByRole("button", { name: "Day options" }));
+    await user.click(screen.getByRole("button", { name: "Rename day" }));
+
+    const nameInput = screen.getByRole("textbox", { name: "Day name" });
+    await user.clear(nameInput);
+    await user.type(nameInput, "Leg Day A");
+    expect(await screen.findByText("Unsaved changes")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Save day/i }));
+    const put = calls.find((c) => c.method === "PUT" && c.url.includes("/workout-days/d1"));
+    expect((put!.body as { name: string }).name).toBe("Leg Day A");
+  });
+
+  it("offers Delete day in the ⋯ menu, wired to onDeleteDay", async () => {
+    installFetch();
+    const onDeleteDay = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <Providers>
+        <DayEditor dayId="d1" programId="p1" onClose={() => {}} onDeleteDay={onDeleteDay} />
+      </Providers>,
+    );
+
+    await screen.findByText("Back Squat");
+    await user.click(screen.getByRole("button", { name: "Day options" }));
+    await user.click(screen.getByRole("button", { name: "Delete day" }));
+    expect(onDeleteDay).toHaveBeenCalled();
+  });
+
+  it("offers Duplicate day in the ⋯ menu, wired to onDuplicateDay", async () => {
+    installFetch();
+    const onDuplicateDay = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <Providers>
+        <DayEditor dayId="d1" programId="p1" onClose={() => {}} onDuplicateDay={onDuplicateDay} />
+      </Providers>,
+    );
+
+    await screen.findByText("Back Squat");
+    await user.click(screen.getByRole("button", { name: "Day options" }));
+    await user.click(screen.getByRole("button", { name: "Duplicate day" }));
+    expect(onDuplicateDay).toHaveBeenCalled();
+  });
+
+  it("hides Duplicate day when no onDuplicateDay handler is given", async () => {
+    installFetch();
+    const user = userEvent.setup();
+    render(
+      <Providers>
+        <DayEditor dayId="d1" programId="p1" onClose={() => {}} />
+      </Providers>,
+    );
+
+    await screen.findByText("Back Squat");
+    await user.click(screen.getByRole("button", { name: "Day options" }));
+    expect(screen.getByRole("button", { name: "Rename day" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Duplicate day" })).not.toBeInTheDocument();
   });
 });

@@ -3,7 +3,7 @@ import { Dumbbell } from "lucide-react";
 import { useActiveSession } from "./api";
 
 const TABS = [
-  { to: "/workouts/builder", label: "Programs" },
+  { to: "/workouts/builder", label: "Train" },
   { to: "/workouts/history", label: "History" },
   { to: "/workouts/calendar", label: "Calendar" },
 ];
@@ -14,11 +14,11 @@ export function WorkoutLayout() {
 
   return (
     <>
-      <div className="mb-4 flex flex-wrap items-center gap-1 border-b border-border pb-2">
+      <div className="mb-4 flex flex-wrap items-center gap-1 pb-2">
         {active && (
           <NavLink
             to="/workouts/active"
-            className="mr-2 inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-[13px] font-semibold text-on-primary"
+            className="mr-2 inline-flex items-center gap-1.5 rounded-pill bg-primary px-3 py-1.5 text-sm font-semibold text-on-primary"
           >
             <Dumbbell size={14} aria-hidden />
             Resume workout
@@ -30,8 +30,8 @@ export function WorkoutLayout() {
             to={t.to}
             end={t.to === "/workouts/builder"}
             className={({ isActive }) =>
-              `rounded-control px-3 py-1.5 text-[13px] font-medium ${
-                isActive ? "bg-primary-soft text-primary-pressed" : "text-foreground-muted hover:bg-surface-subtle"
+              `rounded-pill px-3.5 py-1.5 text-sm font-medium ${
+                isActive ? "bg-primary text-on-primary" : "text-foreground-muted hover:bg-surface-subtle"
               }`
             }
           >

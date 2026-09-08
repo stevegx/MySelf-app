@@ -120,11 +120,39 @@ history. 49 unit + 102 integration + 65 frontend tests._
 - Add/replace movement during session.
 - Offline local draft, recovery and sync status.
 
+### Phase 4W — workouts UX rework
+
+_Shipped 2026-09-06 (branch `phase-4-workouts-home`; see
+`docs/learning-log/2026-09-06-phase4-*`). An unplanned, user-driven pass done before the
+original Phase 4 below. Slices: **Train home** (the /workouts landing leads with the active
+program's day cards + Start; program list moved behind "Manage programs"); **exercise
+muscles + equipment** on `GET /exercises`; **day focus** (`WorkoutDay.FocusMuscleIds`,
+`GET /muscles`) + a filtered exercise picker + an off-focus nudge with a
+`UserProfile.WarnOffFocusExercises` setting (`PUT /me/preferences`); **wger illustration
+images** (`enrich-images` import command, ~27% coverage, hot-linked); **gym logging
+redesign** (one exercise expanded, pre-seeded sets, `−/+` steppers, one Log button,
+auto-advance); **mobile bottom tab bar** + a persistent **Resume-workout bar**;
+**muscle-coverage** signal on the program Overview (`ProgramStats.muscleWeeklySets`).
+Deferred: per-exercise "stalled lift" chip in the day editor. Migrations
+`20260906081458`–`20260906092651`. 49 unit + 107 integration + 71 frontend tests._
+
 ### Phase 4 — dashboard and progress
 
-- Aggregated dashboard endpoint.
-- Nutrition-first overview, workout frequency and body-weight trend.
-- Detailed strength/performance charts remain in Progress.
+- **DONE 2026-09-07** — Body-weight logging (`BodyMeasurement`,
+  `POST/GET/DELETE /me/body-measurements`, `GET /analytics/weight` = daily average → 7-day
+  rolling). `WeightTrendCalculator` (pure). Progress "Body weight" tab (log dialog, two-line
+  trend chart, recent-readings list) + dashboard "Body weight" card. Migration
+  `20260907160452`. See `docs/learning-log/2026-09-07-body-weight-logging.md`.
+- **Deferred to Phase 5** — Aggregated `GET /dashboard?date=` endpoint. Half its payload
+  (nutrition today) has no data until food logging exists; the dashboard composes client-side
+  in the meantime (workout frequency + the real body-weight card).
+- **Own design pass, post-freeze** — Light gamification (agreed 2026-09-06): weekly workout
+  goal, streaks, badges, encouraging messages; goals across consistency / strength-PRs /
+  body-weight / balance; no XP/levels. Context-aware theming (agreed 2026-09-06): dark
+  "strong & heavy" active-workout screen, distinct nutrition palette, calm + gold "win"
+  colour for dashboard/progress, as theme scopes over the CSS-var tokens. Both blocked on
+  the "colours on hold" decision being lifted and a rules spec.
+- Detailed strength/performance charts remain in Progress (already shipped in Phase 3/4W).
 
 ### Phase 5 — nutrition
 

@@ -272,7 +272,18 @@ one completed session appear.
 ```json
 {
   "items": [
-    { "id": "ex-squat…", "name": "Back Squat", "category": "Legs", "defaultTrackingMode": "WeightAndReps" }
+    {
+      "id": "ex-squat…",
+      "name": "Barbell Full Squat",
+      "category": "Legs",
+      "defaultTrackingMode": "WeightAndReps",
+      "primaryMuscles": ["Quads"],
+      "secondaryMuscles": ["Glutes", "Hamstrings"],
+      "equipment": ["Barbell"],
+      "imageThumbUrl": "https://wger.de/media/exercise-images/1801/….200x200_q85.jpg",
+      "imageUrl": "https://wger.de/media/exercise-images/1801/….jpg",
+      "imageAttribution": "Workout Guru · wger.de (CC BY-SA)"
+    }
   ],
   "page": 1,
   "pageSize": 25,
@@ -280,5 +291,19 @@ one completed session appear.
 }
 ```
 
-`defaultTrackingMode`: `WeightAndReps` | `BodyweightReps` | `BodyweightPlusWeight` |
-`AssistanceReps` | `Duration` | `RepsOnly` — decides which performed fields a set shows.
+- `defaultTrackingMode`: `WeightAndReps` | `BodyweightReps` | `BodyweightPlusWeight` |
+  `AssistanceReps` | `Duration` | `RepsOnly` — decides which performed fields a set shows.
+- `primaryMuscles` / `secondaryMuscles`: muscle-group names (85% of the catalogue has them);
+  `equipment`: e.g. `Barbell`, `Dumbbell`, `Cable machine`, `none (bodyweight exercise)`.
+- `image*`: a hot-linked wger CC-BY-SA illustration — **null for ~73% of exercises**. Show
+  `imageThumbUrl` (200px) in lists, `imageUrl` full-size; render `imageAttribution` near it.
+- `GET /exercises/{id}` returns the **same object shape** (one item).
+
+### `GET /muscles` → `MuscleGroup[]`
+
+```json
+[ { "id": 4, "name": "Chest", "isFront": true }, { "id": 10, "name": "Quads", "isFront": true } ]
+```
+
+The 15 muscle groups, for the day-focus picker. `WorkoutDay.focusMuscleIds` on `GET
+/workout-days/{id}` is a list of these ids; `PUT` accepts it (unknown ids are dropped).

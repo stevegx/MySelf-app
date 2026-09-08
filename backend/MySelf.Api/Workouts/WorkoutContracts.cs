@@ -2,9 +2,22 @@ namespace MySelf.Api.Workouts;
 
 // --- exercise catalogue ---
 
-public sealed record ExerciseListItem(Guid Id, string Name, string Category, string DefaultTrackingMode);
+public sealed record ExerciseListItem(
+    Guid Id,
+    string Name,
+    string Category,
+    string DefaultTrackingMode,
+    IReadOnlyList<string> PrimaryMuscles,
+    IReadOnlyList<string> SecondaryMuscles,
+    IReadOnlyList<string> Equipment,
+    string? ImageThumbUrl,
+    string? ImageUrl,
+    string? ImageAttribution);
 
 public sealed record ExerciseSearchResult(IReadOnlyList<ExerciseListItem> Items, int Page, int PageSize, int Total);
+
+/// <summary>A muscle group from the catalogue (GET /api/v1/muscles) — for the day-focus picker.</summary>
+public sealed record MuscleGroup(int Id, string Name, bool IsFront);
 
 // --- programs ---
 
@@ -59,11 +72,30 @@ public sealed record ProgramStats(
     int SkippedSets,
     double SkippedSetRate,
     IReadOnlyList<ProgramDayStat> PerDay,
-    IReadOnlyList<ProgramPrStat> PersonalRecords);
+    IReadOnlyList<ProgramPrStat> PersonalRecords,
+    // Completed working sets per primary muscle ÷ weeks in range — a coverage / "don't skip
+    // leg day" signal. Lowest first.
+    IReadOnlyList<MuscleWeeklySets> MuscleWeeklySets,
+    // Completed sets over the last ~2 weeks, split two ways so the Train home can show a
+    // "balance" read: by source day (every program day, 0-filled) and by primary muscle
+    // (the client folds those into its coarse groups). Reflects what was actually logged.
+    ProgramRecentVolume RecentVolume);
 
 public sealed record ProgramDayStat(Guid DayId, string DayName, int Sessions, DateOnly? LastPerformedOn);
 
 public sealed record ProgramPrStat(string ExerciseName, string Type, double Value, DateOnly AchievedOn);
+
+public sealed record MuscleWeeklySets(string Muscle, double SetsPerWeek);
+
+public sealed record ProgramRecentVolume(
+    DateOnly From,
+    DateOnly To,
+    int Sessions,
+    int Sets,
+    IReadOnlyList<VolumeSlice> ByDay,
+    IReadOnlyList<VolumeSlice> ByMuscle);
+
+public sealed record VolumeSlice(string Label, int Sets);
 
 // --- day detail ---
 
@@ -75,7 +107,9 @@ public sealed record DayDetail(
     // The owning program's xmin token — send it back on PUT to guard the edit.
     uint ProgramRowVersion,
     IReadOnlyList<DayExerciseDetail> Exercises,
-    IReadOnlyList<SupersetDetail> Supersets);
+    IReadOnlyList<SupersetDetail> Supersets,
+    // Muscle-group ids this day trains (empty = no focus). Drives the picker's suggestions.
+    IReadOnlyList<int> FocusMuscleIds);
 
 public sealed record DayExerciseDetail(
     Guid Id,
@@ -109,7 +143,9 @@ public sealed record UpdateDayRequest(
     IReadOnlyList<UpdateDayExercise>? Exercises,
     IReadOnlyList<UpdateSuperset>? Supersets,
     // The owning program's xmin token from the last read; 409 if it moved on. Optional.
-    uint? RowVersion);
+    uint? RowVersion,
+    // Muscle-group ids the day focuses on. Null = leave as-is; [] = clear. Unknown ids are dropped.
+    IReadOnlyList<int>? FocusMuscleIds);
 
 public sealed record UpdateDayExercise(
     Guid ExerciseId,

@@ -25,8 +25,9 @@ function renderShell(initialPath = "/dashboard") {
 describe("AppShell", () => {
   it("renders the primary navigation", () => {
     renderShell();
+    // Two navs exist (desktop sidebar + mobile bottom bar); CSS decides which shows.
     for (const label of ["Dashboard", "Workouts", "Nutrition", "Progress", "Settings"]) {
-      expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
+      expect(screen.getAllByRole("link", { name: label }).length).toBeGreaterThanOrEqual(1);
     }
   });
 

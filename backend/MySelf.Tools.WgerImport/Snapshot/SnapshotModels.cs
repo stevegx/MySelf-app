@@ -31,4 +31,8 @@ public record SnapshotExercise(
     string? Attribution,
     IReadOnlyList<int> PrimaryMuscleIds,
     IReadOnlyList<int> SecondaryMuscleIds,
-    IReadOnlyList<int> EquipmentIds);
+    IReadOnlyList<int> EquipmentIds,
+    // Illustration, added by the `enrich-images` pass. Null when wger has no main image.
+    string? ImageUrl = null,
+    string? ImageThumbUrl = null,
+    string? ImageAttribution = null);

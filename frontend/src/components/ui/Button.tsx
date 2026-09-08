@@ -12,7 +12,7 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const BASE =
-  "inline-flex items-center justify-center gap-1.5 rounded-control font-semibold leading-tight " +
+  "inline-flex items-center justify-center gap-1.5 rounded-pill font-semibold leading-tight " +
   "cursor-pointer transition-colors disabled:opacity-45 disabled:cursor-not-allowed " +
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
@@ -40,9 +40,9 @@ export function Button({
       className={cn(
         BASE,
         VARIANT[variant],
-        size === "md" ? "min-h-11 px-4 py-2 text-sm" : "min-h-[34px] px-3 text-[13px]",
-        variant === "ghost" && !iconOnly && "px-2",
-        iconOnly && "size-11 p-0",
+        size === "md" ? "min-h-11 px-4 py-2 text-sm" : "min-h-9 px-3.5 py-1.5 text-sm",
+        variant === "ghost" && !iconOnly && "px-2.5",
+        iconOnly && (size === "md" ? "size-11 p-0" : "size-9 p-0"),
         block && "w-full",
         className,
       )}

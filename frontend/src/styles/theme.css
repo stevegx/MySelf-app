@@ -127,12 +127,23 @@
   --color-viz-negative: var(--viz-negative);
   --color-viz-track: var(--viz-track);
 
-  /* docs/06: 12px cards, 10px controls, pill only for tags/status */
-  --radius-card: 12px;
-  --radius-control: 10px;
+  /* Rounder "organic" surfaces (mockup influence): soft cards, gently rounded
+     controls, and a true pill for buttons / tabs / chips. Colours unchanged. */
+  --radius-card: 20px;
+  --radius-control: 12px;
+  --radius-pill: 999px;
 
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
     Arial, sans-serif;
+  /* Display face for page + card titles. */
+  --font-display: "Caprasimo", Georgia, "Times New Roman", serif;
+
+  /* A notch up from Tailwind's defaults — the UI was reading small. */
+  --text-xs: 0.8125rem; /* 13px (was 12) */
+  --text-xs--line-height: 1.45;
+  --text-sm: 0.9375rem; /* 15px (was 14) */
+  --text-sm--line-height: 1.5;
+  --text-base: 1rem; /* 16px */
 
   --breakpoint-nav: 45rem;
 }
@@ -148,10 +159,21 @@
     background: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
-    font-size: 15px;
+    font-size: 16px;
     line-height: 1.55;
     -webkit-font-smoothing: antialiased;
     transition: background 0.2s ease, color 0.2s ease;
+  }
+
+  /* Anything interactive gets the hand cursor — Buttons already do, this covers
+     bare <button>s, NavLinks, summary toggles and radio/checkbox labels. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  summary,
+  a[href],
+  label:has(> input[type="radio"]),
+  label:has(> input[type="checkbox"]) {
+    cursor: pointer;
   }
 
   h1,
@@ -164,6 +186,14 @@
     line-height: 1.15;
     letter-spacing: -0.015em;
     margin: 0 0 0.5rem;
+  }
+  /* Page-level titles carry the display face; smaller UI headings stay Inter
+     for density. Caprasimo only ships a 400 weight and already reads bold. */
+  h1,
+  h2 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: -0.01em;
   }
   h1 {
     font-size: 34px;

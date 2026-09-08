@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from "lucide-react";
-import { Button, Checkbox, Input, Segmented } from "../../components/ui";
+import { ArrowDown, ArrowUp, ChevronDown, Copy, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import { Button, Checkbox, Input, Segmented, Tag } from "../../components/ui";
+import { cn } from "../../lib/cn";
 import { ApiError } from "../../lib/api";
+import { useMe } from "../auth/useMe";
 import { ExercisePicker } from "./ExercisePicker";
+import { ExerciseTrend } from "./ExerciseTrend";
 import { SortableList } from "./SortableList";
-import { useBulkExercises, useProgram, useUpdateDay, useDay } from "./api";
+import { MUSCLE_GROUPS, activeGroupKeys, toggleGroup, type MuscleGroupKey } from "./muscleGroups";
+import { useBulkExercises, useMuscles, useProgram, useUpdateDay, useUpdatePreferences, useDay } from "./api";
 import type { DayDetail, ExerciseListItem, UpdateDayBody } from "./api";
 
 /**
@@ -35,12 +39,32 @@ type EditExercise = {
   notes: string;
   supersetKey: string | null;
   moreOpen: boolean;
+  collapsed: boolean; // UI only — the mockup shows a summary row you expand to edit sets
   sets: EditSet[];
 };
 
+/** Summary tags for a collapsed exercise row (sets · rep range · rest). */
+function summaryTags(e: EditExercise): string[] {
+  const tags: string[] = [`${e.sets.length} ${e.sets.length === 1 ? "set" : "sets"}`];
+  const mins = e.sets.map((s) => Number(s.repsMin)).filter((n) => Number.isFinite(n) && n > 0);
+  const maxs = e.sets.map((s) => Number(s.repsMax)).filter((n) => Number.isFinite(n) && n > 0);
+  if (mins.length || maxs.length) {
+    const lo = mins.length ? Math.min(...mins) : Math.min(...maxs);
+    const hi = maxs.length ? Math.max(...maxs) : Math.max(...mins);
+    tags.push(lo === hi ? `${lo} reps` : `${lo}–${hi} reps`);
+  }
+  if (e.restSeconds.trim() !== "") tags.push(`rest ${e.restSeconds}s`);
+  return tags;
+}
+
 type EditSuperset = { key: string; restAfterRoundSeconds: string };
 
-type EditState = { exercises: EditExercise[]; supersets: EditSuperset[] };
+type EditState = {
+  name: string;
+  exercises: EditExercise[];
+  supersets: EditSuperset[];
+  focusMuscleIds: number[];
+};
 
 let seq = 0;
 const uid = (prefix: string) => `${prefix}-${(seq += 1)}`;
@@ -70,6 +94,7 @@ function seed(day: DayDetail): EditState {
       notes: e.notes ?? "",
       supersetKey: e.supersetGroupId ? (supersetKeyByServerId.get(e.supersetGroupId) ?? null) : null,
       moreOpen: false,
+      collapsed: true,
       sets: e.sets
         .slice()
         .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -85,7 +110,7 @@ function seed(day: DayDetail): EditState {
         })),
     }));
 
-  return { exercises, supersets };
+  return { name: day.name, exercises, supersets, focusMuscleIds: [...day.focusMuscleIds] };
 }
 
 const blankSet = (): EditSet => ({
@@ -102,6 +127,8 @@ const blankSet = (): EditSet => ({
 // A comparable snapshot for dirty-tracking (drops the volatile React keys).
 const fingerprint = (s: EditState) =>
   JSON.stringify({
+    name: s.name.trim(),
+    focus: [...s.focusMuscleIds].sort((a, b) => a - b),
     exercises: s.exercises.map((e) => ({
       exerciseId: e.exerciseId,
       restSeconds: e.restSeconds,
@@ -119,17 +146,33 @@ export function DayEditor({
   dayId,
   programId,
   onClose,
+  onSaved,
+  onDeleteDay,
+  onDuplicateDay,
 }: {
   dayId: string;
   programId: string;
   onClose: () => void;
+  /** Called after a successful save. Defaults to onClose (full-screen use); the inline
+   *  two-column builder passes a no-op so the day stays selected. */
+  onSaved?: () => void;
+  /** When set, the header's ⋯ menu offers "Delete day" and calls this. */
+  onDeleteDay?: () => void;
+  /** When set, the header's ⋯ menu offers "Duplicate day" and calls this. */
+  onDuplicateDay?: () => void;
 }) {
   const { data: day, isLoading } = useDay(dayId);
   const { data: program } = useProgram(programId);
+  const { data: muscles } = useMuscles();
+  const { data: me } = useMe();
   const update = useUpdateDay(programId);
   const bulk = useBulkExercises(programId);
+  const prefs = useUpdatePreferences();
 
-  const [state, setState] = useState<EditState>({ exercises: [], supersets: [] });
+  const [state, setState] = useState<EditState>({ name: "", exercises: [], supersets: [], focusMuscleIds: [] });
+  const [renaming, setRenaming] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [offFocusNote, setOffFocusNote] = useState<{ name: string; muscles: string[] } | null>(null);
   const [baseline, setBaseline] = useState<string>("");
   const [loadedFrom, setLoadedFrom] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
@@ -163,6 +206,15 @@ export function DayEditor({
     if (!program) return [];
     return program.days.filter((d) => d.id !== dayId).map((d) => ({ id: d.id, label: d.name }));
   }, [program, dayId]);
+
+  const muscleName = useMemo(() => {
+    const m = new Map((muscles ?? []).map((x) => [x.id, x.name]));
+    return (id: number) => m.get(id) ?? "";
+  }, [muscles]);
+
+  const focusNames = state.focusMuscleIds.map(muscleName).filter(Boolean);
+  const activeGroups = activeGroupKeys(state.focusMuscleIds, muscles ?? []);
+  const warnOffFocus = me?.profile?.warnOffFocusExercises ?? true;
 
   if (isLoading || !day) {
     return <p className="text-sm text-foreground-muted">Loading day…</p>;
@@ -203,12 +255,25 @@ export function DayEditor({
           notes: "",
           supersetKey: null,
           moreOpen: false,
+          collapsed: false,
           sets: [blankSet()],
         },
       ],
     }));
     setPicking(false);
+
+    // Off-focus nudge (docs: never blocks — just informs). Only when this day has a focus,
+    // the exercise's primary muscles fall entirely outside it, and the user hasn't opted out.
+    if (warnOffFocus && focusNames.length > 0 && ex.primaryMuscles.length > 0) {
+      const outside = ex.primaryMuscles.filter((m) => !focusNames.includes(m));
+      if (outside.length === ex.primaryMuscles.length) {
+        setOffFocusNote({ name: ex.name, muscles: outside });
+      }
+    }
   };
+
+  const toggleFocusGroup = (key: MuscleGroupKey) =>
+    setState((s) => ({ ...s, focusMuscleIds: toggleGroup(key, s.focusMuscleIds, muscles ?? []) }));
 
   const removeExercise = (key: string) =>
     setState((s) => ({ ...s, exercises: s.exercises.filter((e) => e.key !== key) }));
@@ -217,6 +282,7 @@ export function DayEditor({
     setState((s) => {
       const key = uid("ss");
       return {
+        ...s,
         supersets: [...s.supersets, { key, restAfterRoundSeconds: "60" }],
         exercises: s.exercises.map((e) => (e.key === exKey ? { ...e, supersetKey: key } : e)),
       };
@@ -239,8 +305,9 @@ export function DayEditor({
   function buildBody(): UpdateDayBody {
     const memberOrder = new Map<string, number>();
     return {
-      name: day!.name,
+      name: state.name.trim() || day!.name,
       rowVersion: day!.programRowVersion,
+      focusMuscleIds: state.focusMuscleIds,
       exercises: state.exercises.map((e, index) => {
         let supersetMemberOrder = 0;
         if (e.supersetKey) {
@@ -282,7 +349,10 @@ export function DayEditor({
     setError(null);
     try {
       await update.mutateAsync({ dayId, body: buildBody() });
-      onClose();
+      // The server now matches `state` — reset the dirty baseline so the editor can stay
+      // open cleanly (inline builder) instead of only ever closing.
+      setBaseline(fingerprint(state));
+      (onSaved ?? onClose)();
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         setError(
@@ -314,9 +384,15 @@ export function DayEditor({
     }
   }
 
+  // "Revert" in the always-open inline editor: drop the working state and re-seed from the
+  // server (clearing loadedFrom re-runs the seed-on-arrival block). Confirmed first while dirty.
   const requestClose = () => {
     if (dirty) setConfirmingDiscard(true);
     else onClose();
+  };
+  const discardEdits = () => {
+    setConfirmingDiscard(false);
+    setLoadedFrom(null);
   };
 
   const groupLabel = (key: string) => `Superset ${state.supersets.findIndex((g) => g.key === key) + 1}`;
@@ -324,14 +400,77 @@ export function DayEditor({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="m-0 text-base font-bold">
-          {day.name}
-          {dirty ? <span className="ml-2 text-xs font-normal text-warning">Unsaved changes</span> : null}
-        </h3>
+        <div className="flex min-w-0 items-center gap-1.5">
+          {renaming ? (
+            <Input
+              autoFocus
+              aria-label="Day name"
+              className="max-w-[220px]"
+              value={state.name}
+              onChange={(e) => setState((s) => ({ ...s, name: e.target.value }))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") setRenaming(false);
+                if (e.key === "Escape") {
+                  setState((s) => ({ ...s, name: day.name }));
+                  setRenaming(false);
+                }
+              }}
+              onBlur={() => setRenaming(false)}
+            />
+          ) : (
+            <h3 className="m-0 truncate text-base font-bold">{state.name || day.name}</h3>
+          )}
+          {dirty ? <span className="shrink-0 text-xs font-normal text-warning">Unsaved changes</span> : null}
+          <span className="relative shrink-0">
+            <Button variant="ghost" size="sm" iconOnly aria-label="Day options" onClick={() => setMenuOpen((o) => !o)}>
+              <MoreHorizontal size={16} aria-hidden />
+            </Button>
+            {menuOpen && (
+              <span className="absolute left-0 top-full z-10 mt-1 flex min-w-[160px] flex-col rounded-control border border-border bg-surface p-1 shadow-lg">
+                <button
+                  type="button"
+                  className="rounded-[6px] px-2 py-1.5 text-left text-sm hover:bg-surface-subtle"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setRenaming(true);
+                  }}
+                >
+                  Rename day
+                </button>
+                {onDuplicateDay && (
+                  <button
+                    type="button"
+                    className="rounded-[6px] px-2 py-1.5 text-left text-sm hover:bg-surface-subtle"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onDuplicateDay();
+                    }}
+                  >
+                    Duplicate day
+                  </button>
+                )}
+                {onDeleteDay && (
+                  <button
+                    type="button"
+                    className="rounded-[6px] px-2 py-1.5 text-left text-sm text-danger hover:bg-danger-soft"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onDeleteDay();
+                    }}
+                  >
+                    Delete day
+                  </button>
+                )}
+              </span>
+            )}
+          </span>
+        </div>
         <div className="flex gap-2">
-          <Button variant="ghost" onClick={requestClose}>
-            {dirty ? "Close" : "Cancel"}
-          </Button>
+          {dirty && (
+            <Button variant="ghost" onClick={requestClose}>
+              Revert
+            </Button>
+          )}
           <Button variant="primary" onClick={save} disabled={update.isPending}>
             {update.isPending ? "Saving…" : "Save day"}
           </Button>
@@ -340,13 +479,13 @@ export function DayEditor({
 
       {confirmingDiscard && (
         <div className="flex items-center justify-between gap-3 rounded-control border border-warning/40 bg-warning-soft px-3 py-2 text-sm">
-          <span>Discard your unsaved changes to this day?</span>
+          <span>Revert your unsaved changes to this day?</span>
           <span className="flex gap-2">
             <Button variant="ghost" size="sm" onClick={() => setConfirmingDiscard(false)}>
               Keep editing
             </Button>
-            <Button variant="danger" size="sm" onClick={onClose}>
-              Discard
+            <Button variant="danger" size="sm" onClick={discardEdits}>
+              Revert
             </Button>
           </span>
         </div>
@@ -355,6 +494,60 @@ export function DayEditor({
       {error && (
         <div role="alert" className="rounded-control border border-danger/40 bg-danger-soft px-3 py-2 text-sm text-danger">
           {error}
+        </div>
+      )}
+
+      <div className="rounded-control border border-border p-3">
+        <div className="mb-2 text-xs font-semibold text-foreground-muted">
+          Focus{" "}
+          <span className="font-normal">
+            — the muscles this day trains. Filters the exercise picker; you can still add anything.
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {MUSCLE_GROUPS.map((g) => {
+            const on = activeGroups.includes(g.key);
+            return (
+              <button
+                key={g.key}
+                type="button"
+                aria-pressed={on}
+                disabled={!muscles}
+                onClick={() => toggleFocusGroup(g.key)}
+                className={cn(
+                  "rounded-full border px-2.5 py-1 text-[13px]",
+                  on
+                    ? "border-primary bg-primary-soft font-semibold text-primary-pressed"
+                    : "border-border text-foreground-muted hover:border-border-strong",
+                )}
+              >
+                {g.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {offFocusNote && (
+        <div className="flex flex-wrap items-center gap-2 rounded-control border border-info/40 bg-info-soft px-3 py-2 text-sm">
+          <span>
+            Added <strong>{offFocusNote.name}</strong> — {offFocusNote.muscles.join(", ")}, outside this day's focus.
+          </span>
+          <span className="ml-auto flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setOffFocusNote(null)}>
+              Dismiss
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                prefs.mutate({ warnOffFocusExercises: false });
+                setOffFocusNote(null);
+              }}
+            >
+              Don&apos;t warn me again
+            </Button>
+          </span>
         </div>
       )}
 
@@ -390,21 +583,43 @@ export function DayEditor({
           <div
             className={`rounded-control border p-3 ${grouped ? "border-primary/50 bg-primary-soft/30" : "border-border"}`}
           >
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="flex items-center gap-2 text-sm font-bold">
-                {dragHandle}
-                {e.serverId && (
-                  <Checkbox
-                    label=""
-                    aria-label={`Select ${e.exerciseName}`}
-                    checked={selected.has(e.serverId)}
-                    onChange={() => toggleSelected(e.serverId!)}
-                  />
+            <div className="flex items-center gap-2">
+              {dragHandle}
+              {e.serverId && (
+                <Checkbox
+                  label=""
+                  aria-label={`Select ${e.exerciseName}`}
+                  checked={selected.has(e.serverId)}
+                  onChange={() => toggleSelected(e.serverId!)}
+                />
+              )}
+              <button
+                type="button"
+                onClick={() => patchExercise(e.key, { collapsed: !e.collapsed })}
+                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                aria-expanded={!e.collapsed}
+              >
+                <ChevronDown
+                  size={15}
+                  aria-hidden
+                  className={cn("shrink-0 text-foreground-subtle transition-transform", e.collapsed && "-rotate-90")}
+                />
+                <span className="truncate text-sm font-bold">{e.exerciseName}</span>
+                {grouped && (
+                  <span className="shrink-0 text-xs font-normal text-primary-pressed">{groupLabel(e.supersetKey!)}</span>
                 )}
-                {e.exerciseName}
-                {grouped ? <span className="text-xs font-normal text-primary-pressed">{groupLabel(e.supersetKey!)}</span> : null}
-              </span>
-              <div className="flex gap-1">
+                {e.collapsed && (
+                  <span className="ml-1 hidden gap-1 sm:flex">
+                    {summaryTags(e).map((t) => (
+                      <Tag key={t} tone="neutral">
+                        {t}
+                      </Tag>
+                    ))}
+                  </span>
+                )}
+              </button>
+              {e.collapsed && <ExerciseTrend exerciseId={e.exerciseId} />}
+              <div className="flex shrink-0 gap-1">
                 <Button variant="secondary" size="sm" iconOnly aria-label="Move up" onClick={() => moveExercise(e.key, -1)}>
                   <ArrowUp size={14} aria-hidden />
                 </Button>
@@ -417,8 +632,17 @@ export function DayEditor({
               </div>
             </div>
 
-            <div className="flex flex-col gap-2">
-              <div className="grid grid-cols-[auto_1fr_1fr_1fr_1fr_auto] items-center gap-2 text-[11px] text-foreground-muted">
+            {e.collapsed ? (
+              <div className="mt-1.5 flex flex-wrap gap-1 pl-7 sm:hidden">
+                {summaryTags(e).map((t) => (
+                  <Tag key={t} tone="neutral">
+                    {t}
+                  </Tag>
+                ))}
+              </div>
+            ) : (
+            <div className="mt-3 flex flex-col gap-2">
+              <div className="grid grid-cols-[auto_1fr_1fr_1fr_1fr_auto] items-center gap-2 text-[12px] text-foreground-muted">
                 <span>#</span>
                 <span>Kind</span>
                 <span>Reps min–max</span>
@@ -498,7 +722,7 @@ export function DayEditor({
                   <label className="flex items-center gap-2 text-xs text-foreground-muted">
                     Superset
                     <select
-                      className="min-h-[34px] rounded-control border border-border bg-surface px-2 text-[13px] text-foreground"
+                      className="min-h-[34px] rounded-control border border-border bg-surface px-2 text-sm text-foreground"
                       value={e.supersetKey ?? ""}
                       onChange={(ev) => patchExercise(e.key, { supersetKey: ev.target.value === "" ? null : ev.target.value })}
                     >
@@ -530,21 +754,29 @@ export function DayEditor({
                 </div>
               )}
             </div>
+            )}
           </div>
         );
         }}
       </SortableList>
 
-      {picking ? (
+      <button
+        type="button"
+        onClick={() => setPicking(true)}
+        className="flex items-center justify-center gap-2 rounded-control border border-dashed border-border-strong px-3 py-5 text-sm text-primary hover:border-primary hover:bg-primary-soft/40"
+      >
+        <Plus size={15} aria-hidden />
+        Add exercise
+      </button>
+
+      {picking && (
         <ExercisePicker
+          drawer
           onPick={addExercise}
           onClose={() => setPicking(false)}
           existingIds={new Set(state.exercises.map((e) => e.exerciseId))}
+          focusGroupKeys={activeGroups}
         />
-      ) : (
-        <Button variant="secondary" onClick={() => setPicking(true)}>
-          + Add exercise
-        </Button>
       )}
     </div>
   );
@@ -574,7 +806,7 @@ function BulkTargetMenu({
             <button
               key={t.id}
               type="button"
-              className="rounded-[6px] px-2 py-1.5 text-left text-[13px] hover:bg-surface-subtle"
+              className="rounded-[6px] px-2 py-1.5 text-left text-sm hover:bg-surface-subtle"
               onClick={() => {
                 setOpen(false);
                 onPick(t.id);

@@ -31,7 +31,41 @@ public static class MeEndpoints
             .WithSummary("Create or update the signed-in user's profile (onboarding step 1).")
             .RequireAuthorization();
 
+        app.MapPut("/api/v1/me/preferences", UpdatePreferencesAsync)
+            .WithName("UpdatePreferences")
+            .WithSummary("Update the signed-in user's small UI preferences.")
+            .RequireAuthorization();
+
         return app;
+    }
+
+    private static async Task<IResult> UpdatePreferencesAsync(
+        UpdatePreferencesRequest request,
+        HttpContext httpContext,
+        MySelfDbContext db,
+        TimeProvider clock,
+        CancellationToken ct)
+    {
+        var userIdClaim = httpContext.User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+        if (userIdClaim is null || !Guid.TryParse(userIdClaim, out var userId))
+        {
+            return Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Invalid credentials");
+        }
+
+        var profile = await db.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId, ct);
+        if (profile is null)
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "No profile yet",
+                detail: "Finish onboarding before changing preferences.");
+        }
+
+        profile.WarnOffFocusExercises = request.WarnOffFocusExercises;
+        profile.UpdatedAt = clock.GetUtcNow();
+        await db.SaveChangesAsync(ct);
+
+        return Results.Ok(ToSummary(profile));
     }
 
     private static async Task<IResult> GetMeAsync(
@@ -169,7 +203,8 @@ public static class MeEndpoints
         p.UnitSystem.ToString(),
         p.Timezone,
         p.Locale,
-        p.OnboardingCompletedAt);
+        p.OnboardingCompletedAt,
+        p.WarnOffFocusExercises);
 
     private static string? Trimmed(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

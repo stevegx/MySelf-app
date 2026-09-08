@@ -15,7 +15,7 @@ export function Tag({ tone = "neutral", children }: { tone?: Tone; children: Rea
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2.5 py-[3px] text-[11px] tracking-[0.02em]",
+        "inline-flex items-center gap-1 rounded-full px-2.5 py-[3px] text-[12px] tracking-[0.02em]",
         TONE[tone],
       )}
     >

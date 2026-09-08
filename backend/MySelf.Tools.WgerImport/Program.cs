@@ -13,6 +13,7 @@ var command = args.FirstOrDefault();
 return command switch
 {
     "fetch" => await FetchAsync(),
+    "enrich-images" => await EnrichImagesAsync(),
     "import" => await ImportAsync(),
     _ => Usage(),
 };
@@ -26,11 +27,77 @@ static int Usage()
           dotnet run --project backend/MySelf.Tools.WgerImport -- fetch
               Pull the wger catalogue and (re)write backend/seed-data/wger-catalogue.json
 
+          dotnet run --project backend/MySelf.Tools.WgerImport -- enrich-images
+              Add wger "main" image URLs to the existing wger-catalogue.json in place
+              (everything else is left byte-for-byte). No DB, just network.
+
           dotnet run --project backend/MySelf.Tools.WgerImport -- import
               Load backend/seed-data/wger-catalogue.json into PostgreSQL (idempotent).
               Reads the connection string from .env (ConnectionStrings__DefaultConnection).
         """);
     return 1;
+}
+
+static async Task<int> EnrichImagesAsync()
+{
+    if (!File.Exists(RepoPaths.CatalogueSnapshot))
+    {
+        Console.Error.WriteLine($"Snapshot not found: {RepoPaths.CatalogueSnapshot}. Run `fetch` first.");
+        return 1;
+    }
+
+    CatalogueSnapshot snapshot;
+    await using (var readStream = File.OpenRead(RepoPaths.CatalogueSnapshot))
+    {
+        snapshot = await JsonSerializer.DeserializeAsync<CatalogueSnapshot>(readStream, SnapshotJson.Options)
+            ?? throw new InvalidOperationException("Snapshot file was empty or invalid.");
+    }
+
+    using var http = new HttpClient { BaseAddress = new Uri(WgerClient.BaseUrl), Timeout = TimeSpan.FromSeconds(60) };
+    http.DefaultRequestHeaders.UserAgent.ParseAdd("MySelfApp-wger-import/1.0 (learning project)");
+    var client = new WgerClient(http);
+
+    Console.WriteLine("Fetching wger main exercise images...");
+    var images = await client.GetMainExerciseImagesAsync(default);
+
+    // Key by the exercise-base uuid — that's what our ExternalId holds. Keep the first per base.
+    var byUuid = new Dictionary<string, WgerExerciseImage>();
+    foreach (var img in images)
+    {
+        if (!img.IsAiGenerated && !string.IsNullOrWhiteSpace(img.ExerciseUuid) && !string.IsNullOrWhiteSpace(img.Image))
+        {
+            byUuid.TryAdd(img.ExerciseUuid!, img);
+        }
+    }
+
+    var matched = 0;
+    var exercises = snapshot.Exercises
+        .Select(e =>
+        {
+            if (!byUuid.TryGetValue(e.ExternalId, out var img))
+            {
+                return e;
+            }
+            matched++;
+            var author = string.IsNullOrWhiteSpace(img.LicenseAuthor) ? null : img.LicenseAuthor!.Trim();
+            return e with
+            {
+                ImageUrl = img.Image,
+                ImageThumbUrl = string.IsNullOrWhiteSpace(img.Thumbnails?.Small) ? img.Image : img.Thumbnails!.Small,
+                ImageAttribution = author is null ? "wger.de (CC BY-SA)" : $"{author} · wger.de (CC BY-SA)",
+            };
+        })
+        .ToList();
+
+    var updated = snapshot with { Exercises = exercises };
+
+    await using (var writeStream = File.Create(RepoPaths.CatalogueSnapshot))
+    {
+        await JsonSerializer.SerializeAsync(writeStream, updated, SnapshotJson.Options);
+    }
+
+    Console.WriteLine($"Matched images for {matched} / {snapshot.Exercises.Count} exercises. Wrote {RepoPaths.CatalogueSnapshot}.");
+    return 0;
 }
 
 static async Task<int> FetchAsync()

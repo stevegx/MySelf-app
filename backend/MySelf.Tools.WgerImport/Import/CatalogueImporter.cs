@@ -56,6 +56,9 @@ public static class CatalogueImporter
             exercise.LicenseShortName = dto.LicenseShortName;
             exercise.LicenseUrl = dto.LicenseUrl;
             exercise.Attribution = dto.Attribution;
+            exercise.ImageUrl = dto.ImageUrl;
+            exercise.ImageThumbUrl = dto.ImageThumbUrl;
+            exercise.ImageAttribution = dto.ImageAttribution;
             exercise.FetchedAt = snapshot.FetchedAt;
 
             exercise.Muscles.Clear();

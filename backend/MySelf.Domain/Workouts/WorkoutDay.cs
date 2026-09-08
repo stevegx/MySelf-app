@@ -20,6 +20,13 @@ public class WorkoutDay
     /// <summary>Optional user estimate, minutes. Not derived from anything.</summary>
     public int? EstimatedDurationMinutes { get; set; }
 
+    /// <summary>
+    /// Muscle-group ids this day is meant to train (wger muscle ids; empty = no focus set).
+    /// Drives the exercise picker's suggestions and the "off-focus" nudge — it never blocks
+    /// what the user can add.
+    /// </summary>
+    public List<int> FocusMuscleIds { get; set; } = [];
+
     public List<DayExercise> Exercises { get; set; } = [];
     public List<SupersetGroup> Supersets { get; set; } = [];
 }

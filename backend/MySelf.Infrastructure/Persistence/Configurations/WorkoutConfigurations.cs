@@ -51,6 +51,11 @@ public class WorkoutDayConfiguration : IEntityTypeConfiguration<WorkoutDay>
         builder.Property(d => d.Name).HasMaxLength(80).IsRequired();
         builder.HasIndex(d => new { d.ProgramId, d.SortOrder });
 
+        // Postgres integer[]; empty for a day with no focus set.
+        builder.Property(d => d.FocusMuscleIds)
+            .HasColumnType("integer[]")
+            .HasDefaultValueSql("'{}'::integer[]");
+
         builder.HasMany(d => d.Exercises)
             .WithOne(e => e.Day)
             .HasForeignKey(e => e.DayId)

@@ -1,7 +1,13 @@
+using System.Text.Json;
 using DotNetEnv;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Respawn;
 using Respawn.Graph;
+using MySelf.Infrastructure.Persistence;
+using MySelf.Tools.WgerImport;
+using MySelf.Tools.WgerImport.Import;
+using MySelf.Tools.WgerImport.Snapshot;
 
 namespace MySelf.IntegrationTests;
 
@@ -32,16 +38,18 @@ public sealed class DatabaseFixture : IAsyncLifetime
 
     public DatabaseFixture()
     {
-        // Same source the API uses: ConnectionStrings__DefaultConnection, from the real
-        // environment in CI or the repo-root .env locally.
+        // TestBootstrap's module initializer has already pointed this at the dedicated
+        // "<db>_test" database, so a test run never touches the developer's dev data.
         Env.NoClobber().TraversePath().Load();
         ConnectionString =
             Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
-            ?? "Host=localhost;Port=5432;Database=myself;Username=myself;Password=myself";
+            ?? "Host=localhost;Port=5432;Database=myself_test;Username=myself;Password=myself";
     }
 
     public async Task InitializeAsync()
     {
+        await EnsureTestDatabaseReadyAsync();
+
         await using var connection = new NpgsqlConnection(ConnectionString);
         await connection.OpenAsync();
 
@@ -53,6 +61,31 @@ public sealed class DatabaseFixture : IAsyncLifetime
         });
 
         await ResetAsync();
+    }
+
+    /// <summary>
+    /// Creates the test database + schema on first run and seeds the reference catalogue
+    /// (Respawn preserves it thereafter), so a fresh machine needs no manual setup.
+    /// </summary>
+    private async Task EnsureTestDatabaseReadyAsync()
+    {
+        var options = new DbContextOptionsBuilder<MySelfDbContext>()
+            .UseNpgsql(ConnectionString)
+            .Options;
+
+        await using var db = new MySelfDbContext(options);
+        await db.Database.MigrateAsync();
+
+        if (!await db.Exercises.AnyAsync())
+        {
+            await using var stream = File.OpenRead(RepoPaths.CatalogueSnapshot);
+            var snapshot = await JsonSerializer.DeserializeAsync<CatalogueSnapshot>(
+                stream,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                ?? throw new InvalidOperationException("wger-catalogue.json was empty or invalid.");
+
+            await CatalogueImporter.ImportAsync(db, snapshot);
+        }
     }
 
     public async Task ResetAsync()

@@ -110,7 +110,7 @@ function installFetch(opts: { active?: unknown } = {}) {
     }
     if (url.includes("/api/v1/exercises?")) {
       return json({
-        items: [{ id: "x2", name: "Leg Press", category: "Legs", defaultTrackingMode: "WeightAndReps" }],
+        items: [{ id: "x2", name: "Leg Press", category: "Legs", defaultTrackingMode: "WeightAndReps", primaryMuscles: ["Quads"], secondaryMuscles: ["Glutes"], equipment: ["Cable machine"], imageThumbUrl: null, imageUrl: null, imageAttribution: null }],
         page: 1,
         pageSize: 25,
         total: 1,
@@ -168,9 +168,11 @@ describe("ActiveWorkoutScreen", () => {
     renderScreen();
 
     await screen.findByText("Back Squat");
-    await user.type(screen.getByLabelText("Set 1 Weight (kg)"), "102.5");
-    await user.type(screen.getByLabelText("Set 1 Reps"), "8");
-    await user.click(screen.getByRole("button", { name: "Log set" }));
+    // The fields are pre-seeded from the day target (100 kg × 8) — override the weight.
+    const kg = screen.getByLabelText("Set 1 kg");
+    await user.clear(kg);
+    await user.type(kg, "102.5");
+    await user.click(screen.getByRole("button", { name: "Log" }));
 
     const logCall = fetchSpy.mock.calls.find(([u, i]) => String(u).endsWith("/set-logs") && i?.method === "POST");
     expect(logCall).toBeTruthy();
@@ -188,7 +190,7 @@ describe("ActiveWorkoutScreen", () => {
 
     // Nothing acted on yet — the empty-workout guard blocks finishing.
     expect(await screen.findByRole("button", { name: "Finish workout" })).toBeDisabled();
-    expect(screen.getByText(/log or skip at least one to finish/i)).toBeInTheDocument();
+    expect(screen.getByText(/log or skip one to finish/i)).toBeInTheDocument();
   });
 
   it("finishes the workout", async () => {
@@ -229,9 +231,8 @@ describe("ActiveWorkoutScreen", () => {
     const user = userEvent.setup();
     renderScreen();
 
-    await user.type(await screen.findByLabelText("Set 1 Weight (kg)"), "100");
-    await user.type(screen.getByLabelText("Set 1 Reps"), "8");
-    await user.click(screen.getByRole("button", { name: "Log set" }));
+    // Fields are pre-seeded from the target — just log.
+    await user.click(await screen.findByRole("button", { name: "Log" }));
 
     expect(await screen.findByText(/^Rest 0:4[0-9]$/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Skip rest" }));
@@ -252,7 +253,7 @@ describe("ActiveWorkoutScreen", () => {
     expect(JSON.parse((addCall![1] as RequestInit).body as string)).toMatchObject({ exerciseId: "x2" });
   });
 
-  it("copies the previous completed set's values into a pending set", async () => {
+  it("pre-seeds a pending set from the previous completed set", async () => {
     const twoSetSession = {
       ...sessionWithOneSet(),
       exercises: [
@@ -265,20 +266,18 @@ describe("ActiveWorkoutScreen", () => {
           supersetGroupSnapshotId: null,
           supersetMemberOrder: 0,
           sets: [
-            makeSet("setA", { sortOrder: 0, weightKg: 100, reps: 8, completedAt: "2026-09-04T09:05:00Z" }),
-            makeSet("setB", { sortOrder: 1 }),
+            makeSet("setA", { sortOrder: 0, weightKg: 105, reps: 7, completedAt: "2026-09-04T09:05:00Z" }),
+            // No target of its own — the only source is set A.
+            makeSet("setB", { sortOrder: 1, targetWeightKg: null, targetRepsMin: null, targetRepsMax: null }),
           ],
         },
       ],
     };
     installFetch({ active: twoSetSession });
-    const user = userEvent.setup();
     renderScreen();
 
     await screen.findByText("Back Squat");
-    await user.click(screen.getByRole("button", { name: "Copy previous" }));
-
-    expect((screen.getByLabelText("Set 2 Weight (kg)") as HTMLInputElement).value).toBe("100");
-    expect((screen.getByLabelText("Set 2 Reps") as HTMLInputElement).value).toBe("8");
+    expect((await screen.findByLabelText("Set 2 kg") as HTMLInputElement).value).toBe("105");
+    expect((screen.getByLabelText("Set 2 reps") as HTMLInputElement).value).toBe("7");
   });
 });

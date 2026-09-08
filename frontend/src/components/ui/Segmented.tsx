@@ -23,7 +23,7 @@ export function Segmented<T extends string>({
   return (
     <div
       role="group"
-      className="inline-flex overflow-hidden rounded-control border border-border"
+      className="inline-flex overflow-hidden rounded-pill border border-border"
       {...rest}
     >
       {options.map((opt) => (
@@ -31,7 +31,7 @@ export function Segmented<T extends string>({
           key={opt.value}
           className={
             "inline-flex min-h-[38px] cursor-pointer items-center gap-1.5 border-l border-border px-3.5 py-[7px] " +
-            "text-[13px] first:border-l-0 hover:bg-surface-subtle " +
+            "text-sm first:border-l-0 hover:bg-surface-subtle " +
             "has-[:checked]:bg-primary has-[:checked]:text-on-primary has-[:checked]:hover:bg-primary " +
             "has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-ring"
           }

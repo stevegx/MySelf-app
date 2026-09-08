@@ -25,6 +25,12 @@ export type ExerciseListItem = {
   name: string;
   category: string;
   defaultTrackingMode: string;
+  primaryMuscles: string[];
+  secondaryMuscles: string[];
+  equipment: string[];
+  imageThumbUrl: string | null;
+  imageUrl: string | null;
+  imageAttribution: string | null;
 };
 
 export type ExerciseSearchResult = {
@@ -70,6 +76,8 @@ export type ProgramPrStat = {
   achievedOn: string;
 };
 
+export type MuscleWeeklySets = { muscle: string; setsPerWeek: number };
+
 /** Aggregates for a program's Overview tab (GET /api/v1/programs/{id}/stats). */
 export type ProgramStats = {
   totalSessions: number;
@@ -85,6 +93,20 @@ export type ProgramStats = {
   skippedSetRate: number;
   perDay: ProgramDayStat[];
   personalRecords: ProgramPrStat[];
+  muscleWeeklySets: MuscleWeeklySets[];
+  /** Optional — older cached responses may lack it. Completed sets over the last ~14 days. */
+  recentVolume?: RecentVolume;
+};
+
+export type VolumeSlice = { label: string; sets: number };
+
+export type RecentVolume = {
+  from: string;
+  to: string;
+  sessions: number;
+  sets: number;
+  byDay: VolumeSlice[];
+  byMuscle: VolumeSlice[];
 };
 
 export type SetPrescriptionDetail = {
@@ -120,7 +142,11 @@ export type DayDetail = {
   programRowVersion: number;
   exercises: DayExerciseDetail[];
   supersets: { id: string; sortOrder: number; restAfterRoundSeconds: number }[];
+  // Muscle-group ids this day trains (empty = no focus set).
+  focusMuscleIds: number[];
 };
+
+export type MuscleGroup = { id: number; name: string; isFront: boolean };
 
 export type UpdateDayExercise = {
   exerciseId: string;
@@ -148,6 +174,8 @@ export type UpdateDayBody = {
   rowVersion?: number;
   exercises: UpdateDayExercise[];
   supersets: { ref: string; sortOrder: number; restAfterRoundSeconds: number }[];
+  // Muscle-group ids the day focuses on. Omit = leave as-is; [] = clear.
+  focusMuscleIds?: number[];
 };
 
 // --- workout sessions (docs/02 "Starting a workout", Story 3A) ---
@@ -336,6 +364,28 @@ export function useExerciseSearch(q: string) {
   });
 }
 
+/** The catalogue's ~15 muscle groups — for the day-focus picker. Effectively static. */
+export function useMuscles() {
+  const accessToken = useToken();
+  return useQuery({
+    queryKey: ["muscles"],
+    queryFn: () => apiFetch<MuscleGroup[]>("/api/v1/muscles", { accessToken }),
+    enabled: accessToken != null,
+    staleTime: 60 * 60 * 1000,
+  });
+}
+
+/** Flip a small UI preference (PUT /api/v1/me/preferences); refreshes GET /me. */
+export function useUpdatePreferences() {
+  const accessToken = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { warnOffFocusExercises: boolean }) =>
+      apiFetch<unknown>("/api/v1/me/preferences", { method: "PUT", body, accessToken }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["me"] }),
+  });
+}
+
 export function useCreateProgram() {
   const accessToken = useToken();
   const qc = useQueryClient();
@@ -388,6 +438,11 @@ export function useMutateProgram(programId: string | null) {
     deleteDay: useMutation({
       mutationFn: (dayId: string) =>
         apiFetch<void>(`/api/v1/workout-days/${dayId}`, { method: "DELETE", accessToken }),
+      onSuccess: invalidate,
+    }),
+    duplicateDay: useMutation({
+      mutationFn: (dayId: string) =>
+        apiFetch<DayListItem>(`/api/v1/workout-days/${dayId}/duplicate`, { method: "POST", accessToken }),
       onSuccess: invalidate,
     }),
     // Rename / relabel a program and/or reorder its days. Pass the program's rowVersion.

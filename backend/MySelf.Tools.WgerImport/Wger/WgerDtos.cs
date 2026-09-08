@@ -17,6 +17,16 @@ public record WgerTranslation(
     string? Description,
     string? LicenseAuthor);
 
+public record WgerThumbnails(string? Small, string? Medium);
+
+public record WgerExerciseImage(
+    string? ExerciseUuid,
+    string? Image,
+    WgerThumbnails? Thumbnails,
+    bool IsMain,
+    bool IsAiGenerated,
+    string? LicenseAuthor);
+
 public record WgerExerciseInfo(
     int Id,
     string Uuid,

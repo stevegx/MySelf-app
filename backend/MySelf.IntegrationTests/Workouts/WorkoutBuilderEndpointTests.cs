@@ -40,6 +40,106 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
     }
 
     [Fact]
+    public async Task Muscles_list_and_day_focus_round_trips_dropping_unknown_ids()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var muscles = (await client.GetFromJsonAsync<JsonElement>("/api/v1/muscles")).EnumerateArray().ToList();
+            Assert.True(muscles.Count >= 10);
+            Assert.All(muscles, m =>
+            {
+                Assert.True(m.GetProperty("id").GetInt32() > 0);
+                Assert.False(string.IsNullOrWhiteSpace(m.GetProperty("name").GetString()));
+            });
+            var id0 = muscles[0].GetProperty("id").GetInt32();
+            var id1 = muscles[1].GetProperty("id").GetInt32();
+
+            var programId = await CreateProgramAsync(client);
+            var dayId = await AddDayAsync(client, programId, "Upper");
+
+            // A fresh day has no focus.
+            var fresh = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-days/{dayId}");
+            Assert.Empty(fresh.GetProperty("focusMuscleIds").EnumerateArray());
+
+            // PUT two real ids + one bogus one — the bogus one is dropped.
+            var put = await client.PutAsJsonAsync($"/api/v1/workout-days/{dayId}", new
+            {
+                name = "Upper",
+                estimatedDurationMinutes = (int?)null,
+                exercises = Array.Empty<object>(),
+                supersets = Array.Empty<object>(),
+                focusMuscleIds = new[] { id0, id1, 999999 },
+            });
+            put.EnsureSuccessStatusCode();
+
+            var saved = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-days/{dayId}");
+            var focus = saved.GetProperty("focusMuscleIds").EnumerateArray().Select(x => x.GetInt32()).OrderBy(x => x).ToList();
+            Assert.Equal(new[] { id0, id1 }.OrderBy(x => x).ToList(), focus);
+
+            // Omitting focusMuscleIds leaves it untouched; sending [] clears it.
+            await client.PutAsJsonAsync($"/api/v1/workout-days/{dayId}", new
+            {
+                name = "Upper", estimatedDurationMinutes = (int?)null,
+                exercises = Array.Empty<object>(), supersets = Array.Empty<object>(),
+                focusMuscleIds = Array.Empty<int>(),
+            });
+            var cleared = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-days/{dayId}");
+            Assert.Empty(cleared.GetProperty("focusMuscleIds").EnumerateArray());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Exercise_search_returns_target_muscles_and_equipment()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var res = await client.GetFromJsonAsync<JsonElement>("/api/v1/exercises?q=bench%20press&pageSize=25");
+            var items = res.GetProperty("items").EnumerateArray().ToList();
+            Assert.NotEmpty(items);
+
+            // Every returned exercise carries the three lists (possibly empty).
+            Assert.All(items, e =>
+            {
+                Assert.Equal(JsonValueKind.Array, e.GetProperty("primaryMuscles").ValueKind);
+                Assert.Equal(JsonValueKind.Array, e.GetProperty("secondaryMuscles").ValueKind);
+                Assert.Equal(JsonValueKind.Array, e.GetProperty("equipment").ValueKind);
+            });
+
+            // "Bench Press" (the plain barbell one) is chest-primary in the seed.
+            var bench = items.First(e => e.GetProperty("name").GetString() == "Bench Press");
+            var primary = bench.GetProperty("primaryMuscles").EnumerateArray().Select(m => m.GetString()).ToList();
+            var secondary = bench.GetProperty("secondaryMuscles").EnumerateArray().Select(m => m.GetString()).ToList();
+            Assert.Contains("Chest", primary);
+            Assert.Contains("Triceps", secondary);
+
+            // Every row carries the (nullable) image fields; the seed enriched ~1/4 of the
+            // catalogue from wger, so a broad search turns up at least one with a thumbnail.
+            Assert.All(items, e => Assert.True(e.TryGetProperty("imageThumbUrl", out _)));
+            var withImage = (await client.GetFromJsonAsync<JsonElement>("/api/v1/exercises?q=squat&pageSize=50"))
+                .GetProperty("items").EnumerateArray()
+                .Where(e => e.GetProperty("imageThumbUrl").ValueKind == JsonValueKind.String)
+                .ToList();
+            Assert.NotEmpty(withImage);
+            Assert.StartsWith("http", withImage[0].GetProperty("imageThumbUrl").GetString());
+            Assert.False(string.IsNullOrWhiteSpace(withImage[0].GetProperty("imageAttribution").GetString()));
+
+            // Same shape from get-by-id.
+            var one = await client.GetFromJsonAsync<JsonElement>($"/api/v1/exercises/{bench.GetProperty("id").GetGuid()}");
+            Assert.Contains("Chest", one.GetProperty("primaryMuscles").EnumerateArray().Select(m => m.GetString()));
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
     public async Task Create_add_day_and_read_the_program_tree()
     {
         var (client, email) = await factory.RegisterAndAuthenticateAsync();
@@ -304,6 +404,71 @@ public class WorkoutBuilderEndpointTests(WebApplicationFactory<Program> factory,
 
             var sourceAfter = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-days/{sourceId}");
             Assert.Equal(2, sourceAfter.GetProperty("exercises").GetArrayLength());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Duplicate_day_deep_copies_it_into_the_same_program_with_fresh_ids()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            var ex = await TwoExerciseIdsAsync();
+            var programId = await CreateProgramAsync(client);
+            var dayId = await AddDayAsync(client, programId, "Legs");
+
+            await client.PutAsJsonAsync($"/api/v1/workout-days/{dayId}", new
+            {
+                focusMuscleIds = new[] { 10 }, // Quads
+                exercises = new object[]
+                {
+                    new
+                    {
+                        exerciseId = ex[0], sortOrder = 0, supersetRef = "A", supersetMemberOrder = 0,
+                        restSeconds = (int?)90, notes = "brace hard",
+                        sets = new[]
+                        {
+                            new { sortOrder = 0, kind = "Standard", isAmrap = false, targetToFailure = false, targetRepsMin = (int?)5, targetRepsMax = (int?)8, targetWeightKg = (decimal?)100, targetRir = (int?)2 },
+                        },
+                    },
+                    new { exerciseId = ex[1], sortOrder = 1, supersetRef = "A", supersetMemberOrder = 1, restSeconds = (int?)null, notes = (string?)null, sets = Array.Empty<object>() },
+                },
+                supersets = new[] { new { @ref = "A", sortOrder = 0, restAfterRoundSeconds = 60 } },
+            });
+
+            var dup = await client.PostAsync($"/api/v1/workout-days/{dayId}/duplicate", null);
+            Assert.Equal(HttpStatusCode.Created, dup.StatusCode);
+            var created = await dup.Content.ReadFromJsonAsync<JsonElement>();
+            var copyId = created.GetProperty("id").GetGuid();
+            Assert.Equal("Legs (copy)", created.GetProperty("name").GetString());
+            Assert.NotEqual(dayId, copyId);
+
+            var tree = await client.GetFromJsonAsync<JsonElement>($"/api/v1/programs/{programId}");
+            Assert.Equal(2, tree.GetProperty("days").GetArrayLength());
+
+            var copy = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-days/{copyId}");
+            Assert.Equal(
+                new[] { 10 },
+                copy.GetProperty("focusMuscleIds").EnumerateArray().Select(x => x.GetInt32()).ToArray());
+
+            var copyExercises = copy.GetProperty("exercises").EnumerateArray().ToList();
+            Assert.Equal(2, copyExercises.Count);
+            Assert.Equal(1, copyExercises[0].GetProperty("sets").GetArrayLength());
+            Assert.Equal(100, copyExercises[0].GetProperty("sets")[0].GetProperty("targetWeightKg").GetDecimal());
+
+            // The superset is recreated, shared by both copied exercises, with a fresh id.
+            var groupId = copyExercises[0].GetProperty("supersetGroupId").GetGuid();
+            Assert.Equal(groupId, copyExercises[1].GetProperty("supersetGroupId").GetGuid());
+            Assert.Equal(1, copy.GetProperty("supersets").GetArrayLength());
+
+            // Original untouched.
+            var original = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workout-days/{dayId}");
+            Assert.Equal(2, original.GetProperty("exercises").GetArrayLength());
+            Assert.Equal("Legs", original.GetProperty("name").GetString());
         }
         finally
         {

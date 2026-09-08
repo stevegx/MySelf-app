@@ -1,4 +1,6 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using MySelf.Domain.Exercises;
 using MySelf.Infrastructure.Persistence;
 
 namespace MySelf.Api.Workouts;
@@ -11,6 +13,19 @@ public static class ExerciseEndpoints
 {
     private const int MaxPageSize = 50;
 
+    /// <summary>One shared EF projection so search and get-by-id stay in sync.</summary>
+    private static readonly Expression<Func<Exercise, ExerciseListItem>> ToListItem = e => new ExerciseListItem(
+        e.Id,
+        e.Name,
+        e.Category.Name,
+        e.DefaultTrackingMode.ToString(),
+        e.Muscles.Where(m => m.Role == MuscleRole.Primary).OrderBy(m => m.Muscle.Name).Select(m => m.Muscle.Name).ToList(),
+        e.Muscles.Where(m => m.Role == MuscleRole.Secondary).OrderBy(m => m.Muscle.Name).Select(m => m.Muscle.Name).ToList(),
+        e.Equipment.OrderBy(x => x.Equipment.Name).Select(x => x.Equipment.Name).ToList(),
+        e.ImageThumbUrl,
+        e.ImageUrl,
+        e.ImageAttribution);
+
     public static IEndpointRouteBuilder MapExerciseEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/v1/exercises").RequireAuthorization();
@@ -18,7 +33,21 @@ public static class ExerciseEndpoints
         group.MapGet("", SearchAsync).WithName("SearchExercises");
         group.MapGet("/{id:guid}", GetAsync).WithName("GetExercise");
 
+        app.MapGet("/api/v1/muscles", MusclesAsync).WithName("ListMuscleGroups").RequireAuthorization();
+
         return app;
+    }
+
+    /// <summary>The catalogue's muscle groups (~15 rows), for the day-focus picker.</summary>
+    private static async Task<IResult> MusclesAsync(MySelfDbContext db, CancellationToken ct)
+    {
+        var muscles = await db.Muscles
+            .AsNoTracking()
+            .OrderBy(m => m.Name)
+            .Select(m => new MuscleGroup(m.Id, m.Name, m.IsFront))
+            .ToListAsync(ct);
+
+        return Results.Ok(muscles);
     }
 
     private static async Task<IResult> SearchAsync(
@@ -42,7 +71,7 @@ public static class ExerciseEndpoints
                 title: "Validation failed");
         }
 
-        var query = db.Exercises.AsNoTracking().Include(e => e.Category).AsQueryable();
+        var query = db.Exercises.AsNoTracking().AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(q))
         {
@@ -63,7 +92,7 @@ public static class ExerciseEndpoints
             .OrderBy(e => e.Name)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(e => new ExerciseListItem(e.Id, e.Name, e.Category.Name, e.DefaultTrackingMode.ToString()))
+            .Select(ToListItem)
             .ToListAsync(ct);
 
         return Results.Ok(new ExerciseSearchResult(items, page, pageSize, total));
@@ -73,9 +102,8 @@ public static class ExerciseEndpoints
     {
         var exercise = await db.Exercises
             .AsNoTracking()
-            .Include(e => e.Category)
             .Where(e => e.Id == id)
-            .Select(e => new ExerciseListItem(e.Id, e.Name, e.Category.Name, e.DefaultTrackingMode.ToString()))
+            .Select(ToListItem)
             .FirstOrDefaultAsync(ct);
 
         return exercise is null ? Results.NotFound() : Results.Ok(exercise);

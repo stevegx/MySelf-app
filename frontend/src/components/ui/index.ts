@@ -9,3 +9,4 @@ export { Segmented } from "./Segmented";
 export { Ring } from "./Ring";
 export { PageHeader } from "./PageHeader";
 export { Skeleton, SkeletonText } from "./Skeleton";
+export { StepperInput } from "./StepperInput";

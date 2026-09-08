@@ -61,7 +61,7 @@ export function WorkoutCalendarScreen() {
           </Button>
         </div>
 
-        <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-foreground-muted">
+        <div className="grid grid-cols-7 gap-1 text-center text-[12px] text-foreground-muted">
           {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
             <div key={d}>{d}</div>
           ))}
@@ -78,7 +78,7 @@ export function WorkoutCalendarScreen() {
                 type="button"
                 onClick={() => setOpenDay(sessions.length ? key : null)}
                 className={cn(
-                  "flex min-h-[52px] flex-col items-center rounded-control border p-1 text-[12px]",
+                  "flex min-h-[52px] flex-col items-center rounded-control border p-1 text-[13px]",
                   inMonth ? "border-border" : "border-transparent text-foreground-muted",
                   sessions.length ? "bg-primary-soft" : "",
                   openDay === key ? "ring-2 ring-primary" : "",
@@ -101,16 +101,16 @@ export function WorkoutCalendarScreen() {
           </span>
           {openSessions.map((s) => (
             <div key={s.id} className="flex flex-wrap items-center gap-2 border-t border-border pt-2 first:border-t-0 first:pt-0">
-              <span className="text-[13px] font-semibold">{s.dayName ?? "Ad-hoc workout"}</span>
+              <span className="text-sm font-semibold">{s.dayName ?? "Quick workout"}</span>
               <Tag tone="neutral">{s.summary.completedSetCount} sets</Tag>
               {s.summary.totalVolumeKg > 0 && (
                 <Tag tone="neutral">{Math.round(s.summary.totalVolumeKg).toLocaleString()} kg</Tag>
               )}
               {s.wasEdited && <Tag tone="neutral">Edited</Tag>}
-              <Link to={`/workouts/session/${s.id}`} className="text-[12px] text-primary underline">
+              <Link to={`/workouts/session/${s.id}`} className="text-[13px] text-primary underline">
                 Edit
               </Link>
-              <label className="ml-auto text-[12px] text-foreground-muted">
+              <label className="ml-auto text-[13px] text-foreground-muted">
                 Move to{" "}
                 <input
                   type="date"
@@ -118,7 +118,7 @@ export function WorkoutCalendarScreen() {
                   onChange={(e) => {
                     if (e.target.value) reschedule.mutate({ sessionId: s.id, localDate: e.target.value });
                   }}
-                  className="rounded-control border border-border bg-surface-subtle px-2 py-1 text-[12px]"
+                  className="rounded-control border border-border bg-surface-subtle px-2 py-1 text-[13px]"
                 />
               </label>
             </div>
