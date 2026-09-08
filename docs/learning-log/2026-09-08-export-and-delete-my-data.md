@@ -105,8 +105,45 @@ rows matching a predicate".
 
 Full suite green: **105 frontend, 60 backend unit, 145 backend integration.**
 
-## Not in this slice (deferred)
+## Slice 1b — Excel export (`9e9f31d`)
 
-CSV variant of the export (the JSON is complete and machine-readable), a
-soft-delete grace period / "download then delete" flow, and emailed/scheduled
-exports.
+`GET /api/v1/me/export?format=xlsx` returns a formatted `.xlsx` built from the
+*same* `DataExport` object; JSON stays the default (no `format`, or
+`?format=json`).
+
+- **ClosedXML** (MIT, wraps the OpenXML SDK) added to `MySelf.Api` and
+  `MySelf.IntegrationTests`. EPPlus was avoided — it went non-free (Polyform
+  Noncommercial) at v5.
+- `DataExportSpreadsheet.Build(DataExport) → byte[]`. Three sheets:
+  - **Summary** — title, account, export date, and a label/value block of
+    counts (meals logged, food-log days, sessions, PRs, programs), calorie
+    target, latest body weight.
+  - **Nutrition** — one row per logged food; a ClosedXML *table*
+    (`range.CreateTable()`, `Theme = TableStyleMedium2`) gives banding + filter
+    dropdowns for free; `SetShowTotalsRow(true)` +
+    `table.Field("Calories").TotalsRowFunction = XLTotalsRowFunction.Sum` adds a
+    summed footer. Frozen header row, `yyyy-mm-dd` / `#,##0` / `0.0` number
+    formats, `Columns(...).AdjustToContents()`.
+  - **Workouts** — one row per logged set, same table treatment.
+- `Results.File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "myself-export-2026-09-08.xlsx")`.
+
+New .NET / ClosedXML notes:
+- A worksheet range → table: `ws.Range(r1,c1,r2,c2).CreateTable("Name")`; the
+  first row becomes the header, so you control the header text (unlike
+  `InsertTable(IEnumerable<T>)` which uses property names — no spaces allowed).
+- `XLCellValue` takes `string`/`double`/`decimal`/`bool`/`DateTime` implicitly;
+  `DateOnly` is converted with `.ToDateTime(TimeOnly.MinValue)` and shown via a
+  `yyyy-mm-dd` number format.
+- `AdjustToContents()` measures text with SixLabors.Fonts — that's the transitive
+  dependency ClosedXML pulls in.
+
+Frontend: the binary file can't go through `apiFetch` (it parses JSON), so
+`downloadExport()` does a raw `fetch` → `res.blob()` → object-URL anchor click.
+`API_BASE_URL` is now exported from `lib/api.ts`. Settings › "Your data" leads
+with **"Export to Excel"**; a small **"raw JSON"** link keeps the complete
+machine-readable export one click away.
+
+## Not in these slices (deferred)
+
+CSV variant, a soft-delete grace period / "download then delete" flow, and
+emailed/scheduled exports.
