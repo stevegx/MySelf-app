@@ -143,6 +143,38 @@ Frontend: the binary file can't go through `apiFetch` (it parses JSON), so
 with **"Export to Excel"**; a small **"raw JSON"** link keeps the complete
 machine-readable export one click away.
 
+### Slice 1c — the workbook reworked as a check-in (`f1365ee`)
+
+The first cut was a 3-sheet dump. This turns it into a 7-sheet review workbook
+driven by a new pure `CheckInModel` (`DataExportCheckInModel.cs`) computed over
+the `DataExport` — no new data, all derived:
+
+| Sheet | What it answers |
+|---|---|
+| **Overview** | one screen: last-7-day avg calories / protein / **protein per kg** / **calorie adherence** (% of days within ±10% of target) / macro split; 28-day training volume, sets, sessions, avg duration, PRs; body-weight latest / 7-day avg / **weekly rate** / total change — with green/amber/red flags |
+| **Nutrition — Daily** | per day: calories vs target (Δ, % of target), macros, macro %, items, status; data bar on calories, **diverging colour scale** centred on 100% of target; totals row shows the averages; a weekly-averages table sits alongside |
+| **Nutrition — Food log** | every logged item (the old detail sheet, kept) |
+| **Training — Sessions** | per session: duration, working sets, **volume = Σ(weight × reps)**, top set, **best e1RM** (Epley: `w × (1 + reps/30)`); data bars on volume + e1RM |
+| **Training — Exercises** | progression per lift: sessions, best weight, best e1RM, best session volume, first/last done |
+| **Training — Set log** | every set with its computed e1RM (the old detail sheet + a column) |
+| **Body weight** | daily weight, **7-day rolling average**, Δ vs 7 days ago, weekly rate |
+
+ClosedXML **cannot emit native charts** — a real limitation. Two ways around it:
+(1) every sheet is a single contiguous, header-first table, so *"select it and
+press Alt+F1"* gives an instant Excel chart; (2) trends are shown with **data-bar
+and colour-scale conditional formatting** (`range.AddConditionalFormat().DataBar(color)`,
+`.ColorScale().LowestValue(..).Midpoint(XLCFContentType.Number, "1", ..).HighestValue(..)`)
+plus red/amber/green cell fills set in code.
+
+New C# gotchas hit on the way:
+- A positional `record` property and a `private static` method can't share a name
+  (`BestDayLabel`) — `CS0102`.
+- `x ? Math.Round(d) : null` where the true branch is `decimal` needs
+  `: (decimal?)null` — `CS0173` otherwise.
+- `decimal?` vs a `double` literal (`>= 0.8`) → `CS0019`; write `0.8m`.
+- A `(string, int)` tuple literal won't implicitly convert to a declared
+  `(string Label, byte Rank)` return type — cast the literal `(byte)0`.
+
 ## Not in these slices (deferred)
 
 CSV variant, a soft-delete grace period / "download then delete" flow, and
