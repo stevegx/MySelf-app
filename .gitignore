@@ -18,6 +18,9 @@ dist/
 # Logs
 *.log
 
+# Local database dumps (scripts/db-backup.sh)
+/backups/
+
 # OS
 .DS_Store
 Thumbs.db
