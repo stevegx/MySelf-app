@@ -4,6 +4,7 @@ export { Checkbox } from "./Checkbox";
 export { Tag } from "./Tag";
 export { Field } from "./Field";
 export { Input } from "./Input";
+export { Modal } from "./Modal";
 export { PasswordInput } from "./PasswordInput";
 export { Segmented } from "./Segmented";
 export { Ring } from "./Ring";

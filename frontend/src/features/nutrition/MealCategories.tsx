@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
-import { Button, Input } from "../../components/ui";
+import { Button, Input, Modal } from "../../components/ui";
 import { ApiError } from "../../lib/api";
 import {
   useCreateMealCategory,
@@ -49,69 +49,64 @@ export function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Manage meal categories"
-      onKeyDown={(e) => e.key === "Escape" && onClose()}
-    >
-      <div className="flex w-full max-w-sm flex-col gap-3 rounded-card border border-border bg-surface p-4 shadow-xl">
-        <h3 className="m-0 text-base font-bold">Meal categories</h3>
-        <p className="m-0 text-sm text-foreground-muted">
-          These are the slots on your nutrition day. Renaming or removing one never changes days
-          you already logged.
-        </p>
+    <Modal title="Meal categories" label="Manage meal categories" onClose={onClose}>
+      <p className="m-0 text-sm text-foreground-muted">
+        These are the slots on your nutrition day. Renaming or removing one never changes days you
+        already logged.
+      </p>
 
-        <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-          {rows.map((row, i) => (
-            <CategoryRow
-              key={row.id}
-              row={row}
-              first={i === 0}
-              last={i === rows.length - 1}
-              onlyOne={rows.length <= 1}
-              busy={busy}
-              onRename={(name) => {
-                setError(null);
-                if (name && name !== row.name) rename.mutate({ id: row.id, name });
-              }}
-              onUp={() => move(i, -1)}
-              onDown={() => move(i, 1)}
-              onDelete={async () => {
-                setError(null);
-                try {
-                  await remove.mutateAsync(row.id);
-                } catch (e) {
-                  setError(errMessage(e));
-                }
-              }}
-            />
-          ))}
-        </ul>
-
-        <div className="flex gap-2">
-          <Input
-            aria-label="New category name"
-            placeholder="Add a category…"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && add()}
+      <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+        {rows.map((row, i) => (
+          <CategoryRow
+            key={row.id}
+            row={row}
+            first={i === 0}
+            last={i === rows.length - 1}
+            onlyOne={rows.length <= 1}
+            busy={busy}
+            onRename={(name) => {
+              setError(null);
+              if (name && name !== row.name) rename.mutate({ id: row.id, name });
+            }}
+            onUp={() => move(i, -1)}
+            onDown={() => move(i, 1)}
+            onDelete={async () => {
+              setError(null);
+              try {
+                await remove.mutateAsync(row.id);
+              } catch (e) {
+                setError(errMessage(e));
+              }
+            }}
           />
-          <Button size="sm" onClick={add} disabled={busy || !newName.trim()}>
-            Add
-          </Button>
-        </div>
+        ))}
+      </ul>
 
-        {error && <p className="m-0 text-[13px] text-danger">{error}</p>}
-
-        <div className="flex justify-end">
-          <Button variant="primary" size="sm" onClick={onClose}>
-            Done
-          </Button>
-        </div>
+      <div className="flex gap-2">
+        <Input
+          aria-label="New category name"
+          placeholder="Add a category…"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && add()}
+        />
+        <Button size="sm" onClick={add} disabled={busy || !newName.trim()}>
+          Add
+        </Button>
       </div>
-    </div>
+
+      {error && (
+        <p className="m-0 text-[13px] text-danger" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div className="flex justify-end">
+        <Button variant="primary" size="sm" onClick={onClose}>
+          Done
+        </Button>
+      </div>
+    </Modal>
   );
 }
 

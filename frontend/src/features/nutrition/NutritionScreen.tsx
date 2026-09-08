@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
-import { Button, Card, CardTitle, Checkbox, Input, PageHeader, Ring, Skeleton } from "../../components/ui";
+import { Button, Card, CardTitle, Checkbox, Input, Modal, PageHeader, Ring, Skeleton } from "../../components/ui";
 import { AddFoodDialog } from "./AddFoodDialog";
 import { ManageCategoriesDialog } from "./MealCategories";
 import { SaveMealDialog, SavedMealsBar } from "./SavedMeals";
@@ -138,29 +138,20 @@ function PickSlotDialog({
   const { data: rows = [] } = useMealCategories();
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-      onKeyDown={(e) => e.key === "Escape" && onClose()}
-    >
-      <div className="flex w-full max-w-xs flex-col gap-2 rounded-card border border-border bg-surface p-4 shadow-xl">
-        <h3 className="m-0 text-base font-bold">{title}</h3>
-        <div className="flex flex-col gap-1">
-          {rows.map((r) => (
-            <Button key={r.id} variant="secondary" block onClick={() => onPick(r.name)}>
-              {confirmLabel} {r.name}
-            </Button>
-          ))}
-        </div>
-        <div className="flex justify-end">
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            Cancel
+    <Modal title={title} onClose={onClose}>
+      <div className="flex flex-col gap-1">
+        {rows.map((r) => (
+          <Button key={r.id} variant="secondary" block onClick={() => onPick(r.name)}>
+            {confirmLabel} {r.name}
           </Button>
-        </div>
+        ))}
       </div>
-    </div>
+      <div className="flex justify-end">
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          Cancel
+        </Button>
+      </div>
+    </Modal>
   );
 }
 

@@ -79,6 +79,12 @@ const navLinkClass =
 export function AppShell() {
   return (
     <div className="flex min-h-screen flex-col items-start nav:flex-row">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-control focus:bg-surface focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:shadow-md focus:outline focus:outline-2 focus:outline-ring"
+      >
+        Skip to main content
+      </a>
       <aside className="flex w-full shrink-0 items-center gap-3 border-b border-border bg-surface p-4 nav:sticky nav:top-0 nav:h-screen nav:w-[232px] nav:flex-col nav:items-stretch nav:gap-6 nav:border-r nav:border-b-0 nav:px-4 nav:py-6">
         <div className="pl-2 text-xl font-bold tracking-tight">MySelf</div>
 
@@ -98,7 +104,11 @@ export function AppShell() {
         </div>
       </aside>
 
-      <main className="scrollbar-slim min-w-0 flex-1 p-5 pb-[calc(4.5rem+env(safe-area-inset-bottom))] nav:h-screen nav:overflow-y-auto nav:p-8 nav:pb-16">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="scrollbar-slim min-w-0 flex-1 p-5 pb-[calc(4.5rem+env(safe-area-inset-bottom))] outline-none nav:h-screen nav:overflow-y-auto nav:p-8 nav:pb-16"
+      >
         <div className="mx-auto max-w-[1120px]">
           <Outlet />
         </div>
