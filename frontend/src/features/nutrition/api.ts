@@ -8,8 +8,10 @@ function useToken() {
 
 export type ServingBasis = "Per100g" | "PerServing";
 export type MealAmountUnit = "Grams" | "Millilitres" | "Serving";
+/** The slots every account is seeded with; the live list is user-editable — see useMealCategories. */
 export const MEAL_CATEGORIES = ["Breakfast", "Lunch", "Dinner", "Snacks"] as const;
-export type MealCategory = (typeof MEAL_CATEGORIES)[number];
+/** A meal-slot name. Free-form because categories are customizable (docs/08 #19). */
+export type MealCategory = string;
 
 export type Nutrients = { kcal: number; proteinG: number; carbG: number; fatG: number };
 export type NutrientTargets = {
@@ -255,6 +257,174 @@ export function useAddSavedMealToDay(date: string) {
       apiFetch<NutritionDay>(`/api/v1/saved-meals/${id}/add-to-day`, {
         method: "POST",
         body: { date, category: category ?? null, multiplier },
+        accessToken,
+      }),
+    onSuccess: invalidate,
+  });
+}
+
+// --- Customizable meal categories (docs/08 #19) ---
+
+export type MealCategoryRow = { id: string; name: string; sortOrder: number };
+
+/** The caller's meal slots, in display order. Seeded server-side with the four defaults. */
+export function useMealCategories() {
+  const accessToken = useToken();
+  return useQuery({
+    queryKey: ["meal-categories"],
+    queryFn: () => apiFetch<MealCategoryRow[]>("/api/v1/meal-categories", { accessToken }),
+    enabled: accessToken != null,
+  });
+}
+
+function useInvalidateCategories() {
+  const qc = useQueryClient();
+  return () => {
+    qc.invalidateQueries({ queryKey: ["meal-categories"] });
+    // Any nutrition day currently shown gets its slots from the same list.
+    qc.invalidateQueries({ queryKey: ["nutrition-day"] });
+  };
+}
+
+export function useCreateMealCategory() {
+  const accessToken = useToken();
+  const invalidate = useInvalidateCategories();
+  return useMutation({
+    mutationFn: (name: string) =>
+      apiFetch<MealCategoryRow>("/api/v1/meal-categories", { method: "POST", body: { name }, accessToken }),
+    onSuccess: invalidate,
+  });
+}
+
+export function useRenameMealCategory() {
+  const accessToken = useToken();
+  const invalidate = useInvalidateCategories();
+  return useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      apiFetch<MealCategoryRow>(`/api/v1/meal-categories/${id}`, { method: "PUT", body: { name }, accessToken }),
+    onSuccess: invalidate,
+  });
+}
+
+export function useReorderMealCategories() {
+  const accessToken = useToken();
+  const invalidate = useInvalidateCategories();
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      apiFetch<MealCategoryRow[]>("/api/v1/meal-categories/reorder", { method: "PUT", body: { ids }, accessToken }),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDeleteMealCategory() {
+  const accessToken = useToken();
+  const invalidate = useInvalidateCategories();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/api/v1/meal-categories/${id}`, { method: "DELETE", accessToken }),
+    onSuccess: invalidate,
+  });
+}
+
+// --- Multi-select copy / move / delete + undo (docs/08 Story 7) ---
+
+/** A logged item plus its slot, shaped for POST .../items/bulk-add (the undo of a delete). */
+export type RestoreMealItemInput = {
+  category: MealCategory;
+  name: string;
+  servingBasis: ServingBasis;
+  servingSizeGrams: number | null;
+  amount: number;
+  unit: MealAmountUnit;
+} & Nutrients & {
+    basisKcal: number;
+    basisProteinG: number;
+    basisCarbG: number;
+    basisFatG: number;
+  };
+
+export function toRestoreInput(category: MealCategory, item: MealItem): RestoreMealItemInput {
+  return {
+    category,
+    name: item.name,
+    servingBasis: item.servingBasis,
+    servingSizeGrams: item.servingSizeGrams,
+    amount: item.amount,
+    unit: item.unit,
+    kcal: item.kcal,
+    proteinG: item.proteinG,
+    carbG: item.carbG,
+    fatG: item.fatG,
+    basisKcal: item.basisKcal,
+    basisProteinG: item.basisProteinG,
+    basisCarbG: item.basisCarbG,
+    basisFatG: item.basisFatG,
+  };
+}
+
+export function useBulkDeleteItems(date: string) {
+  const accessToken = useToken();
+  const invalidate = useInvalidateDay(date);
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      apiFetch<NutritionDay>(`/api/v1/nutrition-days/${date}/items/bulk-delete`, {
+        method: "POST",
+        body: { ids },
+        accessToken,
+      }),
+    onSuccess: invalidate,
+  });
+}
+
+export function useBulkMoveItems(date: string) {
+  const accessToken = useToken();
+  const invalidate = useInvalidateDay(date);
+  return useMutation({
+    mutationFn: ({ ids, toCategory }: { ids: string[]; toCategory: MealCategory }) =>
+      apiFetch<NutritionDay>(`/api/v1/nutrition-days/${date}/items/bulk-move`, {
+        method: "POST",
+        body: { ids, toCategory },
+        accessToken,
+      }),
+    onSuccess: invalidate,
+  });
+}
+
+export function useBulkCopyItems(date: string) {
+  const accessToken = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      ids,
+      toCategory,
+      toDate,
+    }: {
+      ids: string[];
+      toCategory: MealCategory;
+      toDate?: string | null;
+    }) =>
+      apiFetch<NutritionDay>(`/api/v1/nutrition-days/${date}/items/bulk-copy`, {
+        method: "POST",
+        body: { ids, toCategory, toDate: toDate ?? null },
+        accessToken,
+      }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["nutrition-day", date] });
+      if (vars.toDate && vars.toDate !== date) {
+        qc.invalidateQueries({ queryKey: ["nutrition-day", vars.toDate] });
+      }
+    },
+  });
+}
+
+export function useBulkRestoreItems(date: string) {
+  const accessToken = useToken();
+  const invalidate = useInvalidateDay(date);
+  return useMutation({
+    mutationFn: (items: RestoreMealItemInput[]) =>
+      apiFetch<NutritionDay>(`/api/v1/nutrition-days/${date}/items/bulk-add`, {
+        method: "POST",
+        body: { items },
         accessToken,
       }),
     onSuccess: invalidate,

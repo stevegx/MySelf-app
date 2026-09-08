@@ -175,7 +175,9 @@ if (rateLimitingEnabled)
 app.MapHealthChecks("/health");
 
 app.MapFoodsEndpoints();
+app.MapMealCategoryEndpoints();
 app.MapNutritionDayEndpoints();
+app.MapMealItemBulkEndpoints();
 app.MapSavedMealEndpoints();
 app.MapNutritionAnalyticsEndpoints();
 app.MapAuthEndpoints();

@@ -13,8 +13,6 @@ namespace MySelf.Api.Nutrition;
 /// </summary>
 public static class SavedMealEndpoints
 {
-    private static readonly string[] Categories = ["Breakfast", "Lunch", "Dinner", "Snacks"];
-
     public static IEndpointRouteBuilder MapSavedMealEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/v1/saved-meals").RequireAuthorization();
@@ -73,12 +71,18 @@ public static class SavedMealEndpoints
             return bad;
         }
 
+        var category = await MealCategoryService.ResolveAsync(db, userId, clock, request.Category, ct);
+        if (category is null)
+        {
+            return await BadCategory(db, userId, clock, ct);
+        }
+
         var meal = new SavedMeal
         {
             Id = Guid.NewGuid(),
             UserId = userId,
             Name = request.Name.Trim(),
-            Category = CanonicalCategory(request.Category)!,
+            Category = category,
             Notes = Trimmed(request.Notes),
             CreatedAt = clock.GetUtcNow(),
             Items = BuildItems(request.Items),
@@ -90,7 +94,7 @@ public static class SavedMealEndpoints
     }
 
     private static async Task<IResult> UpdateAsync(
-        Guid id, UpsertSavedMealRequest request, HttpContext http, MySelfDbContext db, CancellationToken ct)
+        Guid id, UpsertSavedMealRequest request, HttpContext http, MySelfDbContext db, TimeProvider clock, CancellationToken ct)
     {
         if (!http.TryGetUserId(out var userId))
         {
@@ -99,6 +103,12 @@ public static class SavedMealEndpoints
         if (Validate(request) is { } bad)
         {
             return bad;
+        }
+
+        var category = await MealCategoryService.ResolveAsync(db, userId, clock, request.Category, ct);
+        if (category is null)
+        {
+            return await BadCategory(db, userId, clock, ct);
         }
 
         var meal = await db.SavedMeals
@@ -110,7 +120,7 @@ public static class SavedMealEndpoints
         }
 
         meal.Name = request.Name.Trim();
-        meal.Category = CanonicalCategory(request.Category)!;
+        meal.Category = category;
         meal.Notes = Trimmed(request.Notes);
 
         // Replace the items wholesale: drop the old rows first, then add the new ones with an
@@ -167,10 +177,15 @@ public static class SavedMealEndpoints
             return Results.NotFound();
         }
 
-        var category = request.Category is null ? meal.Category : CanonicalCategory(request.Category);
+        // An explicit target must be one of the user's active slots; with none given, fall
+        // back to the meal's own stored category even if it has since been renamed/archived
+        // (the day will surface it as an orphan slot rather than silently dropping the meal).
+        var category = request.Category is null
+            ? meal.Category
+            : await MealCategoryService.ResolveAsync(db, userId, clock, request.Category, ct);
         if (category is null)
         {
-            return Validation("category", $"Category must be one of: {string.Join(", ", Categories)}.");
+            return await BadCategory(db, userId, clock, ct);
         }
 
         var multiplier = request.Multiplier ?? 1m;
@@ -221,10 +236,17 @@ public static class SavedMealEndpoints
         }
 
         await db.SaveChangesAsync(ct);
-        return Results.Ok(await NutritionDayEndpoints.BuildDayAsync(db, userId, day, ct));
+        return Results.Ok(await NutritionDayEndpoints.BuildDayAsync(db, userId, day, clock, ct));
     }
 
     // --- helpers ---
+
+    private static async Task<IResult> BadCategory(
+        MySelfDbContext db, Guid userId, TimeProvider clock, CancellationToken ct)
+    {
+        var names = await MealCategoryService.ActiveNamesAsync(db, userId, clock, ct);
+        return Validation("category", $"Category must be one of: {string.Join(", ", names)}.");
+    }
 
     private static IResult? Validate(UpsertSavedMealRequest request)
     {
@@ -232,10 +254,6 @@ public static class SavedMealEndpoints
         if (string.IsNullOrWhiteSpace(name) || name.Length > 120)
         {
             return Validation("name", "Enter a meal name (1–120 characters).");
-        }
-        if (CanonicalCategory(request.Category) is null)
-        {
-            return Validation("category", $"Category must be one of: {string.Join(", ", Categories)}.");
         }
         if (request.Items is not { Count: > 0 })
         {
@@ -302,9 +320,6 @@ public static class SavedMealEndpoints
             new NutrientTotals(totals.Kcal, totals.ProteinG, totals.CarbG, totals.FatG),
             items);
     }
-
-    private static string? CanonicalCategory(string? raw) =>
-        Categories.FirstOrDefault(c => string.Equals(c, raw, StringComparison.OrdinalIgnoreCase));
 
     private static string? Trimmed(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 

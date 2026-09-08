@@ -28,6 +28,7 @@ public class MySelfDbContext(DbContextOptions<MySelfDbContext> options)
     public DbSet<Equipment> Equipment => Set<Equipment>();
 
     public DbSet<FoodCacheEntry> FoodCacheEntries => Set<FoodCacheEntry>();
+    public DbSet<MealCategory> MealCategories => Set<MealCategory>();
     public DbSet<MealLog> MealLogs => Set<MealLog>();
     public DbSet<MealLogItem> MealLogItems => Set<MealLogItem>();
     public DbSet<CustomFood> CustomFoods => Set<CustomFood>();

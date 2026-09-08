@@ -13,8 +13,6 @@ namespace MySelf.Api.Nutrition;
 /// </summary>
 public static class NutritionDayEndpoints
 {
-    private static readonly string[] Categories = ["Breakfast", "Lunch", "Dinner", "Snacks"];
-
     public static IEndpointRouteBuilder MapNutritionDayEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/v1/nutrition-days/{date}", GetDayAsync)
@@ -32,7 +30,8 @@ public static class NutritionDayEndpoints
         return app;
     }
 
-    private static async Task<IResult> GetDayAsync(string date, HttpContext http, MySelfDbContext db, CancellationToken ct)
+    private static async Task<IResult> GetDayAsync(
+        string date, HttpContext http, MySelfDbContext db, TimeProvider clock, CancellationToken ct)
     {
         if (!http.TryGetUserId(out var userId))
         {
@@ -43,7 +42,7 @@ public static class NutritionDayEndpoints
             return BadDate();
         }
 
-        return Results.Ok(await BuildDayAsync(db, userId, day, ct));
+        return Results.Ok(await BuildDayAsync(db, userId, day, clock, ct));
     }
 
     private static async Task<IResult> AddItemAsync(
@@ -63,10 +62,11 @@ public static class NutritionDayEndpoints
             return BadDate();
         }
 
-        var category = Categories.FirstOrDefault(c => string.Equals(c, request.Category, StringComparison.OrdinalIgnoreCase));
+        var category = await MealCategoryService.ResolveAsync(db, userId, clock, request.Category, ct);
         if (category is null)
         {
-            return Validation("category", $"Category must be one of: {string.Join(", ", Categories)}.");
+            var names = await MealCategoryService.ActiveNamesAsync(db, userId, clock, ct);
+            return Validation("category", $"Category must be one of: {string.Join(", ", names)}.");
         }
 
         var name = request.Name?.Trim();
@@ -147,7 +147,7 @@ public static class NutritionDayEndpoints
         });
 
         await db.SaveChangesAsync(ct);
-        return Results.Ok(await BuildDayAsync(db, userId, day, ct));
+        return Results.Ok(await BuildDayAsync(db, userId, day, clock, ct));
     }
 
     private static async Task<IResult> UpdateItemAsync(
@@ -155,6 +155,7 @@ public static class NutritionDayEndpoints
         UpdateMealItemRequest request,
         HttpContext http,
         MySelfDbContext db,
+        TimeProvider clock,
         CancellationToken ct)
     {
         if (!http.TryGetUserId(out var userId))
@@ -202,7 +203,7 @@ public static class NutritionDayEndpoints
         item.FatG = scaled.FatG;
 
         await db.SaveChangesAsync(ct);
-        return Results.Ok(await BuildDayAsync(db, userId, item.MealLog.LocalDate, ct));
+        return Results.Ok(await BuildDayAsync(db, userId, item.MealLog.LocalDate, clock, ct));
     }
 
     private static async Task<IResult> DeleteItemAsync(Guid id, HttpContext http, MySelfDbContext db, CancellationToken ct)
@@ -233,7 +234,7 @@ public static class NutritionDayEndpoints
     // --- helpers ---
 
     internal static async Task<NutritionDayResponse> BuildDayAsync(
-        MySelfDbContext db, Guid userId, DateOnly day, CancellationToken ct)
+        MySelfDbContext db, Guid userId, DateOnly day, TimeProvider clock, CancellationToken ct)
     {
         var logs = await db.MealLogs
             .AsNoTracking()
@@ -247,7 +248,18 @@ public static class NutritionDayEndpoints
             .OrderByDescending(g => g.EffectiveFrom)
             .FirstOrDefaultAsync(ct);
 
-        var meals = Categories.Select(category =>
+        // The user's active slots drive which cards show; any category still carrying logged
+        // items that day but no longer active (renamed/archived) is appended so its history
+        // stays visible and editable.
+        var activeCategories = await MealCategoryService.ActiveNamesAsync(db, userId, clock, ct);
+        var orphanCategories = logs
+            .Select(l => l.Category)
+            .Where(c => !activeCategories.Contains(c, StringComparer.OrdinalIgnoreCase))
+            .Distinct()
+            .OrderBy(c => c)
+            .ToList();
+
+        var meals = activeCategories.Concat(orphanCategories).Select(category =>
         {
             var log = logs.FirstOrDefault(l => l.Category == category);
             var items = (log?.Items ?? [])

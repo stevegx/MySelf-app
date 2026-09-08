@@ -37,22 +37,61 @@ function dayWithLunchItem(date: string) {
   return d;
 }
 
+function dayWithTwoLunchItems(date: string) {
+  const d = dayWithLunchItem(date);
+  const lunch = d.meals.find((m) => m.category === "Lunch")!;
+  lunch.items.push({
+    id: "i2", sortOrder: 1, name: "Chicken breast", servingBasis: "Per100g", servingSizeGrams: null,
+    amount: 200, unit: "Grams", kcal: 330, proteinG: 62, carbG: 0, fatG: 7.2,
+    basisKcal: 165, basisProteinG: 31, basisCarbG: 0, basisFatG: 3.6,
+  });
+  lunch.subtotals = { kcal: 408, proteinG: 67.1, carbG: 7.5, fatG: 9.8 };
+  d.totals = { ...lunch.subtotals };
+  return d;
+}
+
+const DEFAULT_CATEGORIES = [
+  { id: "c1", name: "Breakfast", sortOrder: 0 },
+  { id: "c2", name: "Lunch", sortOrder: 1 },
+  { id: "c3", name: "Dinner", sortOrder: 2 },
+  { id: "c4", name: "Snacks", sortOrder: 3 },
+];
+
 const SAVED_FOOD = {
   id: "f1", name: "Chicken breast", brand: "Farm", barcode: null,
   servingBasis: "Per100g", servingSizeGrams: null, kcal: 165, proteinG: 31, carbG: 0, fatG: 3.6,
 };
 
-function installFetch(day: unknown, opts: { myFoods?: unknown[]; savedMeals?: unknown[] } = {}) {
+function installFetch(
+  day: unknown,
+  opts: { myFoods?: unknown[]; savedMeals?: unknown[]; categories?: unknown[] } = {},
+) {
   const calls: { url: string; method: string; body: unknown }[] = [];
   let current = day;
   const spy = vi.fn<typeof fetch>((input, init) => {
     const url = String(input);
     const method = init?.method ?? "GET";
-    calls.push({ url, method, body: init?.body ? JSON.parse(init.body as string) : undefined });
+    const parsedBody = init?.body ? JSON.parse(init.body as string) : undefined;
+    calls.push({ url, method, body: parsedBody });
     const json = (b: unknown, status = 200) =>
       Promise.resolve(new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json" } }));
 
     if (url.includes("/auth/refresh")) return json(AUTH);
+
+    if (url.endsWith("/api/v1/meal-categories") && method === "GET") return json(opts.categories ?? DEFAULT_CATEGORIES);
+    if (url.endsWith("/api/v1/meal-categories") && method === "POST")
+      return json({ id: "c-new", name: parsedBody.name, sortOrder: 4 }, 201);
+    if (url.endsWith("/api/v1/meal-categories/reorder") && method === "PUT") return json(DEFAULT_CATEGORIES);
+    if (url.match(/\/api\/v1\/meal-categories\/[\w-]+$/) && method === "PUT")
+      return json({ id: "c1", name: parsedBody.name, sortOrder: 0 });
+    if (url.match(/\/api\/v1\/meal-categories\/[\w-]+$/) && method === "DELETE")
+      return Promise.resolve(new Response(null, { status: 204 }));
+
+    if (url.match(/\/api\/v1\/nutrition-days\/[\d-]+\/items\/bulk-(delete|move|copy|add)$/) && method === "POST") {
+      current = url.endsWith("bulk-add") ? dayWithLunchItem((current as NutritionDay).date) : emptyDay((current as NutritionDay).date);
+      return json(current);
+    }
+
     if (url.includes("/api/v1/foods/search")) return json(opts.myFoods ?? []);
     if (url.includes("/api/v1/foods/barcode/")) {
       return json({
@@ -222,5 +261,68 @@ describe("NutritionScreen", () => {
     await waitFor(() =>
       expect(calls.some((c) => c.method === "DELETE" && c.url.includes("/meal-log-items/i1"))).toBe(true),
     );
+  });
+
+  it("adds a custom meal category from the manage dialog", async () => {
+    const calls = installFetch(emptyDay("2026-09-08"));
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: "Manage" }));
+    const dialog = await screen.findByRole("dialog", { name: /Manage meal categories/i });
+    await user.type(within(dialog).getByLabelText("New category name"), "Pre-workout");
+    await user.click(within(dialog).getByRole("button", { name: "Add" }));
+
+    await waitFor(() => {
+      const post = calls.find((c) => c.method === "POST" && c.url.endsWith("/api/v1/meal-categories"));
+      expect(post).toBeTruthy();
+      expect(post!.body).toMatchObject({ name: "Pre-workout" });
+    });
+  });
+
+  it("bulk-deletes selected items and offers undo", async () => {
+    const calls = installFetch(dayWithTwoLunchItems("2026-09-08"));
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: "Select" }));
+    await user.click(await screen.findByRole("checkbox", { name: "Plain yogurt" }));
+    await user.click(screen.getByRole("checkbox", { name: "Chicken breast" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => {
+      const post = calls.find((c) => c.method === "POST" && c.url.endsWith("/items/bulk-delete"));
+      expect(post).toBeTruthy();
+      expect(post!.body).toMatchObject({ ids: ["i1", "i2"] });
+    });
+
+    // The undo bar appears; clicking it replays the snapshots through bulk-add.
+    await user.click(await screen.findByRole("button", { name: "Undo" }));
+    await waitFor(() => {
+      const add = calls.find((c) => c.method === "POST" && c.url.endsWith("/items/bulk-add"));
+      expect(add).toBeTruthy();
+      const body = add!.body as { items: { name: string; category: string }[] };
+      expect(body.items.map((i) => i.name)).toEqual(["Plain yogurt", "Chicken breast"]);
+      expect(body.items[0].category).toBe("Lunch");
+    });
+  });
+
+  it("bulk-moves selected items to another slot", async () => {
+    const calls = installFetch(dayWithTwoLunchItems("2026-09-08"));
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: "Select" }));
+    await user.click(await screen.findByRole("checkbox", { name: "Plain yogurt" }));
+    await user.click(screen.getByRole("button", { name: "Move" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Move to…" });
+    await user.click(within(dialog).getByRole("button", { name: "Move to Dinner" }));
+
+    await waitFor(() => {
+      const post = calls.find((c) => c.method === "POST" && c.url.endsWith("/items/bulk-move"));
+      expect(post).toBeTruthy();
+      expect(post!.body).toMatchObject({ ids: ["i1"], toCategory: "Dinner" });
+    });
   });
 });

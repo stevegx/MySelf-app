@@ -3,10 +3,10 @@ import { Trash2 } from "lucide-react";
 import { Button, Input, Segmented } from "../../components/ui";
 import { ApiError } from "../../lib/api";
 import {
-  MEAL_CATEGORIES,
   useAddSavedMealToDay,
   useCreateSavedMeal,
   useDeleteSavedMeal,
+  useMealCategories,
   useSavedMeals,
 } from "./api";
 import type { MealCategory, MealItem, SavedMeal } from "./api";
@@ -63,6 +63,7 @@ function AddSavedMealDialog({
   onClose: () => void;
 }) {
   const add = useAddSavedMealToDay(date);
+  const { data: categories = [] } = useMealCategories();
   const [multiplier, setMultiplier] = useState<number>(1);
   const [category, setCategory] = useState<MealCategory>(meal.category);
   const [error, setError] = useState<string | null>(null);
@@ -115,7 +116,10 @@ function AddSavedMealDialog({
             aria-label="Meal"
             value={category}
             onChange={setCategory}
-            options={MEAL_CATEGORIES.map((c) => ({ value: c, label: c }))}
+            options={(categories.length ? categories.map((c) => c.name) : [meal.category]).map((c) => ({
+              value: c,
+              label: c,
+            }))}
           />
         </label>
 
