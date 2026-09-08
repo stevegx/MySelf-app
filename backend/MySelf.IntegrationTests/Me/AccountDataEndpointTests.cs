@@ -63,7 +63,7 @@ public class AccountDataEndpointTests(WebApplicationFactory<Program> factory, Da
     }
 
     [Fact]
-    public async Task Export_as_xlsx_has_a_nutrition_and_a_workouts_sheet_with_the_data()
+    public async Task Export_as_xlsx_is_a_check_in_workbook_with_nutrition_and_training_sheets()
     {
         var (client, email) = await factory.RegisterAndAuthenticateAsync();
         try
@@ -79,15 +79,25 @@ public class AccountDataEndpointTests(WebApplicationFactory<Program> factory, Da
             Assert.Contains(".xlsx", res.Content.Headers.ContentDisposition?.ToString() ?? "");
 
             using var wb = new XLWorkbook(await res.Content.ReadAsStreamAsync());
-            Assert.Equal(new[] { "Summary", "Nutrition", "Workouts" }, wb.Worksheets.Select(w => w.Name).ToArray());
+            Assert.Equal(
+                new[]
+                {
+                    "Overview", "Nutrition — Daily", "Nutrition — Food log",
+                    "Training — Sessions", "Training — Exercises", "Training — Set log", "Body weight",
+                },
+                wb.Worksheets.Select(w => w.Name).ToArray());
 
-            var nutrition = wb.Worksheet("Nutrition");
-            Assert.Equal("Date", nutrition.Cell(3, 1).GetString());
-            Assert.Equal("Calories", nutrition.Cell(3, 6).GetString());
-            Assert.Equal("Rice bowl", nutrition.Cell(4, 3).GetString());
-            Assert.Equal(325d, nutrition.Cell(4, 6).GetDouble()); // 130 kcal/100g × 250g
+            Assert.Contains("Check-in", wb.Worksheet("Overview").Cell(2, 2).GetString());
 
-            Assert.Equal("Workout log", wb.Worksheet("Workouts").Cell(1, 1).GetString());
+            // Daily rollup: the one logged day sums to 130 kcal/100g × 250 g = 325.
+            var daily = wb.Worksheet("Nutrition — Daily");
+            Assert.Equal("Calories", daily.Cell(3, 3).GetString());
+            Assert.Equal(325d, daily.Cell(4, 3).GetDouble());
+
+            // Food log: the underlying item.
+            var log = wb.Worksheet("Nutrition — Food log");
+            Assert.Equal("Rice bowl", log.Cell(4, 3).GetString());
+            Assert.Equal(325d, log.Cell(4, 6).GetDouble());
         }
         finally
         {
