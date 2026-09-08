@@ -105,13 +105,8 @@ export function ResetPasswordScreen() {
         <Field
           label="New password"
           htmlFor="newPassword"
-          hint={
-            errors.newPassword ? (
-              <span className="text-danger">{errors.newPassword.message}</span>
-            ) : (
-              "At least 6 characters, with a number, an uppercase letter and a symbol."
-            )
-          }
+          hint="At least 6 characters, with a number, an uppercase letter and a symbol."
+          error={errors.newPassword?.message}
         >
           <PasswordInput
             id="newPassword"
@@ -124,11 +119,7 @@ export function ResetPasswordScreen() {
         <Field
           label="Confirm new password"
           htmlFor="confirmNewPassword"
-          hint={
-            errors.confirmNewPassword ? (
-              <span className="text-danger">{errors.confirmNewPassword.message}</span>
-            ) : undefined
-          }
+          error={errors.confirmNewPassword?.message}
         >
           <PasswordInput
             id="confirmNewPassword"

@@ -89,13 +89,8 @@ export function RegisterScreen() {
         <Field
           label="Username"
           htmlFor="username"
-          hint={
-            errors.username ? (
-              <span className="text-danger">{errors.username.message}</span>
-            ) : (
-              "3-24 characters: letters, numbers, dots, underscores and hyphens."
-            )
-          }
+          hint="3-24 characters: letters, numbers, dots, underscores and hyphens."
+          error={errors.username?.message}
         >
           <Input
             id="username"
@@ -109,7 +104,7 @@ export function RegisterScreen() {
         <Field
           label="Email"
           htmlFor="email"
-          hint={errors.email ? <span className="text-danger">{errors.email.message}</span> : undefined}
+          error={errors.email?.message}
         >
           <Input
             id="email"
@@ -123,13 +118,8 @@ export function RegisterScreen() {
         <Field
           label="Password"
           htmlFor="password"
-          hint={
-            errors.password ? (
-              <span className="text-danger">{errors.password.message}</span>
-            ) : (
-              "At least 6 characters, with a number, an uppercase letter and a symbol."
-            )
-          }
+          hint="At least 6 characters, with a number, an uppercase letter and a symbol."
+          error={errors.password?.message}
         >
           <PasswordInput
             id="password"
@@ -142,11 +132,7 @@ export function RegisterScreen() {
         <Field
           label="Confirm password"
           htmlFor="confirmPassword"
-          hint={
-            errors.confirmPassword ? (
-              <span className="text-danger">{errors.confirmPassword.message}</span>
-            ) : undefined
-          }
+          error={errors.confirmPassword?.message}
         >
           <PasswordInput
             id="confirmPassword"

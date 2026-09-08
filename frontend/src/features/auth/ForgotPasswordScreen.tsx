@@ -74,7 +74,7 @@ export function ForgotPasswordScreen() {
             <Field
               label="Email"
               htmlFor="email"
-              hint={errors.email ? <span className="text-danger">{errors.email.message}</span> : undefined}
+              error={errors.email?.message}
             >
               <Input
                 id="email"

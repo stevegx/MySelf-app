@@ -22,7 +22,7 @@ export function Segmented<T extends string>({
 
   return (
     <div
-      role="group"
+      role="radiogroup"
       className="inline-flex overflow-hidden rounded-pill border border-border"
       {...rest}
     >
