@@ -48,7 +48,7 @@ export function LoginScreen() {
         className="flex w-[min(420px,100%)] flex-col gap-5 rounded-card border border-border bg-surface p-9 pb-7 shadow-md"
       >
         <div>
-          <h2 className="mb-1">Welcome back</h2>
+          <h1 className="mb-1 text-[26px]">Welcome back</h1>
           <p className="m-0 text-sm text-foreground-muted">Log in to continue.</p>
         </div>
 

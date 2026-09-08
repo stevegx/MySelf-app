@@ -29,7 +29,7 @@ export function SettingsScreen() {
 
   return (
     <>
-      <h2 className="mb-5">Settings</h2>
+      <h1 className="mb-5 text-[26px]">Settings</h1>
 
       <div className="flex max-w-[560px] flex-col gap-4">
         <Card>
@@ -120,7 +120,7 @@ export function SettingsScreen() {
             <div>
               <div className="text-sm">Export my data</div>
               <div className="text-xs text-foreground-muted">
-                A formatted Excel workbook — a Nutrition sheet and a Workouts sheet.{" "}
+                A formatted Excel workbook — a check-in overview plus nutrition and training sheets.{" "}
                 <button
                   type="button"
                   className="text-primary underline disabled:opacity-50"

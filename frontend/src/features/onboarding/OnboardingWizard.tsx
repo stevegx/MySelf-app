@@ -132,7 +132,7 @@ function StepHeader({ step, title, subtitle }: { step: number; title: string; su
       <div className="mb-1.5 text-[12px] uppercase tracking-[0.08em] text-foreground-muted">
         Step {step} of 4
       </div>
-      <h2 className="mb-1">{title}</h2>
+      <h1 className="mb-1 text-[26px]">{title}</h1>
       <p className="m-0 text-sm text-foreground-muted">{subtitle}</p>
     </div>
   );

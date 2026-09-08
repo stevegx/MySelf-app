@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { NavLink, Outlet, useLocation } from "react-router";
 import {
   Dumbbell,
   LayoutDashboard,
@@ -76,9 +77,38 @@ function AccountSummary() {
 const navLinkClass =
   "flex min-h-11 items-center gap-2.5 rounded-control px-3 py-2.5 text-sm text-foreground no-underline hover:bg-surface-subtle aria-[current=page]:bg-primary-soft aria-[current=page]:font-semibold aria-[current=page]:text-primary-pressed";
 
+/**
+ * Announces the new page to screen readers after a client-side navigation (which otherwise
+ * moves nothing and says nothing). Reads the page's <h1> once the route has rendered.
+ */
+function RouteAnnouncer() {
+  const { pathname } = useLocation();
+  const [message, setMessage] = useState("");
+  const first = useRef(true);
+
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    const id = requestAnimationFrame(() => {
+      const heading = document.querySelector<HTMLElement>("#main-content h1")?.textContent?.trim();
+      setMessage(heading ? `${heading} page` : "Page changed");
+    });
+    return () => cancelAnimationFrame(id);
+  }, [pathname]);
+
+  return (
+    <div aria-live="polite" role="status" className="sr-only">
+      {message}
+    </div>
+  );
+}
+
 export function AppShell() {
   return (
     <div className="flex min-h-screen flex-col items-start nav:flex-row">
+      <RouteAnnouncer />
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-control focus:bg-surface focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:shadow-md focus:outline focus:outline-2 focus:outline-ring"

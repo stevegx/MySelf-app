@@ -35,7 +35,7 @@ export function ForgotPasswordScreen() {
     <div className="flex min-h-screen items-center justify-center bg-background px-5 py-12">
       <div className="flex w-[min(420px,100%)] flex-col gap-5 rounded-card border border-border bg-surface p-9 pb-7 shadow-md">
         <div>
-          <h2 className="mb-1">Reset your password</h2>
+          <h1 className="mb-1 text-[26px]">Reset your password</h1>
           <p className="m-0 text-sm text-foreground-muted">
             Enter your email and we'll send a reset link if an account exists for it.
           </p>

@@ -71,7 +71,7 @@ export function RegisterScreen() {
         className="flex w-[min(420px,100%)] flex-col gap-5 rounded-card border border-border bg-surface p-9 pb-7 shadow-md"
       >
         <div>
-          <h2 className="mb-1">Create your account</h2>
+          <h1 className="mb-1 text-[26px]">Create your account</h1>
           <p className="m-0 text-sm text-foreground-muted">
             Track workouts and nutrition in one place.
           </p>
