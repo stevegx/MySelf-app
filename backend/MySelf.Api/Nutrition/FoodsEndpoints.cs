@@ -18,7 +18,8 @@ public static class FoodsEndpoints
 
         group.MapGet("/barcode/{code}", GetByBarcodeAsync)
             .WithName("GetFoodByBarcode")
-            .WithSummary("Look up a packaged food by barcode via Open Food Facts (cached).");
+            .WithSummary("Look up a packaged food by barcode via Open Food Facts (cached).")
+            .RequireRateLimiting(RateLimiting.LookupPolicy);
 
         group.MapGet("/search", SearchMyFoodsAsync)
             .WithName("SearchMyFoods")

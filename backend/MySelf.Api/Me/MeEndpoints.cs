@@ -29,12 +29,14 @@ public static class MeEndpoints
         app.MapPut("/api/v1/me/profile", UpdateProfileAsync)
             .WithName("UpdateProfile")
             .WithSummary("Create or update the signed-in user's profile (onboarding step 1).")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .RequireRateLimiting(RateLimiting.WritePolicy);
 
         app.MapPut("/api/v1/me/preferences", UpdatePreferencesAsync)
             .WithName("UpdatePreferences")
             .WithSummary("Update the signed-in user's small UI preferences.")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .RequireRateLimiting(RateLimiting.WritePolicy);
 
         return app;
     }
