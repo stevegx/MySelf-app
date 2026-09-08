@@ -33,7 +33,8 @@ public static class AccountDataEndpoints
     }
 
     private static async Task<IResult> ExportAsync(
-        HttpContext http, MySelfDbContext db, UserManager<ApplicationUser> users, CancellationToken ct)
+        HttpContext http, MySelfDbContext db, UserManager<ApplicationUser> users, CancellationToken ct,
+        string? format = null)
     {
         if (!http.TryGetUserId(out var userId))
         {
@@ -153,9 +154,18 @@ public static class AccountDataEndpoints
             goals, measurements, categories, mealLogs, customFoods, savedMeals,
             programExport, sessionExport, prs);
 
-        var fileName = $"myself-export-{DateOnly.FromDateTime(DateTime.UtcNow):yyyy-MM-dd}.json";
+        var stamp = DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd");
+
+        if (string.Equals(format, "xlsx", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.File(
+                DataExportSpreadsheet.Build(export),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"myself-export-{stamp}.xlsx");
+        }
+
         var bytes = JsonSerializer.SerializeToUtf8Bytes(export, ExportJson);
-        return Results.File(bytes, "application/json", fileName);
+        return Results.File(bytes, "application/json", $"myself-export-{stamp}.json");
     }
 
     private static async Task<IResult> DeleteAccountAsync(

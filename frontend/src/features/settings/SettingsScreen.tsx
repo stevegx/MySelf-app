@@ -120,15 +120,23 @@ export function SettingsScreen() {
             <div>
               <div className="text-sm">Export my data</div>
               <div className="text-xs text-foreground-muted">
-                Download everything in this account as a JSON file.
+                A formatted Excel workbook — a Nutrition sheet and a Workouts sheet.{" "}
+                <button
+                  type="button"
+                  className="text-primary underline disabled:opacity-50"
+                  disabled={exportData.isPending}
+                  onClick={() => exportData.mutate("json")}
+                >
+                  raw JSON
+                </button>
               </div>
             </div>
             <Button
               variant="ghost"
               disabled={exportData.isPending}
-              onClick={() => exportData.mutate()}
+              onClick={() => exportData.mutate("xlsx")}
             >
-              {exportData.isPending ? "Preparing…" : "Export"}
+              {exportData.isPending ? "Preparing…" : "Export to Excel"}
             </Button>
           </div>
           {exportData.isError && (

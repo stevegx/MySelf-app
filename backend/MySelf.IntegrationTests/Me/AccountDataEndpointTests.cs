@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using ClosedXML.Excel;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -54,6 +55,39 @@ public class AccountDataEndpointTests(WebApplicationFactory<Program> factory, Da
 
             var program = export.GetProperty("workoutPrograms").EnumerateArray().Single();
             Assert.Equal("PPL", program.GetProperty("name").GetString());
+        }
+        finally
+        {
+            await factory.DeleteUsersAsync(email);
+        }
+    }
+
+    [Fact]
+    public async Task Export_as_xlsx_has_a_nutrition_and_a_workouts_sheet_with_the_data()
+    {
+        var (client, email) = await factory.RegisterAndAuthenticateAsync();
+        try
+        {
+            await client.PostAsJsonAsync("/api/v1/nutrition-days/2026-09-08/items",
+                Meal("Lunch", "Rice bowl", 130, 250));
+
+            var res = await client.GetAsync("/api/v1/me/export?format=xlsx");
+            Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+            Assert.Equal(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                res.Content.Headers.ContentType?.MediaType);
+            Assert.Contains(".xlsx", res.Content.Headers.ContentDisposition?.ToString() ?? "");
+
+            using var wb = new XLWorkbook(await res.Content.ReadAsStreamAsync());
+            Assert.Equal(new[] { "Summary", "Nutrition", "Workouts" }, wb.Worksheets.Select(w => w.Name).ToArray());
+
+            var nutrition = wb.Worksheet("Nutrition");
+            Assert.Equal("Date", nutrition.Cell(3, 1).GetString());
+            Assert.Equal("Calories", nutrition.Cell(3, 6).GetString());
+            Assert.Equal("Rice bowl", nutrition.Cell(4, 3).GetString());
+            Assert.Equal(325d, nutrition.Cell(4, 6).GetDouble()); // 130 kcal/100g × 250g
+
+            Assert.Equal("Workout log", wb.Worksheet("Workouts").Cell(1, 1).GetString());
         }
         finally
         {

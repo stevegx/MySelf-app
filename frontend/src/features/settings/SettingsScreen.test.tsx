@@ -76,19 +76,14 @@ describe("SettingsScreen", () => {
     await vi.waitFor(() => expect(onSetSession).toHaveBeenCalledWith(null));
   });
 
-  it("exports account data as a JSON download", async () => {
+  it("exports account data as an Excel download", async () => {
     const calls: { url: string; method: string }[] = [];
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((url: string, options?: RequestInit) => {
         calls.push({ url: String(url), method: options?.method ?? "GET" });
         if (String(url).includes("/api/v1/me/export")) {
-          return Promise.resolve(
-            new Response(JSON.stringify({ account: { email: "demo@example.com" }, mealLogs: [] }), {
-              status: 200,
-              headers: { "content-type": "application/json" },
-            }),
-          );
+          return Promise.resolve(new Response(new Blob(["spreadsheet-bytes"]), { status: 200 }));
         }
         return Promise.resolve(
           new Response(JSON.stringify({ id: "1", username: "demo", email: "demo@example.com" }), {
@@ -108,10 +103,12 @@ describe("SettingsScreen", () => {
     const user = userEvent.setup();
     renderSettingsScreen(vi.fn());
 
-    await user.click(screen.getByRole("button", { name: "Export" }));
+    await user.click(screen.getByRole("button", { name: "Export to Excel" }));
 
     await vi.waitFor(() => {
-      expect(calls.some((c) => c.url.includes("/api/v1/me/export") && c.method === "GET")).toBe(true);
+      expect(
+        calls.some((c) => c.url.includes("/api/v1/me/export?format=xlsx") && c.method === "GET"),
+      ).toBe(true);
       expect(createUrl).toHaveBeenCalled();
       expect(clickSpy).toHaveBeenCalled();
     });
