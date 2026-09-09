@@ -20,7 +20,8 @@ public static class OnboardingEndpoints
         app.MapPost("/api/v1/me/onboarding/complete", CompleteAsync)
             .WithName("CompleteOnboarding")
             .WithSummary("Persist the chosen nutrition goal and mark onboarding done.")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .RequireRateLimiting(RateLimiting.WritePolicy);
 
         app.MapGet("/api/v1/me/goals", GetGoalsAsync)
             .WithName("GetGoals")

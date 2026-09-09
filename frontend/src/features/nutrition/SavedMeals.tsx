@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Trash2 } from "lucide-react";
-import { Button, Input, Segmented } from "../../components/ui";
+import { Button, Input, Modal, Segmented } from "../../components/ui";
 import { ApiError } from "../../lib/api";
 import {
   useAddSavedMealToDay,
@@ -79,67 +79,61 @@ function AddSavedMealDialog({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Add ${meal.name}`}
-      onKeyDown={(e) => e.key === "Escape" && onClose()}
-    >
-      <div className="flex w-full max-w-sm flex-col gap-3 rounded-card border border-border bg-surface p-4 shadow-xl">
-        <h3 className="m-0 text-base font-bold">{meal.name}</h3>
-
-        <div className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
-          Amount
-          <div className="flex gap-1.5">
-            {MULTIPLIERS.map((x) => (
-              <button
-                key={x}
-                type="button"
-                aria-pressed={multiplier === x}
-                onClick={() => setMultiplier(x)}
-                className={
-                  multiplier === x
-                    ? "rounded-pill bg-primary px-3 py-1 text-sm font-semibold text-on-primary"
-                    : "rounded-pill border border-border px-3 py-1 text-sm text-foreground-muted hover:border-border-strong"
-                }
-              >
-                {x}×
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <label className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
-          Add to
-          <Segmented<MealCategory>
-            aria-label="Meal"
-            value={category}
-            onChange={setCategory}
-            options={(categories.length ? categories.map((c) => c.name) : [meal.category]).map((c) => ({
-              value: c,
-              label: c,
-            }))}
-          />
-        </label>
-
-        <p className="m-0 text-sm text-foreground-muted">
-          Adds {meal.items.length} {meal.items.length === 1 ? "food" : "foods"} · ≈{" "}
-          {round(meal.totals.kcal * multiplier)} kcal. You can fine-tune each amount afterwards.
-        </p>
-
-        {error && <p className="m-0 text-[13px] text-danger">{error}</p>}
-
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="primary" size="sm" onClick={submit} disabled={add.isPending}>
-            {add.isPending ? "Adding…" : "Add to day"}
-          </Button>
+    <Modal title={meal.name} label={`Add ${meal.name}`} onClose={onClose}>
+      <div className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
+        Amount
+        <div className="flex gap-1.5">
+          {MULTIPLIERS.map((x) => (
+            <button
+              key={x}
+              type="button"
+              aria-pressed={multiplier === x}
+              onClick={() => setMultiplier(x)}
+              className={
+                multiplier === x
+                  ? "rounded-pill bg-primary px-3 py-1 text-sm font-semibold text-on-primary"
+                  : "rounded-pill border border-border px-3 py-1 text-sm text-foreground-muted hover:border-border-strong"
+              }
+            >
+              {x}×
+            </button>
+          ))}
         </div>
       </div>
-    </div>
+
+      <label className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
+        Add to
+        <Segmented<MealCategory>
+          aria-label="Meal"
+          value={category}
+          onChange={setCategory}
+          options={(categories.length ? categories.map((c) => c.name) : [meal.category]).map((c) => ({
+            value: c,
+            label: c,
+          }))}
+        />
+      </label>
+
+      <p className="m-0 text-sm text-foreground-muted">
+        Adds {meal.items.length} {meal.items.length === 1 ? "food" : "foods"} · ≈{" "}
+        {round(meal.totals.kcal * multiplier)} kcal. You can fine-tune each amount afterwards.
+      </p>
+
+      {error && (
+        <p className="m-0 text-[13px] text-danger" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button variant="primary" size="sm" onClick={submit} disabled={add.isPending}>
+          {add.isPending ? "Adding…" : "Add to day"}
+        </Button>
+      </div>
+    </Modal>
   );
 }
 
@@ -185,39 +179,34 @@ export function SaveMealDialog({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Save ${category} as a meal`}
-      onKeyDown={(e) => e.key === "Escape" && onClose()}
-    >
-      <div className="flex w-full max-w-sm flex-col gap-3 rounded-card border border-border bg-surface p-4 shadow-xl">
-        <h3 className="m-0 text-base font-bold">Save as a meal</h3>
-        <p className="m-0 text-sm text-foreground-muted">
-          Saves {items.length} {items.length === 1 ? "food" : "foods"} from {category} as a reusable
-          template.
+    <Modal title="Save as a meal" label={`Save ${category} as a meal`} onClose={onClose}>
+      <p className="m-0 text-sm text-foreground-muted">
+        Saves {items.length} {items.length === 1 ? "food" : "foods"} from {category} as a reusable
+        template.
+      </p>
+      <label className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
+        Name
+        <Input
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          placeholder="e.g. Chicken & Rice Lunch"
+        />
+      </label>
+      {error && (
+        <p className="m-0 text-[13px] text-danger" role="alert">
+          {error}
         </p>
-        <label className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
-          Name
-          <Input
-            autoFocus
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && submit()}
-            placeholder="e.g. Chicken & Rice Lunch"
-          />
-        </label>
-        {error && <p className="m-0 text-[13px] text-danger">{error}</p>}
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="primary" size="sm" onClick={submit} disabled={create.isPending}>
-            {create.isPending ? "Saving…" : "Save meal"}
-          </Button>
-        </div>
+      )}
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button variant="primary" size="sm" onClick={submit} disabled={create.isPending}>
+          {create.isPending ? "Saving…" : "Save meal"}
+        </Button>
       </div>
-    </div>
+    </Modal>
   );
 }

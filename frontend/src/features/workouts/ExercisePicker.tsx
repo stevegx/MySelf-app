@@ -1,7 +1,9 @@
 import { useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Button, Input } from "../../components/ui";
 import { cn } from "../../lib/cn";
+import { useFocusTrap } from "../../lib/useFocusTrap";
 import { MUSCLE_GROUPS, expandGroupsToMuscleNames, type MuscleGroupKey } from "./muscleGroups";
 import { useExerciseSearch } from "./api";
 import type { ExerciseListItem } from "./api";
@@ -30,6 +32,7 @@ export function ExercisePicker({
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<Set<MuscleGroupKey>>(() => new Set(focusGroupKeys ?? []));
   const { data, isLoading } = useExerciseSearch(q);
+  const { ref: drawerRef, onKeyDown: drawerKeyDown } = useFocusTrap<HTMLDivElement>(onClose, drawer);
 
   const toggle = (key: MuscleGroupKey) =>
     setSelected((prev) => {
@@ -136,21 +139,26 @@ export function ExercisePicker({
     return <div className="rounded-control border border-border bg-surface-subtle p-3">{body}</div>;
   }
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex justify-end bg-black/40"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Add exercise"
-      onClick={onClose}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      onKeyDown={drawerKeyDown}
     >
       <div
-        className="flex h-full w-[380px] max-w-[92vw] flex-col gap-3 overflow-y-auto bg-background p-5 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
+        ref={drawerRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Add exercise"
+        tabIndex={-1}
+        className="flex h-full w-[380px] max-w-[92vw] flex-col gap-3 overflow-y-auto bg-background p-5 shadow-xl outline-none"
       >
         {body}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

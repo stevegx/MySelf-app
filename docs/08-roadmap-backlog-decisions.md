@@ -166,8 +166,28 @@ Deferred: per-exercise "stalled lift" chip in the day editor. Migrations
 
 ### Phase 6 — polish and release
 
-- Accessibility, localization, export/delete, rate limiting.
-- Production config, monitoring and backups.
+**DONE 2026-09-08** (branch `phase-6-polish-release`; see
+`docs/learning-log/2026-09-08-{export-and-delete-my-data,accessibility-pass,rate-limit-audit,phase6-close}.md`).
+
+- **Export / delete** — `GET /api/v1/me/export` (JSON, or `?format=xlsx` for a 7-sheet
+  ClosedXML "check-in" workbook: Overview KPIs, Nutrition Daily/Food log, Training
+  Sessions/Exercises/Set log, Body weight) + `DELETE /api/v1/me` (hard-delete, FK cascade,
+  refresh tokens cleared). Settings › "Your data".
+- **Accessibility** — `useFocusTrap` + `Modal` primitive (every ad-hoc `role="dialog"`
+  migrated; focus trap/restore, scroll lock, portal); `Field` `error` → `aria-describedby` +
+  `aria-invalid` + `role="alert"`; `Segmented` → `radiogroup`; one `<h1>` per page;
+  `RouteAnnouncer`; `prefers-reduced-motion`; skip link.
+- **Rate limiting** — audit of every endpoint; new `lookup` policy (per-caller, 30/window)
+  for the anonymous OFF barcode lookup; `write` policy added to four unprotected mutations.
+- **Localization** — dependency-free `t()` / `useT()` seam + `en` catalogue; AppShell
+  migrated as the reference (full string extraction is mechanical follow-up).
+- **Production config / monitoring / backups** — `StartupChecks` fail-fast validator
+  (Production only), `appsettings.Production.json`, `AddHttpLogging`, `/health/live` +
+  `/health/ready` split, `scripts/db-backup.sh` + `db-restore.sh`, `docs/09-operations.md`.
+
+Deferred and documented: full string extraction; a colour-contrast audit + a `read`
+rate-limit policy for heavy analytics GETs (wait on the colour freeze / a capacity call);
+Docker Compose; a real deploy target.
 
 Κάθε phase πρέπει να κλείνει με working vertical slices. Δεν χτίζουμε όλο το database layer πριν εμφανιστεί λειτουργικό user flow.
 

@@ -24,7 +24,8 @@ public static class NutritionEstimateEndpoints
         app.MapPost("/api/v1/me/nutrition-estimate", Estimate)
             .WithName("NutritionEstimate")
             .WithSummary("Non-persisted BMR/TDEE/goal breakdown for onboarding answers.")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .RequireRateLimiting(RateLimiting.WritePolicy);
 
         return app;
     }

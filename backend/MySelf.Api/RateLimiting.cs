@@ -28,6 +28,13 @@ public sealed class RateLimitOptions
 
     /// <summary>Per-user ceiling for builder mutations (program / group / variant writes).</summary>
     public int WritePermitLimit { get; set; } = 90;
+
+    /// <summary>
+    /// Per-caller ceiling for endpoints that fan out to an external service (the Open Food
+    /// Facts barcode lookup). Tighter than <see cref="WritePermitLimit"/> because each miss
+    /// is an outbound HTTP call, and the barcode endpoint is reachable anonymously.
+    /// </summary>
+    public int LookupPermitLimit { get; set; } = 30;
 }
 
 /// <summary>
@@ -39,6 +46,7 @@ public static class RateLimiting
 {
     public const string AuthPolicy = "auth";
     public const string WritePolicy = "write";
+    public const string LookupPolicy = "lookup";
 
     public static WebApplicationBuilder AddAppRateLimiting(this WebApplicationBuilder builder)
     {
@@ -77,6 +85,10 @@ public static class RateLimiting
             limiter.AddPolicy(WritePolicy, context => RateLimitPartition.GetFixedWindowLimiter(
                 $"write:{CallerKey(context)}",
                 _ => new FixedWindowRateLimiterOptions { PermitLimit = options.WritePermitLimit, Window = window }));
+
+            limiter.AddPolicy(LookupPolicy, context => RateLimitPartition.GetFixedWindowLimiter(
+                $"lookup:{CallerKey(context)}",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = options.LookupPermitLimit, Window = window }));
 
             limiter.OnRejected = async (rejected, cancellationToken) =>
             {

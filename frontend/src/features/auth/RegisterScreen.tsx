@@ -71,7 +71,7 @@ export function RegisterScreen() {
         className="flex w-[min(420px,100%)] flex-col gap-5 rounded-card border border-border bg-surface p-9 pb-7 shadow-md"
       >
         <div>
-          <h2 className="mb-1">Create your account</h2>
+          <h1 className="mb-1 text-[26px]">Create your account</h1>
           <p className="m-0 text-sm text-foreground-muted">
             Track workouts and nutrition in one place.
           </p>
@@ -89,13 +89,8 @@ export function RegisterScreen() {
         <Field
           label="Username"
           htmlFor="username"
-          hint={
-            errors.username ? (
-              <span className="text-danger">{errors.username.message}</span>
-            ) : (
-              "3-24 characters: letters, numbers, dots, underscores and hyphens."
-            )
-          }
+          hint="3-24 characters: letters, numbers, dots, underscores and hyphens."
+          error={errors.username?.message}
         >
           <Input
             id="username"
@@ -109,7 +104,7 @@ export function RegisterScreen() {
         <Field
           label="Email"
           htmlFor="email"
-          hint={errors.email ? <span className="text-danger">{errors.email.message}</span> : undefined}
+          error={errors.email?.message}
         >
           <Input
             id="email"
@@ -123,13 +118,8 @@ export function RegisterScreen() {
         <Field
           label="Password"
           htmlFor="password"
-          hint={
-            errors.password ? (
-              <span className="text-danger">{errors.password.message}</span>
-            ) : (
-              "At least 6 characters, with a number, an uppercase letter and a symbol."
-            )
-          }
+          hint="At least 6 characters, with a number, an uppercase letter and a symbol."
+          error={errors.password?.message}
         >
           <PasswordInput
             id="password"
@@ -142,11 +132,7 @@ export function RegisterScreen() {
         <Field
           label="Confirm password"
           htmlFor="confirmPassword"
-          hint={
-            errors.confirmPassword ? (
-              <span className="text-danger">{errors.confirmPassword.message}</span>
-            ) : undefined
-          }
+          error={errors.confirmPassword?.message}
         >
           <PasswordInput
             id="confirmPassword"

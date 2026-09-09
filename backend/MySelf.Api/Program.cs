@@ -33,6 +33,18 @@ builder.Services.AddOpenApi();
 // RFC 7807 ProblemDetails for error responses (docs/04 API conventions).
 builder.Services.AddProblemDetails();
 
+// Structured per-request logging (method, path, status, duration) as one line. Framework
+// built-in — no Serilog. The Authorization header is never in the default field set.
+builder.Services.AddHttpLogging(options =>
+{
+    options.LoggingFields =
+        Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.RequestMethod
+        | Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.RequestPath
+        | Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.ResponseStatusCode
+        | Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.Duration;
+    options.CombineLogs = true;
+});
+
 // Rate limiting (docs/04: no rate limiting was a Phase 2 gap). Generous global ceiling plus
 // stricter "auth" / "write" policies; disabled in the integration test environment.
 builder.AddAppRateLimiting();
@@ -49,9 +61,10 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<MySelfDbContext>(options =>
     options.UseNpgsql(connectionString));
 
-// Health check that verifies the API can reach PostgreSQL through MySelfDbContext.
+// Health checks. The DbContext probe is tagged "ready" so /health/ready gates on it while
+// /health/live only reports that the process is up.
 builder.Services.AddHealthChecks()
-    .AddDbContextCheck<MySelfDbContext>();
+    .AddDbContextCheck<MySelfDbContext>(tags: ["ready"]);
 
 // --- Identity: user accounts + password hashing (docs/05) ---
 // AddIdentityCore (not AddIdentity) registers UserManager and friends without also pulling
@@ -95,6 +108,19 @@ if (string.IsNullOrEmpty(jwtSection["Key"]))
 var jwtOptions = jwtSection.Get<JwtOptions>()!;
 builder.Services.Configure<JwtOptions>(jwtSection);
 builder.Services.AddSingleton<TokenService>();
+
+// Refuse to start a Production instance with dev-only config still in place (localhost CORS,
+// a short signing key, AllowedHosts "*", rate limiting off). Dev/test are exempt on purpose.
+if (builder.Environment.IsProduction())
+{
+    var problems = StartupChecks.ProductionConfigProblems(builder.Configuration);
+    if (problems.Count > 0)
+    {
+        throw new InvalidOperationException(
+            "Production configuration is not deployment-ready:" + Environment.NewLine
+            + string.Join(Environment.NewLine, problems.Select(p => "  - " + p)));
+    }
+}
 
 // --- Auth middleware: validates the JWT on protected endpoints (docs/05) ---
 // This only validates access tokens already issued by TokenService above — it has no
@@ -155,6 +181,8 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseHttpLogging();
+
 app.UseCors("Frontend");
 
 // Order matters: UseAuthentication figures out *who* the caller is (reads/validates the
@@ -170,8 +198,18 @@ if (rateLimitingEnabled)
     app.UseRateLimiter();
 }
 
-// Liveness/readiness probe. Deliberately unversioned (not under /api/v1, which is
-// reserved for business resources).
+// Health probes. Unversioned (not under /api/v1, which is for business resources).
+//   /health/live  — process is up; runs no checks (for a container liveness probe).
+//   /health/ready — dependencies are reachable; gates on the "ready"-tagged DB check.
+//   /health       — everything, kept for back-compat.
+app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = _ => false,
+});
+app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready"),
+});
 app.MapHealthChecks("/health");
 
 app.MapFoodsEndpoints();
@@ -183,6 +221,7 @@ app.MapNutritionAnalyticsEndpoints();
 app.MapAuthEndpoints();
 app.MapPasswordResetEndpoints();
 app.MapMeEndpoints();
+app.MapAccountDataEndpoints();
 app.MapBodyMeasurementEndpoints();
 app.MapNutritionEstimateEndpoints();
 app.MapOnboardingEndpoints();

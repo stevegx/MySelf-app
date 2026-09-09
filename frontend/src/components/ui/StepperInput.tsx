@@ -38,7 +38,7 @@ export function StepperInput({
       <span className="flex items-stretch">
         <button
           type="button"
-          aria-label={`${ariaLabel} minus`}
+          aria-label={`Decrease ${ariaLabel}`}
           onClick={() => nudge(-1)}
           className="flex w-9 items-center justify-center rounded-l-control border border-r-0 border-border-strong bg-surface-subtle text-foreground hover:bg-surface-strong"
         >
@@ -63,7 +63,7 @@ export function StepperInput({
         />
         <button
           type="button"
-          aria-label={`${ariaLabel} plus`}
+          aria-label={`Increase ${ariaLabel}`}
           onClick={() => nudge(1)}
           className="flex w-9 items-center justify-center rounded-r-control border border-l-0 border-border-strong bg-surface-subtle text-foreground hover:bg-surface-strong"
         >

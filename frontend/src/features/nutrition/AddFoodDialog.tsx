@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Checkbox, Input, Segmented, Tag } from "../../components/ui";
+import { Button, Checkbox, Input, Modal, Segmented, Tag } from "../../components/ui";
 import { ApiError } from "../../lib/api";
 import { useAddMealItem, useBarcodeLookup, useCreateCustomFood, useFoodSearch } from "./api";
 import type { CustomFood, MealAmountUnit, MealCategory, ServingBasis } from "./api";
@@ -153,154 +153,154 @@ export function AddFoodDialog({
   const basisLabel = basis === "Per100g" ? "per 100 g / ml" : "per serving";
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Add food to ${category}`}
-      onKeyDown={(e) => e.key === "Escape" && onClose()}
+    <Modal
+      title={`Add food · ${category}`}
+      label={`Add food to ${category}`}
+      onClose={onClose}
+      size="md"
+      className="max-h-[92vh] overflow-y-auto"
     >
-      <div className="flex max-h-[92vh] w-full max-w-md flex-col gap-3 overflow-y-auto rounded-card border border-border bg-surface p-4 shadow-xl">
-        <h3 className="m-0 text-base font-bold">Add food · {category}</h3>
+      <label className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
+        Search My Foods
+        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Type to find a saved food" />
+      </label>
+      {search.trim() !== "" && (results?.length ?? 0) > 0 && (
+        <ul className="m-0 flex max-h-40 list-none flex-col gap-1 overflow-y-auto p-0">
+          {results!.map((f) => (
+            <li key={f.id}>
+              <button
+                type="button"
+                onClick={() => applyFood(f)}
+                className="flex w-full items-center justify-between rounded-control border border-border bg-surface-subtle px-3 py-2 text-left text-[13px] hover:border-border-strong"
+              >
+                <span className="min-w-0 truncate">
+                  {f.name}
+                  {f.brand ? <span className="ml-1 text-foreground-muted">· {f.brand}</span> : null}
+                </span>
+                <span className="shrink-0 text-xs text-foreground-muted">
+                  {Math.round(f.kcal)} kcal / {f.servingBasis === "Per100g" ? "100g" : "serving"}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
 
-        <label className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
-          Search My Foods
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Type to find a saved food" />
-        </label>
-        {search.trim() !== "" && (results?.length ?? 0) > 0 && (
-          <ul className="m-0 flex max-h-40 list-none flex-col gap-1 overflow-y-auto p-0">
-            {results!.map((f) => (
-              <li key={f.id}>
-                <button
-                  type="button"
-                  onClick={() => applyFood(f)}
-                  className="flex w-full items-center justify-between rounded-control border border-border bg-surface-subtle px-3 py-2 text-left text-[13px] hover:border-border-strong"
-                >
-                  <span className="min-w-0 truncate">
-                    {f.name}
-                    {f.brand ? <span className="ml-1 text-foreground-muted">· {f.brand}</span> : null}
-                  </span>
-                  <span className="shrink-0 text-xs text-foreground-muted">
-                    {Math.round(f.kcal)} kcal / {f.servingBasis === "Per100g" ? "100g" : "serving"}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <div className="flex items-end gap-2">
-          <label className="flex flex-1 flex-col gap-1 text-xs font-semibold text-foreground-muted">
-            Barcode
-            <Input
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && lookUp()}
-              placeholder="8–14 digits"
-              inputMode="numeric"
-            />
-          </label>
-          <Button variant="secondary" size="sm" onClick={lookUp} disabled={barcode.isPending}>
-            {barcode.isPending ? "Looking up…" : "Look up"}
-          </Button>
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <span className="flex items-center gap-2 text-xs font-semibold text-foreground-muted">
-            Name
-            {sourceTag && <Tag tone="neutral">{sourceTag}</Tag>}
-          </span>
+      <div className="flex items-end gap-2">
+        <label className="flex flex-1 flex-col gap-1 text-xs font-semibold text-foreground-muted">
+          Barcode
           <Input
-            autoFocus
-            aria-label="Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Plain yogurt"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && lookUp()}
+            placeholder="8–14 digits"
+            inputMode="numeric"
           />
-        </div>
+        </label>
+        <Button variant="secondary" size="sm" onClick={lookUp} disabled={barcode.isPending}>
+          {barcode.isPending ? "Looking up…" : "Look up"}
+        </Button>
+      </div>
 
-        <Segmented<ServingBasis>
-          aria-label="Nutrients are given"
-          value={basis}
-          onChange={onBasisChange}
+      <div className="flex flex-col gap-1">
+        <span className="flex items-center gap-2 text-xs font-semibold text-foreground-muted">
+          Name
+          {sourceTag && <Tag tone="neutral">{sourceTag}</Tag>}
+        </span>
+        <Input
+          autoFocus
+          aria-label="Name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Plain yogurt"
+        />
+      </div>
+
+      <Segmented<ServingBasis>
+        aria-label="Nutrients are given"
+        value={basis}
+        onChange={onBasisChange}
+        options={[
+          { value: "Per100g", label: "Per 100 g" },
+          { value: "PerServing", label: "Per serving" },
+        ]}
+      />
+
+      <div className="grid grid-cols-2 gap-2">
+        <label className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
+          Calories ({basisLabel})
+          <Input type="number" inputMode="decimal" value={kcal} onChange={(e) => setKcal(e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
+          Protein g
+          <Input type="number" inputMode="decimal" value={protein} onChange={(e) => setProtein(e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
+          Carbs g
+          <Input type="number" inputMode="decimal" value={carb} onChange={(e) => setCarb(e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
+          Fat g
+          <Input type="number" inputMode="decimal" value={fat} onChange={(e) => setFat(e.target.value)} />
+        </label>
+      </div>
+
+      <div className="flex items-end gap-2">
+        <label className="flex flex-1 flex-col gap-1 text-xs font-semibold text-foreground-muted">
+          Amount eaten
+          <Input
+            type="number"
+            inputMode="decimal"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+          />
+        </label>
+        <Segmented<MealAmountUnit>
+          aria-label="Unit"
+          value={unit}
+          onChange={setUnit}
           options={[
-            { value: "Per100g", label: "Per 100 g" },
-            { value: "PerServing", label: "Per serving" },
+            { value: "Grams", label: "g" },
+            { value: "Millilitres", label: "ml" },
+            { value: "Serving", label: "serving" },
           ]}
         />
-
-        <div className="grid grid-cols-2 gap-2">
-          <label className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
-            Calories ({basisLabel})
-            <Input type="number" inputMode="decimal" value={kcal} onChange={(e) => setKcal(e.target.value)} />
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
-            Protein g
-            <Input type="number" inputMode="decimal" value={protein} onChange={(e) => setProtein(e.target.value)} />
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
-            Carbs g
-            <Input type="number" inputMode="decimal" value={carb} onChange={(e) => setCarb(e.target.value)} />
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
-            Fat g
-            <Input type="number" inputMode="decimal" value={fat} onChange={(e) => setFat(e.target.value)} />
-          </label>
-        </div>
-
-        <div className="flex items-end gap-2">
-          <label className="flex flex-1 flex-col gap-1 text-xs font-semibold text-foreground-muted">
-            Amount eaten
-            <Input
-              type="number"
-              inputMode="decimal"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submit()}
-            />
-          </label>
-          <Segmented<MealAmountUnit>
-            aria-label="Unit"
-            value={unit}
-            onChange={setUnit}
-            options={[
-              { value: "Grams", label: "g" },
-              { value: "Millilitres", label: "ml" },
-              { value: "Serving", label: "serving" },
-            ]}
-          />
-        </div>
-
-        {needsServingSize && (
-          <label className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
-            Serving size (g)
-            <Input
-              type="number"
-              inputMode="decimal"
-              value={servingSize}
-              onChange={(e) => setServingSize(e.target.value)}
-              placeholder="grams one serving weighs"
-            />
-          </label>
-        )}
-
-        <Checkbox
-          label="Save to My Foods"
-          checked={saveFood}
-          onChange={(e) => setSaveFood(e.target.checked)}
-        />
-
-        {error && <p className="m-0 text-[13px] text-danger">{error}</p>}
-
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="primary" size="sm" onClick={submit} disabled={add.isPending}>
-            {add.isPending ? "Adding…" : "Add"}
-          </Button>
-        </div>
       </div>
+
+      {needsServingSize && (
+        <label className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
+          Serving size (g)
+          <Input
+            type="number"
+            inputMode="decimal"
+            value={servingSize}
+            onChange={(e) => setServingSize(e.target.value)}
+            placeholder="grams one serving weighs"
+          />
+        </label>
+      )}
+
+      <Checkbox
+        label="Save to My Foods"
+        checked={saveFood}
+        onChange={(e) => setSaveFood(e.target.checked)}
+      />
+
+    {error && (
+      <p className="m-0 text-[13px] text-danger" role="alert">
+        {error}
+      </p>
+    )}
+
+    <div className="flex justify-end gap-2">
+      <Button variant="ghost" size="sm" onClick={onClose}>
+        Cancel
+      </Button>
+      <Button variant="primary" size="sm" onClick={submit} disabled={add.isPending}>
+        {add.isPending ? "Adding…" : "Add"}
+      </Button>
     </div>
+    </Modal>
   );
 }

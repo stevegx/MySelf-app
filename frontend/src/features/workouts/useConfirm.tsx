@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { Button } from "../../components/ui";
+import { Button, Modal } from "../../components/ui";
 
 type ConfirmOptions = {
   title: string;
@@ -31,31 +31,22 @@ export function useConfirm() {
   };
 
   const dialog = options ? (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={options.title}
-      onKeyDown={(e) => e.key === "Escape" && settle(false)}
-    >
-      <div className="w-full max-w-sm rounded-card border border-border bg-surface p-4 shadow-xl">
-        <h3 className="m-0 mb-1 text-base font-bold">{options.title}</h3>
-        <p className="m-0 mb-4 text-sm text-foreground-muted">{options.message}</p>
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={() => settle(false)}>
-            Cancel
-          </Button>
-          <Button
-            variant={options.tone === "primary" ? "primary" : "danger"}
-            size="sm"
-            autoFocus
-            onClick={() => settle(true)}
-          >
-            {options.confirmLabel ?? "Confirm"}
-          </Button>
-        </div>
+    <Modal title={options.title} onClose={() => settle(false)}>
+      <p className="m-0 text-sm text-foreground-muted">{options.message}</p>
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={() => settle(false)}>
+          Cancel
+        </Button>
+        <Button
+          variant={options.tone === "primary" ? "primary" : "danger"}
+          size="sm"
+          autoFocus
+          onClick={() => settle(true)}
+        >
+          {options.confirmLabel ?? "Confirm"}
+        </Button>
       </div>
-    </div>
+    </Modal>
   ) : null;
 
   return { confirm, dialog };

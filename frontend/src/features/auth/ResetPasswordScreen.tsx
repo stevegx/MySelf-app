@@ -38,7 +38,7 @@ export function ResetPasswordScreen() {
   if (!email || !token) {
     return (
       <Card>
-        <h2 className="mb-1">Invalid reset link</h2>
+        <h1 className="mb-1 text-[26px]">Invalid reset link</h1>
         <p className="m-0 text-sm text-foreground-muted">
           This link is missing information it needs. Request a new one.
         </p>
@@ -55,7 +55,7 @@ export function ResetPasswordScreen() {
   if (done) {
     return (
       <Card>
-        <h2 className="mb-1">Password reset</h2>
+        <h1 className="mb-1 text-[26px]">Password reset</h1>
         <p className="m-0 text-sm text-foreground-muted">
           Your password has been changed. Other signed-in devices have been logged out for
           your security.
@@ -89,7 +89,7 @@ export function ResetPasswordScreen() {
     <Card>
       <form onSubmit={onSubmit} noValidate className="flex flex-col gap-5">
         <div>
-          <h2 className="mb-1">Choose a new password</h2>
+          <h1 className="mb-1 text-[26px]">Choose a new password</h1>
           <p className="m-0 text-sm text-foreground-muted">for {email}</p>
         </div>
 
@@ -105,13 +105,8 @@ export function ResetPasswordScreen() {
         <Field
           label="New password"
           htmlFor="newPassword"
-          hint={
-            errors.newPassword ? (
-              <span className="text-danger">{errors.newPassword.message}</span>
-            ) : (
-              "At least 6 characters, with a number, an uppercase letter and a symbol."
-            )
-          }
+          hint="At least 6 characters, with a number, an uppercase letter and a symbol."
+          error={errors.newPassword?.message}
         >
           <PasswordInput
             id="newPassword"
@@ -124,11 +119,7 @@ export function ResetPasswordScreen() {
         <Field
           label="Confirm new password"
           htmlFor="confirmNewPassword"
-          hint={
-            errors.confirmNewPassword ? (
-              <span className="text-danger">{errors.confirmNewPassword.message}</span>
-            ) : undefined
-          }
+          error={errors.confirmNewPassword?.message}
         >
           <PasswordInput
             id="confirmNewPassword"

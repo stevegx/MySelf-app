@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Input } from "../../components/ui";
+import { Button, Input, Modal } from "../../components/ui";
 import { ApiError } from "../../lib/api";
 import { useLogWeight } from "./api";
 
@@ -36,45 +36,39 @@ export function LogWeightDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Log your weight"
-      onKeyDown={(e) => e.key === "Escape" && onClose()}
-    >
-      <div className="w-full max-w-sm rounded-card border border-border bg-surface p-4 shadow-xl">
-        <h3 className="m-0 mb-3 text-base font-bold">Log your weight</h3>
+    <Modal title="Log your weight" onClose={onClose}>
+      <label className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
+        Weight (kg)
+        <Input
+          type="number"
+          inputMode="decimal"
+          step="0.1"
+          autoFocus
+          value={weight}
+          onChange={(e) => setWeight(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+        />
+      </label>
 
-        <label className="mb-2 flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
-          Weight (kg)
-          <Input
-            type="number"
-            inputMode="decimal"
-            step="0.1"
-            autoFocus
-            value={weight}
-            onChange={(e) => setWeight(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && submit()}
-          />
-        </label>
+      <label className="flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
+        Date
+        <Input type="date" max={today()} value={date} onChange={(e) => setDate(e.target.value)} />
+      </label>
 
-        <label className="mb-4 flex flex-col gap-1 text-xs font-semibold text-foreground-muted">
-          Date
-          <Input type="date" max={today()} value={date} onChange={(e) => setDate(e.target.value)} />
-        </label>
+      {error && (
+        <p className="m-0 text-sm text-danger" role="alert">
+          {error}
+        </p>
+      )}
 
-        {error && <p className="m-0 mb-3 text-sm text-danger">{error}</p>}
-
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="primary" size="sm" onClick={submit} disabled={log.isPending}>
-            {log.isPending ? "Saving…" : "Save"}
-          </Button>
-        </div>
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button variant="primary" size="sm" onClick={submit} disabled={log.isPending}>
+          {log.isPending ? "Saving…" : "Save"}
+        </Button>
       </div>
-    </div>
+    </Modal>
   );
 }
